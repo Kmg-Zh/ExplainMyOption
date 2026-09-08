@@ -1,0 +1,8 @@
+{
+  "primary_driver": "Vega / implied volatility",
+  "verdict": "IV crush led the move after the print.",
+  "confidence_level": "high",
+  "confidence_rationale": "Vol story from quotes.",
+  "evidence": [],
+  "takeaways": ["Fade the crush."]
+}

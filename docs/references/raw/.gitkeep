@@ -1,0 +1,7 @@
+# Optional local dumps
+
+Put large saved HTML/PDF mirrors of external docs here if you truly need offline copies.
+
+Prefer linking from `../langgraph.md` instead of committing bulky dumps.
+
+This directory is gitignored except this placeholder note may be local-only; see root `.gitignore`.

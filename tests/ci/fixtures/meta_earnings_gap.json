@@ -1,0 +1,23 @@
+{
+  "snapshot": {
+    "ticker": "META",
+    "option_type": "call",
+    "strike": 320.0,
+    "expiry": "2022-03-18",
+    "spot_now": 237.76,
+    "spot_prev": 320.19,
+    "iv_now": 0.35,
+    "iv_prev": 0.55,
+    "option_price_now": 0.0,
+    "option_price_prev": 0.0,
+    "time_to_expiry_years": 0.1178082191780822,
+    "risk_free_rate": 0.045,
+    "dividend_yield": 0.0,
+    "exercise_style": "american",
+    "as_of": "2022-02-03",
+    "iv_prev_source": "fixture",
+    "quantity": 1.0,
+    "multiplier": 100.0
+  },
+  "surface": null
+}

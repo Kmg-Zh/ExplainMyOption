@@ -1,0 +1,435 @@
+[
+  {
+    "test_id": "meta_earnings_gap_2022",
+    "ticker": "META",
+    "date": "2022-02-03",
+    "tier": "A",
+    "tier_label": "engine_and_narrative",
+    "memo": "memos/meta_earnings_gap_2022.md",
+    "input_quant": {
+      "fixture": "meta_earnings_gap",
+      "option_type": "call",
+      "strike": 320.0,
+      "expiry": "2022-03-18",
+      "min_residual_ratio": 0.2
+    },
+    "input_text": "META Q4 miss and weak guide; stock fell about 26% in one session while implied vol collapsed after earnings (IV crush). Taylor Delta-Gamma-Vega leaves a large residual on the extreme gap.",
+    "as_of_news": [
+      {
+        "title": "Meta shares plunged about 26% after weak revenue guidance and the first quarterly decline in daily active users",
+        "publisher": "CNBC",
+        "link": "https://www.cnbc.com/2022/02/03/facebook-shares-plummet-22percent-after-reporting-weak-guidance.html",
+        "published": "2022-02-03"
+      },
+      {
+        "title": "Meta options volume surged as implied volatility collapsed after earnings",
+        "publisher": "Reuters",
+        "link": "https://www.reuters.com/business/meta-slide-drives-insane-options-volume-some-bet-bounce-2022-02-03/",
+        "published": "2022-02-03"
+      }
+    ],
+    "ground_truth": [
+      {
+        "title": "Meta slide drives insane options volume as some bet on bounce",
+        "publisher": "Reuters",
+        "link": "https://www.reuters.com/business/meta-slide-drives-insane-options-volume-some-bet-bounce-2022-02-03/",
+        "published": "2022-02-04",
+        "note": "Same-day/next print options/IV reaction used as mechanism GT.",
+        "excerpt": "Options activity and implied volatility reset violently around the Meta gap; vol collapse after the print is the IV-crush layer alongside the cash move."
+      },
+      {
+        "title": "Facebook (Meta) Earnings: What Happened with FB",
+        "publisher": "Investopedia",
+        "link": "https://www.investopedia.com/facebook-meta-q4-fy2021-earnings-report-recap-5217818",
+        "published": "2022-02-04",
+        "note": "Earnings/guidance fundamentals behind the gap.",
+        "excerpt": "Weak Q1 revenue guidance and DAU decline drove the historic one-day selloff that options had to reprice."
+      },
+      {
+        "title": "What is IV crush (tastylive explainer)",
+        "publisher": "tastylive",
+        "link": "https://www.tastylive.com/concepts-strategies/iv-crush",
+        "published": "2022-02-04",
+        "note": "Pedagogy — not same-day tape.",
+        "excerpt": "IV crush is the sharp drop in implied volatility after an earnings release once event risk is resolved."
+      }
+    ],
+    "references": [
+      {
+        "title": "Facebook stock plummets 26% (CNBC)",
+        "url": "https://www.cnbc.com/2022/02/03/facebook-shares-plummet-22percent-after-reporting-weak-guidance.html"
+      },
+      {
+        "title": "Meta slide drives insane options volume (Reuters)",
+        "url": "https://www.reuters.com/business/meta-slide-drives-insane-options-volume-some-bet-bounce-2022-02-03/"
+      },
+      {
+        "title": "FB/Meta earnings recap (Investopedia)",
+        "url": "https://www.investopedia.com/facebook-meta-q4-fy2021-earnings-report-recap-5217818"
+      }
+    ],
+    "eval_dimensions": {
+      "layer_a": {
+        "label": "Taylor / residual story",
+        "tokens": ["higher-order", "convexity", "taylor", "truncation", "residual", "gamma"],
+        "min_hits": 1
+      },
+      "layer_b": {
+        "label": "Earnings + IV crush catalyst",
+        "tokens": ["iv crush", "volatility crush", "vol crush", "implied volatility", "earnings", "guidance"],
+        "min_hits": 1
+      }
+    },
+    "expected_keyword_groups": [
+      ["higher-order convexity", "convexity", "taylor truncation", "truncation", "speed"],
+      ["iv crush", "volatility crush", "implied volatility", "vol crush"]
+    ],
+    "min_keyword_groups_hit": 2,
+    "hindsight_keyword_group_labels": [],
+    "hindsight_action_themes": [],
+    "hindsight_leak_markers": [],
+    "expected_action_themes": ["reprice", "repric", "surface", "jump", "earnings"],
+    "min_action_themes_hit": 1,
+    "expected_root_cause_keywords": ["higher-order convexity", "iv crush"],
+    "expected_action_items": [
+      "Switch to full-surface sequential repricing",
+      "Stress test large jump scenarios"
+    ]
+  },
+  {
+    "test_id": "aapl_exdiv_2023",
+    "ticker": "AAPL",
+    "date": "2023-11-09",
+    "tier": "A",
+    "tier_label": "american_ee_and_dividend",
+    "memo": "memos/aapl_exdiv_2023.md",
+    "input_quant": {
+      "fixture": "aapl_exdiv_2023",
+      "option_type": "call",
+      "strike": 170.0,
+      "expiry": "2023-11-17",
+      "min_residual_ratio": 0.1
+    },
+    "input_text": "AAPL cash dividend with ex-dividend on 2023-11-10. Deep ITM American calls face early-exercise / assignment boundary risk the day before ex-date; assignment can fall short of theoretical 100%.",
+    "as_of_news": [
+      {
+        "title": "Apple to trade ex-dividend on November 10, 2023 with $0.24 quarterly cash dividend",
+        "publisher": "Forbes / Dividend Channel",
+        "link": "https://www.forbes.com/sites/dividendchannel/2023/11/08/ex-dividend-reminder-apple-parker-hannifin-and-bread-financial-holdings/",
+        "published": "2023-11-08"
+      }
+    ],
+    "ground_truth": [
+      {
+        "title": "Ex-Dividend Dates: Understanding Dividend Risk",
+        "publisher": "Charles Schwab",
+        "link": "https://www.schwab.com/learn/story/ex-dividend-dates-understanding-dividend-risk",
+        "published": "2023-11-10",
+        "note": "Desk rule for early exercise vs dividend.",
+        "excerpt": "Any option that has an extrinsic value of less than the amount of the dividend might, more likely, be a candidate for early exercise."
+      },
+      {
+        "title": "How Early Exercise Order Flow Impacts Equity Option Put-Call Ratios",
+        "publisher": "Cboe",
+        "link": "https://www.cboe.com/insights/posts/how-early-exercise-order-flow-impacts-equity-option-put-call-ratios",
+        "published": "2023-11-10",
+        "note": "Exchange-side early-exercise / dividend note.",
+        "excerpt": "For calls, if the dividend amount exceeds the extrinsic value, a long holder is usually better off exercising."
+      }
+    ],
+    "references": [
+      {
+        "title": "Ex-dividend reminder: Apple (Forbes)",
+        "url": "https://www.forbes.com/sites/dividendchannel/2023/11/08/ex-dividend-reminder-apple-parker-hannifin-and-bread-financial-holdings/"
+      },
+      {
+        "title": "Schwab — ex-dividend / dividend risk",
+        "url": "https://www.schwab.com/learn/story/ex-dividend-dates-understanding-dividend-risk"
+      },
+      {
+        "title": "Cboe — early exercise order flow",
+        "url": "https://www.cboe.com/insights/posts/how-early-exercise-order-flow-impacts-equity-option-put-call-ratios"
+      }
+    ],
+    "eval_dimensions": {
+      "layer_a": {
+        "label": "Modeled Greek / residual story",
+        "tokens": ["delta", "vega", "theta", "residual", "taylor", "convexity"],
+        "min_hits": 1
+      },
+      "layer_b": {
+        "label": "Ex-div + early exercise",
+        "tokens": ["ex-dividend", "ex-div", "ex dividend", "dividend", "early exercise", "early-exercise", "assignment", "american"],
+        "min_hits": 2
+      }
+    },
+    "expected_keyword_groups": [
+      ["ex-dividend", "ex dividend", "ex-div"],
+      ["early exercise", "early-exercise", "assignment", "american"]
+    ],
+    "min_keyword_groups_hit": 2,
+    "hindsight_keyword_group_labels": [],
+    "hindsight_action_themes": [],
+    "hindsight_leak_markers": [],
+    "expected_action_themes": ["ex-div", "dividend", "early exercise", "assignment"],
+    "min_action_themes_hit": 1,
+    "expected_root_cause_keywords": ["ex-dividend", "early exercise"],
+    "expected_action_items": [
+      "Review early exercise boundary around ex-dividend",
+      "Track assignment behavior vs theory"
+    ]
+  },
+  {
+    "test_id": "gme_squeeze_2021",
+    "ticker": "GME",
+    "date": "2021-01-25",
+    "tier": "B",
+    "tier_label": "narrative_primary",
+    "memo": "memos/gme_squeeze_2021.md",
+    "input_quant": {
+      "fixture": "gme_squeeze_2021",
+      "option_type": "put",
+      "strike": 120.0,
+      "expiry": "2021-02-19",
+      "min_residual_ratio": 0.25
+    },
+    "input_text": "GME short squeeze: short interest exceeded float, borrow fees spiked, and buy-in / recall risk distorted deep ITM put marks versus standard parity models.",
+    "as_of_news": [
+      {
+        "title": "GameStop jumps amid retail frenzy as an epic short squeeze continues; more than 138% of the float was sold short",
+        "publisher": "CNBC",
+        "link": "https://www.cnbc.com/2021/01/25/gamestop-shares-jump-another-40percent-shake-off-analyst-downgrade-as-epic-short-squeeze-continues.html",
+        "published": "2021-01-25"
+      },
+      {
+        "title": "Mania in stocks like GameStop and surging options activity as heavily shorted names are squeezed",
+        "publisher": "CNBC",
+        "link": "https://www.cnbc.com/2021/01/25/mania-in-stocks-like-gamestop-surging-options-activity-suggest-a-market-pullback-is-coming.html",
+        "published": "2021-01-25"
+      }
+    ],
+    "ground_truth": [
+      {
+        "title": "SEC Staff Report on Equity and Options Market Structure Conditions in Early 2021",
+        "publisher": "U.S. SEC",
+        "link": "https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf",
+        "published": "2021-10-18",
+        "note": "Oracle — ~9 months after as_of.",
+        "excerpt": "Lending fees to borrow GME were elevated into January 2021; short interest and covering dynamics are central. Staff did not find gamma squeeze as the main driver in available data."
+      },
+      {
+        "title": "GameStop: the real data story for securities lending",
+        "publisher": "Securities Finance Times",
+        "link": "https://www.securitiesfinancetimes.com/securitieslendingnews/industryarticle.php?article_id=224507",
+        "published": "2021-02-01",
+        "note": "Lending post-mortem.",
+        "excerpt": "Utilisation of shares available to lend hit 100% and stayed maxed; average cost-to-borrow around 33% as of 28 January — well above hot-lend thresholds."
+      },
+      {
+        "title": "GameStop short sellers / borrow fee",
+        "publisher": "CNBC",
+        "link": "https://www.cnbc.com/2021/01/29/gamestop-short-sellers-are-still-not-surrendering-despite-nearly-20-billion-in-losses-this-year.html",
+        "published": "2021-01-29",
+        "note": "Near-event borrow fee (after as_of).",
+        "excerpt": "The borrow fee on GameStop jumped to roughly 29% on existing shorts and 50% on new shorts (S3)."
+      }
+    ],
+    "references": [
+      {
+        "title": "SEC Staff Report (early 2021)",
+        "url": "https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf"
+      },
+      {
+        "title": "Securities Finance Times — GME lending",
+        "url": "https://www.securitiesfinancetimes.com/securitieslendingnews/industryarticle.php?article_id=224507"
+      },
+      {
+        "title": "CNBC — GME borrow fee (29 Jan 2021)",
+        "url": "https://www.cnbc.com/2021/01/29/gamestop-short-sellers-are-still-not-surrendering-despite-nearly-20-billion-in-losses-this-year.html"
+      }
+    ],
+    "eval_dimensions": {
+      "layer_a": {
+        "label": "Spot / residual blotter story",
+        "tokens": ["delta", "residual", "taylor", "truncation", "convexity", "gamma"],
+        "min_hits": 1
+      },
+      "layer_b": {
+        "label": "Squeeze + borrow (desk-inferable)",
+        "tokens": ["squeeze", "short interest", "borrow", "cost to borrow", "hard to borrow", "lending"],
+        "min_hits": 2
+      }
+    },
+    "expected_keyword_groups": [
+      ["short squeeze", "squeeze"],
+      ["borrow", "cost to borrow", "hard to borrow"],
+      ["buy-in", "buy in", "recall", "liquidity"]
+    ],
+    "min_keyword_groups_hit": 2,
+    "hindsight_keyword_group_labels": ["buy-in"],
+    "hindsight_action_themes": ["buy-in"],
+    "hindsight_leak_markers": ["122.97", "staff report"],
+    "expected_action_themes": ["borrow", "liquidity", "buy-in", "quote"],
+    "min_action_themes_hit": 1,
+    "expected_root_cause_keywords": ["short squeeze", "borrow"],
+    "expected_action_items": [
+      "Re-price with stressed borrow assumptions",
+      "Add buy-in liquidity guardrails"
+    ]
+  },
+  {
+    "test_id": "vow_float_squeeze_2008",
+    "ticker": "VOW.DE",
+    "date": "2008-10-27",
+    "tier": "B",
+    "tier_label": "narrative_primary",
+    "memo": "memos/vow_float_squeeze_2008.md",
+    "input_quant": {
+      "fixture": "vow_float_squeeze_2008",
+      "option_type": "call",
+      "strike": 300.0,
+      "expiry": "2008-12-19",
+      "min_residual_ratio": 0.5
+    },
+    "input_text": "Porsche disclosed 74.1% economic interest in VW; free float collapsed while shorts exceeded available stock, producing a cornered-market squeeze and liquidity breakdown.",
+    "as_of_news": [
+      {
+        "title": "Porsche disclosed 74.1% of VW voting stock via shares plus cash-settled options, collapsing free float",
+        "publisher": "Porsche SE",
+        "link": "https://www.porsche-se.com/en/media/press-releases/detail/porsche-heads-for-domination-agreement-1",
+        "published": "2008-10-26"
+      }
+    ],
+    "ground_truth": [
+      {
+        "title": "Short sellers make VW the world's priciest firm",
+        "publisher": "Reuters",
+        "link": "https://www.reuters.com/article/business/energy/refile-update-3-short-sellers-make-vw-the-worlds-priciest-firm-idUSLS143657/",
+        "published": "2008-10-28",
+        "note": "Day-after peak squeeze (oracle).",
+        "excerpt": "With free float collapsed, shorts scrambled to cover; VW briefly became the world's most valuable listed company."
+      },
+      {
+        "title": "Market Efficiency and Limits to Arbitrage: Evidence from the Volkswagen Short Squeeze",
+        "publisher": "Harvard CorpGov / JFE",
+        "link": "https://corpgov.law.harvard.edu/2021/09/15/market-efficiency-and-limits-to-arbitrage-evidence-from-the-volkswagen-short-squeeze",
+        "published": "2021-09-15",
+        "note": "Academic reconstruction — oracle.",
+        "excerpt": "Porsche's 26 Oct 2008 domination announcement produced a short squeeze; VW briefly traded above EUR 1,000 on 28 Oct from a prior Friday close near EUR 211."
+      }
+    ],
+    "references": [
+      {
+        "title": "Porsche SE press release (26 Oct 2008)",
+        "url": "https://www.porsche-se.com/en/media/press-releases/detail/porsche-heads-for-domination-agreement-1"
+      },
+      {
+        "title": "Reuters — VW world's priciest firm (28 Oct 2008)",
+        "url": "https://www.reuters.com/article/business/energy/refile-update-3-short-sellers-make-vw-the-worlds-priciest-firm-idUSLS143657/"
+      },
+      {
+        "title": "Harvard CorpGov — VW short squeeze paper summary",
+        "url": "https://corpgov.law.harvard.edu/2021/09/15/market-efficiency-and-limits-to-arbitrage-evidence-from-the-volkswagen-short-squeeze"
+      }
+    ],
+    "eval_dimensions": {
+      "layer_a": {
+        "label": "Extreme residual / Taylor story",
+        "tokens": ["residual", "taylor", "truncation", "convexity", "gamma", "higher-order"],
+        "min_hits": 1
+      },
+      "layer_b": {
+        "label": "Float collapse → squeeze",
+        "tokens": ["free float", "float", "porsche", "squeeze", "corner", "short"],
+        "min_hits": 2
+      }
+    },
+    "expected_keyword_groups": [
+      ["cornered market", "corner", "free float", "float"],
+      ["short squeeze", "squeeze", "buy-in", "buy in"],
+      ["liquidity", "hedging", "continuous"]
+    ],
+    "min_keyword_groups_hit": 2,
+    "hindsight_keyword_group_labels": ["liquidity"],
+    "hindsight_action_themes": ["haircut", "limit"],
+    "hindsight_leak_markers": ["world's priciest", "most valuable company", "eur 1000", "€1000"],
+    "expected_action_themes": ["liquidity", "hedg", "haircut", "squeeze", "limit"],
+    "min_action_themes_hit": 1,
+    "expected_root_cause_keywords": ["cornered market", "liquidity"],
+    "expected_action_items": [
+      "Disable continuous hedging assumptions",
+      "Apply liquidity haircuts to marks"
+    ]
+  },
+  {
+    "test_id": "vmw_htb_2008",
+    "ticker": "VMW",
+    "date": "2008-01-28",
+    "tier": "C",
+    "tier_label": "known_engine_gap",
+    "memo": "memos/vmw_htb_2008.md",
+    "input_quant": {
+      "fixture": "vmw_htb_2008",
+      "option_type": "call",
+      "strike": 60.0,
+      "expiry": "2009-01-16",
+      "min_residual_ratio": 0.01
+    },
+    "input_text": "VMW became hard-to-borrow ahead of earnings; Jan 2009 $60 conversion spread reached about -$8 per share then narrowed toward -$1.80 after the drop, producing about $6,200 unexplained PnL on a delta-neutral conversion (Avellaneda example).",
+    "as_of_news": [
+      {
+        "title": "VMware shares fell sharply after revenue guidance disappointed investors following the Q4 2007 report",
+        "publisher": "24/7 Wall St.",
+        "link": "https://247wallst.com/apps-software/2008/01/28/vmwares-revenue/",
+        "published": "2008-01-28"
+      }
+    ],
+    "ground_truth": [
+      {
+        "title": "A Dynamic Model for Hard-to-Borrow Stocks (VMW conversion example)",
+        "publisher": "Avellaneda & Lipkin / Risk",
+        "link": "https://math.nyu.edu/inmemoriam/avellaneda/HardToBorrow.pdf",
+        "published": "2009-06-01",
+        "note": "Oracle only — not a same-day desk requirement.",
+        "excerpt": "Prior to earnings VMW was extremely hard to borrow; the Jan 2009 $60 conversion traded deeply negative then normalized after the drop — HTB / synthetic-dividend distortion in the paper example."
+      }
+    ],
+    "references": [
+      {
+        "title": "Avellaneda & Lipkin HTB paper",
+        "url": "https://math.nyu.edu/inmemoriam/avellaneda/HardToBorrow.pdf"
+      },
+      {
+        "title": "VMware revenue reaction (24/7 Wall St., 28 Jan 2008)",
+        "url": "https://247wallst.com/apps-software/2008/01/28/vmwares-revenue/"
+      }
+    ],
+    "eval_dimensions": {
+      "layer_a": {
+        "label": "Earnings spot/vol story (desk-OK)",
+        "tokens": ["delta", "vega", "earnings", "guidance", "revenue", "residual"],
+        "min_hits": 1
+      },
+      "layer_b": {
+        "label": "Same-day earnings catalyst only",
+        "tokens": ["earnings", "guidance", "revenue"],
+        "min_hits": 1
+      }
+    },
+    "expected_keyword_groups": [
+      ["hard-to-borrow", "hard to borrow", "htb", "borrow"],
+      ["conversion", "put-call parity", "parity", "synthetic dividend"]
+    ],
+    "min_keyword_groups_hit": 0,
+    "hindsight_keyword_group_labels": ["hard-to-borrow", "conversion"],
+    "hindsight_action_themes": ["borrow", "conversion", "parity", "synthetic"],
+    "hindsight_leak_markers": ["avellaneda", "6,200", "6200", "synthetic dividend"],
+    "expected_action_themes": ["borrow", "conversion", "parity", "synthetic"],
+    "min_action_themes_hit": 0,
+    "expected_root_cause_keywords": ["hard-to-borrow", "conversion"],
+    "expected_action_items": [
+      "Update borrow curve assumptions",
+      "Stress test synthetic dividend mismatch"
+    ]
+  }
+]

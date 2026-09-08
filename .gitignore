@@ -1,0 +1,40 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.ipynb_checkpoints/
+
+# Local market-data cache
+.cache/
+
+# Optional bulky dumps (keep folder via .gitkeep)
+docs/references/raw/**
+!docs/references/raw/.gitkeep
+
+# Test run output
+tests/live_book/output/
+tests/historical/output/
+tests/historical/historical_benchmark_summary.json
+tests/output/
+
+# Accidental reports at repo root
+/report*.md
+/report_*.md

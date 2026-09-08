@@ -1,0 +1,23 @@
+{
+  "snapshot": {
+    "ticker": "VOW.DE",
+    "option_type": "call",
+    "strike": 300.0,
+    "expiry": "2008-12-19",
+    "spot_now": 1005.0,
+    "spot_prev": 200.0,
+    "iv_now": 1.8,
+    "iv_prev": 0.95,
+    "option_price_now": 0.0,
+    "option_price_prev": 0.0,
+    "time_to_expiry_years": 0.15,
+    "risk_free_rate": 0.03,
+    "dividend_yield": 0.0,
+    "exercise_style": "american",
+    "as_of": "2008-10-27",
+    "iv_prev_source": "fixture",
+    "quantity": 1.0,
+    "multiplier": 100.0
+  },
+  "surface": null
+}

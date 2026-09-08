@@ -1,0 +1,23 @@
+{
+  "snapshot": {
+    "ticker": "VMW",
+    "option_type": "call",
+    "strike": 60.0,
+    "expiry": "2009-01-16",
+    "spot_now": 60.0,
+    "spot_prev": 88.0,
+    "iv_now": 0.45,
+    "iv_prev": 1.0,
+    "option_price_now": 0.0,
+    "option_price_prev": 0.0,
+    "time_to_expiry_years": 0.97,
+    "risk_free_rate": 0.03,
+    "dividend_yield": 0.0,
+    "exercise_style": "american",
+    "as_of": "2008-01-28",
+    "iv_prev_source": "fixture",
+    "quantity": 1.0,
+    "multiplier": 100.0
+  },
+  "surface": null
+}

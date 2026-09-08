@@ -1,0 +1,20 @@
+# Core agent framework
+langgraph>=1.2,<2
+langchain-openai>=0.2.0
+langchain-core>=0.3.0
+
+# Quant & math
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+QuantLib>=1.43
+
+# Data source
+yfinance>=0.2.40
+tavily-python>=0.5.0
+
+# UI
+streamlit>=1.36
+
+# Config
+python-dotenv>=1.0

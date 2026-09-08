@@ -1,0 +1,58 @@
+{
+  "snapshot": {
+    "ticker": "SYN",
+    "option_type": "call",
+    "strike": 100.0,
+    "expiry": "2026-09-18",
+    "spot_now": 100.0,
+    "spot_prev": 100.0,
+    "iv_now": 0.25,
+    "iv_prev": 0.25,
+    "option_price_now": 0.0,
+    "option_price_prev": 0.0,
+    "time_to_expiry_years": 0.0958904109589041,
+    "risk_free_rate": 0.045,
+    "dividend_yield": 0.01,
+    "exercise_style": "american",
+    "as_of": "2026-08-14",
+    "iv_prev_source": "fixture"
+  },
+  "surface": {
+    "as_of": "2026-08-14",
+    "expiries": [
+      "2026-09-18",
+      "2026-10-16",
+      "2026-11-20"
+    ],
+    "strikes": [
+      90.0,
+      95.0,
+      100.0,
+      105.0,
+      110.0
+    ],
+    "matrix": [
+      [
+        0.240677,
+        0.246827,
+        0.252877,
+        0.258827,
+        0.264677
+      ],
+      [
+        0.242979,
+        0.249128,
+        0.255178,
+        0.261128,
+        0.266979
+      ],
+      [
+        0.245856,
+        0.252005,
+        0.258055,
+        0.264005,
+        0.269855
+      ]
+    ]
+  }
+}

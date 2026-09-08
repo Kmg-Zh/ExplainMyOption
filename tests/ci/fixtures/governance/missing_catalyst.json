@@ -1,0 +1,8 @@
+{
+  "primary_driver": "Delta-driven gap",
+  "verdict": "Spot move dominated via higher-order convexity.",
+  "confidence_level": "medium",
+  "confidence_rationale": "Truncation after an extreme gap.",
+  "evidence": [],
+  "takeaways": ["Re-price on the full surface."]
+}

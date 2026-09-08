@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "as_of": "2026-08-14",
+  "legs": [
+    {
+      "leg_id": "AAPL",
+      "fixture": "spot_gap",
+      "ticker": "AAPL",
+      "option_type": "call",
+      "quantity": 1.0,
+      "multiplier": 1.0
+    },
+    {
+      "leg_id": "META",
+      "fixture": "vol_crush",
+      "ticker": "META",
+      "option_type": "call",
+      "quantity": 2.0,
+      "multiplier": 100.0
+    },
+    {
+      "leg_id": "FAIL",
+      "fixture": "does_not_exist",
+      "ticker": "FAIL",
+      "option_type": "call"
+    }
+  ]
+}
