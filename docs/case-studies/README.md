@@ -18,13 +18,13 @@ to add). They are not a scoreboard.
 Manifest: `tests/historical/historical_test_cases.json`  
 Offline check: `python tests/historical/test_news_lineage.py`
 
-| Case | As-of tape | Walkthrough |
-|------|------------|-------------|
-| META (2022-02-03) | CNBC gap, Reuters options vol | — |
-| AAPL (2023-11-09) | Forbes ex-div reminder | [aapl_exdiv_attribution.md](aapl_exdiv_attribution.md) |
-| GME (2021-01-25) | Same-day CNBC squeeze | — |
-| VOW (2008-10-27) | Porsche SE 10-26 float disclosure | [vow_float_squeeze_2008.md](vow_float_squeeze_2008.md) |
-| VMW (2008-01-28) | Same-day earnings reaction | Borrow is not in the official engine |
+| Case | As-of tape | Desk lesson | Walkthrough |
+|------|------------|-------------|-------------|
+| META (2022-02-03) | CNBC gap, Reuters options vol | Overnight gap + IV crush on the blotter | — |
+| AAPL (2023-11-09) | Forbes ex-div reminder | Taylor misses the div vs early-exercise split | [aapl_exdiv_attribution.md](aapl_exdiv_attribution.md) |
+| GME (2021-01-25) | Same-day CNBC squeeze | Borrow / squeeze is tape context, not an engine factor | — |
+| VOW (2008-10-27) | Porsche SE 10-26 float disclosure | Large residual → escalate, don't invent | [vow_float_squeeze_2008.md](vow_float_squeeze_2008.md) |
+| VMW (2008-01-28) | Same-day earnings reaction | Borrow is not modeled → low residual is expected | — |
 
 ```bash
 python tests/historical/run.py --case vow_float_squeeze_2008

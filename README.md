@@ -4,12 +4,14 @@ A **governed diagnostic agent**: QuantLib produces the blotter; the LLM only wri
 
 This is a personal project, in progress — not a production desk system. LangGraph is the runtime; **policy is this repo**.
 
+**Why this exists:** funds talk about “AI in the workflow.” Chat UIs and coding IDEs speed up *people*. This repo is a **coded, repeatable desk step** — fixed stages, budgets, abstain rules, and a blotter the narrative must reconcile to.
+
 ## Design (what to look at)
 
 1. **Numbers first.** Official 1-day PnL comes from QuantLib American FDM. The LLM cannot introduce a dollar figure.
 2. **Policy before LLM.** A **rules** controller may run ≤3 diagnostic tools and logs skip reasons. This is not free-form ReAct; the agent does not pick engines.
-3. **Three roles.** Narrator writes against the blotter. An independent catalyst critic may only keep mechanism tags from a **code scan** of relevant headlines (whitelist). Verifier + deterministic precheck: FAIL on numeric hallucination; PARTIAL if Layer B (named catalyst) is missing. Code can suppress Vega / IV-crush when quotes are noise.
-4. **Gated search.** Cue-based planner (default **no LLM**): extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news. Missing keys skip fail-soft.
+3. **Three roles.** Narrator / catalyst critic (headline whitelist) / verifier. FAIL on invented dollars; PARTIAL if a named catalyst is missing. [Case studies](docs/case-studies/README.md)
+4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
 5. **Escalate, don't invent.** Budget exhausted with a large residual or mark gap → unexplained (`terminal_unexplained_break`). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
 
 ## 1-day attribution
@@ -19,6 +21,20 @@ Greek-based / Taylor (the shipped blotter):
 $$\Delta P \approx \Delta \cdot \Delta S + \tfrac12\Gamma(\Delta S)^2 + \mathcal{V}\cdot\Delta\sigma + \Theta\cdot\Delta t + \text{residual}$$
 
 When the leftover residual is large, a diagnostic pass may also run **sequential full revaluation** (order **t → S → σ → r**) on the same official engine. That path is an audit of the Taylor blotter, not a second official PnL.
+
+## What is proven offline
+
+| Gate | Where |
+|------|--------|
+| No invented dollars / observation lock / missing catalyst / unexplained break | `tests/ci/test_governance_scorecard.py` |
+| Ex-div FO overlay (not an edge claim) | `tests/ci/test_exdiv_attribution.py` · [walkthrough](docs/case-studies/aapl_exdiv_attribution.md) |
+| Residual is the hard bar; narrative is not a published score | [case-studies README](docs/case-studies/README.md) |
+
+```bash
+./scripts/run-tests.sh
+```
+
+The CI suite does not call a live LLM. Historical `run.py` is a separate, keyed eval.
 
 ## Try it
 
@@ -31,7 +47,7 @@ pip install -r requirements.txt
 ./scripts/run-tests.sh
 ```
 
-Copy `.env.example` → `.env`. Default runtime requires `OPENAI_API_KEY` (entry node). Optional: `EMO_LLM_MODEL` (code default `gpt-5.4-mini`), `TAVILY_API_KEY`, `EMO_SEC_USER_AGENT`, `LANGSMITH_API_KEY`. Never commit `.env`.
+Copy `.env.example` → `.env`. Default runtime requires `OPENAI_API_KEY` (entry gate). Optional keys and the chat model are listed there (`EMO_LLM_MODEL`, `TAVILY_API_KEY`, `EMO_SEC_USER_AGENT`, `LANGSMITH_API_KEY`). Never commit `.env`.
 
 ```bash
 python app.py --ticker AAPL --type call
@@ -56,13 +72,13 @@ Layout and notebooks: [tests/README.md](tests/README.md) · [notebooks/README.md
 
 Synthetic fixtures with frozen as-of news. Headlines must have `published <= as_of`.
 
-| Case | As-of | Walkthrough |
-|------|-------|-------------|
-| META earnings gap | 2022-02-03 | — |
-| AAPL ex-div | 2023-11-09 | [aapl_exdiv_attribution.md](docs/case-studies/aapl_exdiv_attribution.md) |
-| GME squeeze | 2021-01-25 | — |
-| VW float squeeze | 2008-10-27 | [vow_float_squeeze_2008.md](docs/case-studies/vow_float_squeeze_2008.md) |
-| VMW HTB | 2008-01-28 | Borrow cost is not in the official engine |
+| Case | As-of | Desk lesson | Walkthrough |
+|------|-------|-------------|-------------|
+| META earnings gap | 2022-02-03 | Overnight gap + IV crush on the blotter | — |
+| AAPL ex-div | 2023-11-09 | Taylor misses the div vs early-exercise split | [aapl_exdiv_attribution.md](docs/case-studies/aapl_exdiv_attribution.md) |
+| GME squeeze | 2021-01-25 | Borrow / squeeze is tape context, not an engine factor | — |
+| VW float squeeze | 2008-10-27 | Large residual → escalate, don't invent | [vow_float_squeeze_2008.md](docs/case-studies/vow_float_squeeze_2008.md) |
+| VMW HTB | 2008-01-28 | Borrow is not modeled → low residual is expected | — |
 
 Index: [docs/case-studies/README.md](docs/case-studies/README.md).
 
@@ -79,21 +95,59 @@ This is not trading advice and not a price forecast.
 
 ## Architecture
 
-Book-first parent graph with `Send` fan-out per leg. Single-leg CLI/UI is one leg in the same graph. Live diagrams: [langgraph_architecture.ipynb](notebooks/langgraph_architecture.ipynb).
+Book-first parent graph. `Send` fans out **in parallel** — one compiled leg subgraph per position. Single-leg CLI/UI is the same graph with one leg. Users cannot pick a path; the loops below are budgeted graph edges, not ReAct. Live diagrams: [langgraph_architecture.ipynb](notebooks/langgraph_architecture.ipynb).
 
 ```mermaid
-flowchart LR
-    A[require_openai] --> B[Send leg_branch]
-    B --> C[aggregate_book]
-    subgraph D[leg subgraph]
-      D1[fetch_market] --> D2[quant] --> D3[blotter] --> D4[diagnostic_pass]
-      D4 --> D5[residual loop]
-      D5 --> D6[plan_search]
-      D6 --> D7[search]
-      D7 --> D8[digest_news]
-      D8 --> D9[challenge_catalyst]
-      D9 --> D10[synthesize]
-      D10 --> D11[verify loop]
-      D11 --> D12[finalize_leg_report]
-    end
+flowchart TB
+  RO[require_key]
+  RO --> FAN{Send fan-out}
+  FAN --> L1[leg 1]
+  FAN --> L2[leg 2]
+  FAN --> LN[leg N]
+  FAN -->|empty book| AGG[aggregate_book]
+  L1 --> AGG
+  L2 --> AGG
+  LN --> AGG
+```
+
+Each `leg_branch` is this subgraph (`fetch` / `quant` / `blotter` have **no LLM**):
+
+```mermaid
+flowchart TB
+  subgraph compute["Compute — no LLM"]
+    FM[fetch_market] -->|ok| Q[quant]
+    FM -->|error| FAIL[leg_failure_finalize]
+    Q -->|ok| BL[blotter]
+    Q -->|error| FAIL
+    BL --> DP[diagnostic_pass]
+  end
+
+  subgraph residual["Bounded residual loop"]
+    RP[react_plan] --> EX[react_tool_exec] --> BG{budget_gate}
+    BG -->|calls left| RG{residual_gate}
+    RG -->|next tool| RP
+    RG -->|done| DF[diag_finalize]
+    BG -->|exhausted| DF
+  end
+
+  DP -->|cue| RP
+  DP -->|skip| DF
+
+  DF --> PS[plan_search] --> SE[search] --> DG[digest_news]
+  DG --> CH[challenge_catalyst] --> SY[synthesize] --> RC[reconcile_debate]
+
+  subgraph verify["Bounded verifier"]
+    VF{verify}
+    VF -->|PASS| FIN[finalize_leg_report]
+    VF -->|FAIL + budget| REV[revise_synthesis]
+    VF -->|PARTIAL| REF[reflect_verifier]
+    VF -->|hard FAIL / exhausted| TUB[terminal_unexplained_break]
+  end
+
+  RC --> VF
+  REV --> RC
+  REF --> FIN
+  TUB --> FIN
+  FAIL --> DONE([done])
+  FIN --> DONE
 ```
