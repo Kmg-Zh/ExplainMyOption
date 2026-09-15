@@ -14,8 +14,8 @@ _Live public ticker, quantity 1, captured 2026-09-14. Not a client book. Headlin
 * **Mark MTM PnL**: `+$0.0000` (-54.9%)
 * **Model ΔP**: `-$5.5062`
 * **Primary drivers**: **Delta PnL** (79%) and **Gamma PnL** (9%) and **Theta decay** (8%).
-* **Verdict**: The option move was dominated by the underlying’s downside spot gap, with the prior delta on the call doing most of the work. Gamma and theta helped shape the move, while the small residual is consistent with ordinary Taylor truncation rather than a distinct missing mechanism. The news flow is only sector-level background and does not supply a company-specific catalyst or a borrow/squeeze/IV-crush regime.
-* **Confidence**: **Medium** — Confidence is medium because the attribution is cleanly concentrated in the modeled delta line, but the market feed is incomplete for a fuller catalyst read and the residual break is flagged for watchlist escalation. The relevant headlines are broad tech/chip context only, while the IV input was proxied from a historical source and the catalyst critic found no required Layer B mechanism.
+* **Verdict**: The position was driven primarily by a downside spot move in the underlying, and the call’s positive delta dominated the day-to-day repricing. Gamma partially softened the move and theta added decay, while the residual stayed small, so the blotter is consistent with a clean spot-led revaluation rather than a major model break. The headline tape is only broad semiconductor and tech weakness, which fits the move as background sentiment and does not add a separate named catalyst.
+* **Confidence**: **Medium** — Confidence is medium because the official factor coverage is high and the residual is low, but the IV history is proxied from a realized-vol source and the feed is not company-specific. The independent catalyst critic found no required Layer B mechanism, so there is no need to force a news-driven overlay beyond broad sector context.
 
 ---
 
@@ -76,21 +76,21 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities):
 
 _Targeted retrieval for dominant driver: **Delta / spot move**._
 
-_Intel note: The feed contains two sector-level tech/chip items that are background for Nvidia and one unrelated personal-finance article. No headline directly names Nvidia or a company-specific control, earnings, or borrow/squeeze event._
+_Intel note: The feed is mostly broad tech/semiconductor sentiment, with two items kept as background because they can influence NVIDIA indirectly. No headline here is company-specific for NVIDIA or indicates a qualifying control-structure event._
 _Intel triage discarded 1 low-relevance headline(s)._
 
 _Yahoo `Ticker.news` returns ticker-level titles; the query string is not applied._
 
 _Peer / sector background (indirect context, not a required catalyst):_
 
-1. **Tech pulls back on AI concerns, cybersecurity takes a step up** _(Source: Yahoo Finance Video)_
-2. **Chip stocks fall as oil prices gain, Treasury yields stay elevated: AlphaCheck** _(Source: Yahoo Finance)_
-3. **Retirement Benchmark Revealed: Is Your 401(k) Balance Ahead of the Curve at 60?** _(Source: Motley Fool)_
+1. **Chip stocks fall as oil prices gain, Treasury yields stay elevated: AlphaCheck** _(Source: Yahoo Finance)_
+   Semiconductor sector tape that can indirectly matter for NVIDIA, but it is a peer-sector move rather than a company-specific headline.
+2. **Tech pulls back on AI concerns, cybersecurity takes a step up** _(Source: Yahoo Finance Video)_
 
 ---
 
 ## 7. Trading Desk Watchlist
 
 * **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock.
-* Reconcile the position with a spot-led full-surface reprice and keep the hedge aligned to the underlying move; the small residual is consistent with truncation, not a separate driver.
-* Use the sector tape only as context; there is no supported NVDA-specific borrow, squeeze, or IV-crush narrative in the headlines.
+* Rehedge around the underlying move; the option PnL is mostly a clean delta pass-through with only modest convexity and decay effects.
+* Treat the tape as sector weakness rather than a company-specific catalyst; no borrow, squeeze, or IV-crush mechanism is indicated in the relevant headlines.

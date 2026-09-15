@@ -13,7 +13,7 @@ ExerciseStyle = Literal["american", "european"]
 
 _LIVE_BOOK_DIR = Path(__file__).resolve().parent
 DEFAULT_PINNED_BOOK = (
-    _LIVE_BOOK_DIR / "pinned_books" / "book_2026-09-01.json"
+    _LIVE_BOOK_DIR / "pinned_books" / "book_2026-09-14.json"
 )
 
 

@@ -59,7 +59,7 @@ python tests/live_book/portfolio_e2e.py --offline
 python tests/live_book/replay_archives.py
 ```
 
-Pin: `tests/live_book/pinned_books/book_2026-09-01.json`. Replay uses archived
+Pin: `tests/live_book/pinned_books/book_2026-09-14.json`. Replay uses archived
 snapshots + news (no live Yahoo). Presentation notebooks live in `notebooks/`
 (committed). Suite `output/` folders are gitignored archives. Hiring/demo captures of the
 product report live in [`docs/samples/`](../docs/samples/README.md) — not in `output/`.

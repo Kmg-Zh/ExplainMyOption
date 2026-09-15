@@ -1,0 +1,118 @@
+{
+  "baseline_as_of": "2026-09-14",
+  "purpose": "Rolled expiries after 2026-09-07 weekly cycle; same strikes/qty for comparable live e2e from this date.",
+  "rolled_from": "tests/live_book/pinned_books/book_2026-09-02.json",
+  "roll_notes": "Resolved 2026-09-14: most names 2026-09-21; XOM/KO/JPM 2026-09-25.",
+  "legs": [
+    {
+      "ticker": "AAPL",
+      "option_type": "call",
+      "strike": 317.5,
+      "expiry": "2026-09-21",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "MSFT",
+      "option_type": "put",
+      "strike": 480.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "OTM put; resolved 2026-09-14"
+    },
+    {
+      "ticker": "NVDA",
+      "option_type": "call",
+      "strike": 210.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "GOOGL",
+      "option_type": "call",
+      "strike": 350.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "european",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "XOM",
+      "option_type": "put",
+      "strike": 175.0,
+      "expiry": "2026-09-25",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM put; resolved 2026-09-14"
+    },
+    {
+      "ticker": "KO",
+      "option_type": "call",
+      "strike": 85.0,
+      "expiry": "2026-09-25",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "JPM",
+      "option_type": "put",
+      "strike": 370.0,
+      "expiry": "2026-09-25",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM put; resolved 2026-09-14"
+    },
+    {
+      "ticker": "META",
+      "option_type": "call",
+      "strike": 665.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "american",
+      "quantity": 2.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "TSLA",
+      "option_type": "call",
+      "strike": 360.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; resolved 2026-09-14"
+    },
+    {
+      "ticker": "SPY",
+      "option_type": "put",
+      "strike": 723.0,
+      "expiry": "2026-09-21",
+      "exercise_style": "european",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "OTM put; resolved 2026-09-14"
+    }
+  ]
+}
