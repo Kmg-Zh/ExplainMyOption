@@ -128,6 +128,23 @@ def test_allow_historical_case_report():
     assert HISTORICAL_OUTPUT_DIR.resolve() in path.parents
 
 
+def test_docs_samples_are_committed_product_reports():
+    samples = REPO_ROOT / "docs" / "samples"
+    expected = {
+        "live.md": ("# Option Price Movement Diagnostic Report", "## 1. Headline"),
+        "historical.md": ("# Option Price Movement Diagnostic Report", "META"),
+        "unexplained_break.md": ("terminal unexplained break", "Terminal break"),
+    }
+    for name, needles in expected.items():
+        path = samples / name
+        assert path.is_file(), name
+        text = path.read_text(encoding="utf-8")
+        assert "## 4. Quantitative PnL Attribution" in text, name
+        assert "## 5. Residual Drill" in text, name
+        for needle in needles:
+            assert needle in text, f"{name} missing {needle!r}"
+
+
 def test_no_stray_report_markdown_in_repo_root():
     for path in REPO_ROOT.glob("*.md"):
         assert path.name in ROOT_MARKDOWN_ALLOWLIST, (
@@ -147,5 +164,6 @@ if __name__ == "__main__":
     test_reject_report_in_repo_root()
     test_allow_report_under_tests_output()
     test_allow_historical_case_report()
+    test_docs_samples_are_committed_product_reports()
     test_no_stray_report_markdown_in_repo_root()
     print("OK — repo layout checks passed")

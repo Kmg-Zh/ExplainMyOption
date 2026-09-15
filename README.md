@@ -14,6 +14,58 @@ This is a personal project, in progress — not a production desk system. LangGr
 4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
 5. **Escalate, don't invent.** Budget exhausted with a large residual or mark gap → unexplained (`terminal_unexplained_break`). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
 
+## Sample output
+
+Three frozen reports live in [`docs/samples/`](docs/samples/README.md). Suite `output/` stays gitignored.
+
+| Capture | File |
+|---------|------|
+| Live public ticker, qty 1 | [live.md](docs/samples/live.md) |
+| META 2022 earnings gap | [historical.md](docs/samples/historical.md) |
+| VW 2008 squeeze — abstain | [unexplained_break.md](docs/samples/unexplained_break.md) |
+
+Truncated `unexplained_break.md` (sections 1–5). Numbers are QuantLib; the LLM only wrote the verdict against that blotter:
+
+```markdown
+# Option Price Movement Diagnostic Report
+
+**Contract**: `VOW.DE 300C 2008-12-19`
+**Analysis Date**: `2008-10-27` | **Status**: Verified by QuantLib (fdm_flat)
+
+## 1. Headline
+
+* **Model PnL (no mark)**: `+$706.2085` (+11593.1%)
+* **Model ΔP**: `+$706.2085`
+* **Primary drivers**: **Gamma PnL** (60%) and **Delta PnL** (7%).
+* **Verifier**: PARTIAL — narrative shipped with caveats (reflect applied).
+* **Verdict**: Reflect (PARTIAL): The blotter is dominated by gamma: the option behaved like a high-convexity instrument into a very large spot jump, so the Taylor bucket is led by convexity rather than linear delta. Layer B adds an issuer-specific control-structure catalyst: Porsche’s large voting-stake disclosure and the resulting reduced free float support a float and squeeze tape, with borrow stress likely amplifying the move; the large residual is consistent with higher-order truncation on top of that tape. …
+* **Confidence**: **Medium** — … the residual is large, so higher-order terms and market-structure effects matter.
+
+## 4. Quantitative PnL Attribution
+
+| Attribution Component | Value ($) | % Share |
+| :--- | ---: | ---: |
+| **Delta PnL (ΔS · Delta)** | `+$145.0401` | +20.5% |
+| **Gamma PnL (½(ΔS)² · Gamma)** | `+$1,164.4252` | +164.9% |
+| **Vega PnL (Δσ · Vega)** | `+$17.1675` | +2.4% |
+| **Theta decay (Δt · Theta)** | `-$0.1799` | -0.0% |
+| **Unexplained residual (ε)** | `-$620.2445` | -87.8% |
+| **Total Model PnL** | **+$706.2085** | **100.0%** |
+
+## 5. Residual Drill
+
+* **Taylor residual**: `-$620.2445` (87.8% of |model|)
+* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap — escalate to human review before trading on factor stories.
+
+### Sequential full revaluation (Layer 4, t → S → σ → r)
+* **time**: `-$0.1799` · **spot**: `+$700.7099` · **vol**: `+$5.6785`
+* Step sum: `+$706.2085` | Model ΔP: `+$706.2085` | Audit residual: `-$0.0000`
+
+* **Tools run** (1/3): `path_reprice`
+```
+
+News, watchlist, and the uncut verdict: [unexplained_break.md](docs/samples/unexplained_break.md).
+
 ## 1-day attribution
 
 Greek-based / Taylor (the shipped blotter):

@@ -30,3 +30,5 @@ Offline check: `python tests/historical/test_news_lineage.py`
 python tests/historical/run.py --case vow_float_squeeze_2008
 python tests/historical/run.py --case aapl_exdiv_2023
 ```
+
+Frozen product reports (not the gitignored `output/` archives): [docs/samples/](../samples/README.md).

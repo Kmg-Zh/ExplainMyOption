@@ -49,7 +49,7 @@ python tests/historical/run.py
 python tests/historical/run.py --case vow_float_squeeze_2008
 ```
 
-Walkthroughs: [docs/case-studies/README.md](../docs/case-studies/README.md).
+Walkthroughs: [docs/case-studies/README.md](../docs/case-studies/README.md). Frozen product reports (not eval archives): [docs/samples/](../docs/samples/README.md).
 
 ## Live book
 
@@ -61,4 +61,5 @@ python tests/live_book/replay_archives.py
 
 Pin: `tests/live_book/pinned_books/book_2026-09-01.json`. Replay uses archived
 snapshots + news (no live Yahoo). Presentation notebooks live in `notebooks/`
-(committed). Suite `output/` folders are gitignored archives.
+(committed). Suite `output/` folders are gitignored archives. Hiring/demo captures of the
+product report live in [`docs/samples/`](../docs/samples/README.md) — not in `output/`.

@@ -9,6 +9,7 @@ Product notes and curated official-doc links. This folder explains what the app 
 | Official doc **links** + version pins | `references/` | LangGraph StateGraph docs URL |
 | Short absorbed coding facts | `knowledge/` | “IV is decimal; Vega per vol point” |
 | Case walkthroughs | `case-studies/` | VW 2008 squeeze; AAPL ex-div |
+| Frozen product reports | `samples/` | Live / historical / unexplained-break |
 | Long excerpts / PDFs (optional) | `references/raw/` (ignored by default) | Saved HTML dumps — prefer links instead |
 
 ## Rules of thumb
@@ -38,3 +39,4 @@ Paste full official docs only if you truly need offline copies → `references/r
 - [knowledge/yfinance-iv.md](knowledge/yfinance-iv.md) — live chain + IV fallback
 - [references/yfinance.md](references/yfinance.md) — yfinance links
 - [references/quantlib.md](references/quantlib.md) — QuantLib links (in-tree `src/pricing/`)
+- [samples/README.md](samples/README.md) — frozen product reports
