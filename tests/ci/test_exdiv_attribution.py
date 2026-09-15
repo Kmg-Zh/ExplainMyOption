@@ -50,7 +50,13 @@ def test_european_and_american_differ_near_large_div():
     assert abs(am_now - eu.price) > 0.01, (am_now, eu.price)
     ee = pricing.diagnostics.early_exercise_premium
     assert ee is not None
-    # Floored at 0 when American FDM with cash divs prints below no-div European.
+    # Signed, not floored: American vs European priced on the same FDM grid
+    # with the same discrete dividend schedule (Task 2 of the v2 work
+    # order). `eu` above is the no-div analytic cross-check, a different
+    # (and larger) quantity than the same-dividend European used for `ee` --
+    # see docs/dev/CODE_MAP.md and pricing/facade.py.
+    assert ee >= -1e-6 * snap.spot_now
+    assert pricing.diagnostics.dividend_pv_effect is not None
 
 
 def test_exdiv_overlay_and_tool_reason_on_aapl_and_synthetic():
