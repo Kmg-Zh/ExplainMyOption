@@ -16,6 +16,7 @@ import yfinance as yf
 
 from .data.cache import load_t1, upsert_snapshot
 from .data.dividends import normalize_dividend_yield, project_dividends
+from .data.observation import ObservationStatus, continuity_gate
 from .data.rates import DEFAULT_RATE, fetch_irx_rate
 from .data.realized import hv20_from_closes, iv_prev_from_hv20
 from .pricing.surface import parallel_shift_surface
@@ -237,13 +238,32 @@ def load_market_data(
 
     hist = tk.history(period="3mo", auto_adjust=False)
     if hist.empty or len(hist) < 2:
-        raise ValueError(f"Not enough price history for {ticker!r}.")
+        # The live loader never independently queries a historical chain for
+        # t-1 (iv_prev/option_price_prev come from the SQLite cache or an
+        # HV20 proxy, which always produce *some* value), so t-1 is OK by
+        # construction of this path. Only t can be DAY_MISSING here.
+        continuity_gate(
+            contract=f"{ticker} {option_type}",
+            status_t1=ObservationStatus.OK,
+            status_t=ObservationStatus.DAY_MISSING,
+            date_t1="t-1",
+            date_t=as_of,
+        )
     spot_now = float(hist["Close"].iloc[-1])
     spot_prev = float(hist["Close"].iloc[-2])
 
     expiry = expiry or _pick_nearest_expiry(tk)
     chain = tk.option_chain(expiry)
     table = chain.calls if option_type == "call" else chain.puts
+
+    if table.empty:
+        continuity_gate(
+            contract=f"{ticker} {option_type} {expiry}",
+            status_t1=ObservationStatus.OK,
+            status_t=ObservationStatus.CONTRACT_MISSING,
+            date_t1="t-1",
+            date_t=as_of,
+        )
 
     if strike is None:
         row = _pick_atm_row(table, spot_now)

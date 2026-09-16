@@ -6,6 +6,7 @@ from typing import Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from ..data.observation import NoComparableObservationError, check_basis_consistency
 from ..graph.deps import FixtureMarketLoader, GraphDeps, default_deps, fixture_deps
 from ..graph.diagnostic_controller import run_diagnostic_pass
 from ..graph.state import OptionState
@@ -34,6 +35,10 @@ class LegState(OptionState, total=False):
     leg: BookLegSpec
     leg_error: str | None
     leg_ok: bool
+    terminal_no_comparable_observation: bool
+    observation_status_t1: str
+    observation_status_t: str
+    basis_mismatch_suspected: bool
     diag_budget_remaining: int
     diag_iterations: int
     diag_tool_history: list[dict[str, Any]]
@@ -167,19 +172,51 @@ def build_leg_diagnosis_subgraph(
                 strike=state.get("strike") or leg.strike,
                 expiry=state.get("expiry") or leg.expiry,
             )
-            next_state: LegState = {
-                "snapshot": data.snapshot,
-                "surface": data.surface,
-                "surface_prev": data.surface_prev,
-                "ticker": data.snapshot.ticker,
-                "option_type": data.snapshot.option_type,
-                "leg_ok": True,
-                "leg_error": None,
+        except NoComparableObservationError as exc:
+            # A3.2: a data coverage gap, never reported as an unexplained
+            # break. No pricing call below this point.
+            return {
+                "leg_ok": False,
+                "leg_error": exc.report_text(),
+                "terminal_no_comparable_observation": True,
+                "observation_status_t1": exc.status_t1.value,
+                "observation_status_t": exc.status_t.value,
             }
-            _apply_leg_overrides(next_state, leg)
-            return next_state
         except Exception as exc:
             return {"leg_ok": False, "leg_error": str(exc)}
+
+        snap = data.snapshot
+        basis = check_basis_consistency(
+            spot=snap.spot_now,
+            rate=snap.risk_free_rate,
+            time_to_expiry_years=snap.time_to_expiry_years,
+            call_mid=snap.mid if snap.option_type == "call" else None,
+            call_strike=snap.strike if snap.option_type == "call" else None,
+            put_mid=snap.mid if snap.option_type == "put" else None,
+            put_strike=snap.strike if snap.option_type == "put" else None,
+        )
+        if basis.basis_mismatch_suspected:
+            # A3.5: never apply a correction factor -- report and stop.
+            return {
+                "leg_ok": False,
+                "leg_error": (
+                    f"Basis mismatch suspected: {basis.failing_invariant} failed "
+                    f"({basis.detail}). No correction applied; case aborted."
+                ),
+                "basis_mismatch_suspected": True,
+            }
+
+        next_state: LegState = {
+            "snapshot": data.snapshot,
+            "surface": data.surface,
+            "surface_prev": data.surface_prev,
+            "ticker": data.snapshot.ticker,
+            "option_type": data.snapshot.option_type,
+            "leg_ok": True,
+            "leg_error": None,
+        }
+        _apply_leg_overrides(next_state, leg)
+        return next_state
 
     def route_after_fetch(state: LegState) -> Literal["quant", "leg_failure_finalize"]:
         if state.get("leg_error"):
@@ -523,6 +560,17 @@ def build_leg_diagnosis_subgraph(
 
     def leg_failure_finalize_node(state: LegState) -> LegState:
         msg = state.get("leg_error") or "Leg failed before report finalization."
+        no_comparable = bool(state.get("terminal_no_comparable_observation"))
+        basis_mismatch = bool(state.get("basis_mismatch_suspected"))
+        if no_comparable:
+            heading = "## No Comparable Observation"
+            takeaways = ["No pricing or news search was performed; this is a data coverage limitation."]
+        elif basis_mismatch:
+            heading = "## Basis Mismatch Suspected"
+            takeaways = ["No pricing was performed; the raw quotes failed a basis-consistency check."]
+        else:
+            heading = "## Leg Failure"
+            takeaways = ["Inspect fixture or market input for this leg."]
         return {
             "diagnosis": msg,
             "diagnostic_synthesis": {
@@ -531,10 +579,10 @@ def build_leg_diagnosis_subgraph(
                 "confidence_level": "low",
                 "confidence_rationale": msg,
                 "evidence": [],
-                "takeaways": ["Inspect fixture or market input for this leg."],
+                "takeaways": takeaways,
                 "american_commentary": "",
             },
-            "report": f"## Leg Failure\n\n{msg}\n",
+            "report": f"{heading}\n\n{msg}\n",
         }
 
     graph = StateGraph(LegState)

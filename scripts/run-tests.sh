@@ -33,6 +33,8 @@ TESTS=(
   ci/test_diagnostic_pass
   ci/test_report_reconciliation
   ci/test_repo_layout
+  ci/test_observation_preconditions
+  ci/test_basis_guard
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage
