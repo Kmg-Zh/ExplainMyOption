@@ -152,6 +152,9 @@ Index: [docs/case-studies/README.md](docs/case-studies/README.md).
   two real cases above; live `iv_prev` still resolves via SQLite t-1, else
   HV20 proxy. Coverage gaps, strike-window bias and licensing:
   `docs/dev/DATA_SOURCES.md`.
+- Second-order vol terms (vanna, volga) are part of the shipped blotter,
+  free and always computed. Charm and rho are not modelled; on a one-day
+  equity horizon both sit below the reporting threshold.
 - `--book` is per-leg fan-out + roll-up, not cross-gamma.
 - Users cannot custom-prompt or pick an alternate path.
 - Not in scope: trading edge, price prediction, book-level cross-gamma.

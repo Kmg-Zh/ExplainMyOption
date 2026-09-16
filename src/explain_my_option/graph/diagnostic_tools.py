@@ -75,6 +75,9 @@ def run_taylor_second_order(
         "combined_pnl": result.combined_pnl,
         "residual_after": result.residual_after,
         "limitations": result.limitations,
+        "residual_first_order": result.residual_first_order,
+        "second_order_explained": result.second_order_explained,
+        "residual_reduction_pct": result.residual_reduction_pct,
     }
 
 

@@ -38,6 +38,7 @@ TESTS=(
   ci/test_implied_borrow
   ci/test_historical_chain
   ci/test_historical_real_cases
+  ci/test_regime_rule
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage

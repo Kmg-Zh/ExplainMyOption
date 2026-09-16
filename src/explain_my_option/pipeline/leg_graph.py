@@ -313,10 +313,14 @@ def build_leg_diagnosis_subgraph(
         next_budget = int(state.get("diag_budget_remaining", config.diag_budget)) - 1
         next_iterations = int(state.get("diag_iterations", 0)) + 1
         next_residual = residual_before
-        if tool_name == "taylor_second_order" and "residual_after" in payload:
+        # path_reprice (A5.1: the only tool this loop can still pick --
+        # taylor_second_order is free and already ran upstream) reports its
+        # own audited residual; use it so the gate below sees progress
+        # instead of looping on a stale pre-reprice number.
+        if tool_name == "path_reprice" and "residual_vs_model" in payload:
             next_residual = abs(
                 100.0
-                * float(payload["residual_after"])
+                * float(payload["residual_vs_model"])
                 / max(abs(state["pricing"].pnl.total_pnl), 1e-12)
             )
         merged = merge_iteration(

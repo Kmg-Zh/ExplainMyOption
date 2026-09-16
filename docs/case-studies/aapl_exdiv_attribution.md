@@ -44,9 +44,44 @@ On AAPL, IV crush is a first-class Taylor slice (Vega). The leftover residual is
 
 ---
 
+## Where the residual went (Task A5)
+
+AAPL's 28% → 18% IV move is a 10 vol point move — large enough that
+`taylor_second_order` (Layer 3, vanna/volga via bump-and-revalue on the
+official FDM engine) is not noise. Numbers below are from a live run of
+`tests/ci/fixtures/aapl_exdiv_2023.json` through `run_diagnostic_pass`
+(`python -c` snippet in the commit that added this section):
+
+| Term | \$ | % of \|ΔP\| |
+|---|---:|---:|
+| Model ΔP | −0.4508 | 100.0% |
+| Vega PnL (first-order) | −0.2813 | 62.4% |
+| Residual, first-order only (`ε_method` before Layer 3) | +0.1883 | 41.8% |
+| Vanna PnL | −0.0181 | 4.0% |
+| Volga PnL | +0.1684 | 37.4% |
+| Residual, after Layer 3 (`ε_method − second_order_explained`) | +0.0381 | 8.4% |
+
+`residual_reduction_pct` = 79.8%: volga alone accounts for 37.4% of what
+the first-order blotter reported as unexplained. The remaining ~8.4%
+residual is short-dated ITM boundary behaviour, the discrete-dividend vs
+no-div European comparison (b, legacy above), and FDM truncation — the
+same honest bucket described in "What Taylor misses," just smaller now
+that the vol convexity term has been named rather than lumped in.
+
+**Regime (A5.3):** `r_vol = 0.599` (volga against a small first-order Vega
+PnL) exceeds the 0.35 threshold, so `taylor_regime = INVALID` on this
+fixture — the Taylor split above is a reference view, not the headline;
+`path_reprice`'s full revaluation is. `path_reprice` already runs on this
+fixture regardless (severity above the 10% band, "What the diagnostic
+tool does" below), so the headline was already correct here by
+coincidence of which tool the severity gate picks — the regime flag is
+what makes that choice principled instead of incidental.
+
+---
+
 ## What the diagnostic tool does
 
-AAPL residual is above the 20% severity band, so `path_reprice` takes the deep slot and `american_dividend_exercise_check` is **skipped with an explicit reason** (`path_reprice outranks ex-div window`). The overlay still attaches so the four-way split is visible.
+AAPL residual is above the 10% severity band, so `path_reprice` takes the deep slot and `american_dividend_exercise_check` is **skipped with an explicit reason** (`path_reprice outranks ex-div window`). `taylor_second_order` (Layer 3, above) also runs regardless — it is free (A5.1) and no longer competes for that slot. The overlay still attaches so the split is visible.
 
 On `deep_itm_exdiv` residual is tiny, so `american_dividend_exercise_check` **runs**. European analytic and American FDM prices still differ; that difference is diagnostic, not an edge.
 

@@ -67,6 +67,7 @@ def compute_second_order_taylor(
     price_now: float,
     d_spot: float,
     d_vol: float,
+    residual_pnl: float = 0.0,
     config: EngineConfig | None = None,
 ) -> SecondOrderTaylorResult:
     """Vanna/Volga PnL from T-1 cross sensitivities (official flat FDM bumps)."""
@@ -121,6 +122,9 @@ def compute_second_order_taylor(
             combined_pnl=0.0,
             residual_after=float(price_now - price_prev),
             limitations=limitations,
+            residual_first_order=float(residual_pnl),
+            second_order_explained=0.0,
+            residual_reduction_pct=0.0,
         )
 
     vanna_pnl = vanna * d_spot * d_vol
@@ -128,6 +132,14 @@ def compute_second_order_taylor(
     combined = vanna_pnl + volga_pnl
     first_order = price_now - price_prev
     residual_after = first_order - combined
+
+    second_order_explained = vanna_pnl + volga_pnl
+    residual_after_second_order = residual_pnl - second_order_explained
+    residual_reduction_pct = (
+        100.0 * (abs(residual_pnl) - abs(residual_after_second_order)) / abs(residual_pnl)
+        if abs(residual_pnl) > 1e-12
+        else 0.0
+    )
     return SecondOrderTaylorResult(
         vanna=float(vanna),
         volga=float(volga),
@@ -136,4 +148,7 @@ def compute_second_order_taylor(
         combined_pnl=float(combined),
         residual_after=float(residual_after),
         limitations=limitations,
+        residual_first_order=float(residual_pnl),
+        second_order_explained=float(second_order_explained),
+        residual_reduction_pct=float(residual_reduction_pct),
     )

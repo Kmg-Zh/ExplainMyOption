@@ -11,6 +11,21 @@ from . import diagnostic_tools as tools
 
 MAX_DIAGNOSTIC_TOOL_CALLS = 3
 
+# A5.1: pure arithmetic on already-computed Greeks -- no repricing path, no
+# network, no LLM -- always runs when its precondition holds and never
+# competes with path_reprice/compare_to_official for the scarce budget
+# slot. (taylor_second_order does bump-and-revalue a handful of small
+# perturbations around the single already-priced t-1 point, which is why
+# it is cheap relative to path_reprice's full multi-factor sequential
+# reval -- "free" here means "does not consume the tool budget", not
+# "zero computation".)
+FREE_TOOLS = frozenset({"taylor_second_order"})
+
+# A5.3: the Taylor expansion is local -- on a large move it does not
+# converge slowly, it diverges. Provisional threshold; see README "Regime
+# rule" (added once the case table backing it exists).
+TAYLOR_REGIME_THRESHOLD = 0.35
+
 
 @dataclass
 class SkippedTool:
@@ -28,6 +43,10 @@ class DiagnosticFindings:
     suppress_vega_narrative: bool = False
     observation_reliable: bool = True
     ex_div_attribution: dict[str, Any] | None = None
+    tool_costs: dict[str, str] = field(default_factory=dict)
+    taylor_regime: str | None = None
+    r_spot: float | None = None
+    r_vol: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload = {
@@ -38,6 +57,10 @@ class DiagnosticFindings:
             "terminal_unexplained_break": self.terminal_unexplained_break,
             "suppress_vega_narrative": self.suppress_vega_narrative,
             "observation_reliable": self.observation_reliable,
+            "tool_costs": dict(self.tool_costs),
+            "taylor_regime": self.taylor_regime,
+            "r_spot": self.r_spot,
+            "r_vol": self.r_vol,
         }
         if self.ex_div_attribution is not None:
             payload["ex_div_attribution"] = dict(self.ex_div_attribution)
@@ -64,12 +87,15 @@ def _run_tool(
     name: str,
     fn: Callable[[], dict[str, Any]],
 ) -> bool:
-    """Run one tool if budget allows. Returns False if budget exhausted."""
-    if findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS:
+    """Run one tool. Free tools (A5.1) always run; costly ones need budget."""
+    cost = "free" if name in FREE_TOOLS else "costly"
+    if cost == "costly" and findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS:
         return False
     findings.tools_run.append(name)
     findings.results[name] = fn()
-    findings.tool_calls_used += 1
+    findings.tool_costs[name] = cost
+    if cost == "costly":
+        findings.tool_calls_used += 1
     return True
 
 
@@ -83,38 +109,26 @@ def _pick_deep_tool(
     gap_pct: float,
     flag_ex_div: bool,
 ) -> tuple[str | None, list[tuple[str, str]]]:
-    """Select one deep tool for the final slot; record skipped alternatives."""
+    """Select one *costly* tool for the final budget slot.
+
+    taylor_second_order no longer competes here (A5.1: it is free and
+    already ran unconditionally before this is called) -- the old
+    10-20% band that reserved the slot for it ahead of a full reval is
+    gone, folded into the path_reprice threshold below.
+    """
     severity = max(residual_pct, gap_pct)
     skipped: list[tuple[str, str]] = []
 
     if severity <= 10.0 and not flag_ex_div:
         return None, skipped
 
-    if severity > 20.0:
-        skipped.extend(
-            [
-                ("taylor_second_order", "path_reprice selected for severity >20%"),
-                ("compare_to_official", "path_reprice selected for severity >20%"),
-            ]
-        )
+    if severity > 10.0:
+        skipped.append(("compare_to_official", "path_reprice selected for severity >10%"))
         if flag_ex_div:
             skipped.append(
                 ("american_dividend_exercise_check", "path_reprice outranks ex-div window")
             )
         return "path_reprice", skipped
-
-    if 10.0 < severity <= 20.0:
-        skipped.extend(
-            [
-                ("path_reprice", "severity in 10–20% band — second-order Taylor first"),
-                ("compare_to_official", "taylor_second_order selected for 10–20% band"),
-            ]
-        )
-        if flag_ex_div:
-            skipped.append(
-                ("american_dividend_exercise_check", "taylor_second_order outranks ex-div")
-            )
-        return "taylor_second_order", skipped
 
     if flag_ex_div:
         skipped.append(("compare_to_official", "american check outranks model-risk cross-check"))
@@ -153,6 +167,19 @@ def run_diagnostic_pass(
             findings.suppress_vega_narrative = True
         findings.observation_reliable = bool(q.get("observation_reliable", True))
 
+    # A5.1: free -- always runs, never competes for the budget slot below.
+    _run_tool(
+        findings,
+        "taylor_second_order",
+        lambda: tools.run_taylor_second_order(snap, pricing, config=config),
+    )
+    second = findings.results.get("taylor_second_order") or {}
+    r_spot = abs(pricing.pnl.gamma_pnl) / max(abs(pricing.pnl.delta_pnl), 1e-12)
+    r_vol = abs(float(second.get("volga_pnl", 0.0))) / max(abs(pricing.pnl.vega_pnl), 1e-12)
+    findings.r_spot = r_spot
+    findings.r_vol = r_vol
+    findings.taylor_regime = "INVALID" if max(r_spot, r_vol) > TAYLOR_REGIME_THRESHOLD else "VALID"
+
     rec = findings.results.get("reconcile_mark_vs_model", {})
     gap_pct = _gap_pct(rec)
     calibrated_ok = rec.get("mark_calibrated") and gap_pct < 2.0
@@ -175,12 +202,6 @@ def run_diagnostic_pass(
                 findings,
                 "path_reprice",
                 lambda: tools.run_path_reprice(snap, pricing, surface, config=config),
-            )
-        elif deep == "taylor_second_order":
-            _run_tool(
-                findings,
-                "taylor_second_order",
-                lambda: tools.run_taylor_second_order(snap, pricing, config=config),
             )
         elif deep == "american_dividend_exercise_check":
             _run_tool(

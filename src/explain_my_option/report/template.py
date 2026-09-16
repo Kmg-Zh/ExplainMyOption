@@ -138,14 +138,44 @@ def _residual_drill_section(
             "* **Terminal break**: diagnostic budget exhausted with large unexplained "
             "residual/gap — escalate to human review before trading on factor stories."
         )
+    taylor_regime = findings.get("taylor_regime")
+    if taylor_regime == "INVALID":
+        r_spot = findings.get("r_spot")
+        lines.append(
+            "* **Regime**: the move this day is outside the range where a Taylor "
+            f"expansion is valid (r_spot = {r_spot:.2f})." if r_spot is not None
+            else "* **Regime**: the move this day is outside the range where a "
+            "Taylor expansion is valid."
+        )
+        lines.append(
+            "  The Greek decomposition below is shown for reference; the headline "
+            "attribution comes from full revaluation."
+        )
     second = results.get("taylor_second_order")
     if second:
+        # A5.4: materiality folding -- a term earns its own line only if
+        # |term| >= max(0.01*|ΔP|, 0.01); smaller terms fold into one line.
+        materiality_floor = max(0.01 * abs(facts.total_pnl), 0.01)
+        vanna_pnl = float(second.get("vanna_pnl", 0.0))
+        volga_pnl = float(second.get("volga_pnl", 0.0))
+        term_lines: list[str] = []
+        folded = 0.0
+        if abs(vanna_pnl) >= materiality_floor:
+            term_lines.append(f"Vanna PnL: `{_money(vanna_pnl)}`")
+        else:
+            folded += vanna_pnl
+        if abs(volga_pnl) >= materiality_floor:
+            term_lines.append(f"Volga PnL: `{_money(volga_pnl)}`")
+        else:
+            folded += volga_pnl
+        if abs(folded) > 1e-12:
+            term_lines.append(f"other second-order: `{_money(folded)}`")
         lines.extend(
             [
                 "",
-                "### Second-order Taylor (Layer 3)",
-                f"* Vanna PnL: `{_money(second.get('vanna_pnl', 0.0))}` | "
-                f"Volga PnL: `{_money(second.get('volga_pnl', 0.0))}`",
+                "### Second-order Taylor (Layer 3)"
+                + (" — reference only, see Regime above" if taylor_regime == "INVALID" else ""),
+                "* " + " | ".join(term_lines),
                 f"* Combined: `{_money(second.get('combined_pnl', 0.0))}` | "
                 f"Residual after: `{_money(second.get('residual_after', 0.0))}`",
             ]

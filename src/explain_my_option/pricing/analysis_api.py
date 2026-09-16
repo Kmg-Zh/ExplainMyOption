@@ -167,6 +167,7 @@ def taylor_second_order(
         price_now=pricing_result.greeks_now.price,
         d_spot=pnl.d_spot,
         d_vol=pnl.d_vol,
+        residual_pnl=pnl.residual_pnl,
         config=config,
     )
 

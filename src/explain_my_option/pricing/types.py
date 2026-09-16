@@ -227,6 +227,14 @@ class SecondOrderTaylorResult:
     combined_pnl: float
     residual_after: float
     limitations: list[str] = field(default_factory=list)
+    # A5.2: named per the spec, alongside (not replacing) the fields above.
+    # second_order_explained is combined_pnl under the spec's own name;
+    # residual_first_order is the *first-order Taylor* residual (pnl.residual_pnl)
+    # this correction is applied against, distinct from residual_after's
+    # existing (total_pnl - combined_pnl) definition.
+    residual_first_order: float = 0.0
+    second_order_explained: float = 0.0
+    residual_reduction_pct: float = 0.0
 
     def as_dict(self) -> dict:
         return asdict(self)

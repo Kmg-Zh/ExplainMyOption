@@ -43,12 +43,13 @@ def test_compute_residual_pct():
 
 
 def test_choose_a2_tool_policy_and_duplicates():
+    # A5.1: taylor_second_order is free and already ran upstream (in
+    # run_diagnostic_pass) before this loop's first turn, so it is never a
+    # candidate here -- path_reprice is the only tool this loop offers.
     assert choose_a2_tool(residual_pct=4.9, tools_run=[]) is None
-    assert choose_a2_tool(residual_pct=10.0, tools_run=[]) == "taylor_second_order"
+    assert choose_a2_tool(residual_pct=10.0, tools_run=[]) == "path_reprice"
     assert choose_a2_tool(residual_pct=30.0, tools_run=[]) == "path_reprice"
-    assert (
-        choose_a2_tool(residual_pct=10.0, tools_run=["taylor_second_order"]) is None
-    )
+    assert choose_a2_tool(residual_pct=10.0, tools_run=["path_reprice"]) is None
     assert choose_a2_tool(residual_pct=30.0, tools_run=["path_reprice"]) is None
 
 
