@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal
 
 from ..data_loader import NewsItem
@@ -39,6 +40,13 @@ class AmericanFacts:
     next_ex_div: str | None
     next_div_amount: float | None
     early_exercise_assessment: str
+    # A2.3 economic screen: a dividend alone doesn't make early exercise
+    # relevant -- needs both dividend_coverage > 1 (the dividend exceeds
+    # remaining time value) and the ex-div date landing before expiry.
+    dividend_coverage: float | None
+    days_to_ex: int | None
+    days_to_expiry: int | None
+    ee_relevant: bool | None
 
 
 @dataclass
@@ -204,6 +212,17 @@ def _confidence(
     return level, reasons
 
 
+def _days_between(start: str | None, end: str | None) -> int | None:
+    if not start or not end:
+        return None
+    try:
+        d0 = datetime.strptime(start, "%Y-%m-%d").date()
+        d1 = datetime.strptime(end, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return (d1 - d0).days
+
+
 def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFacts:
     diag = pricing.diagnostics
     american = diag.american_price if diag.american_price is not None else pricing.greeks_now.price
@@ -218,25 +237,41 @@ def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFac
             next_ex = future[0].ex_date
             next_amt = future[0].amount
 
+    # A2.3: a dividend alone does not make early exercise relevant -- needs
+    # the dividend to exceed remaining time value (coverage > 1) *and* the
+    # ex-div date to land before expiry.
+    days_to_ex = _days_between(snap.as_of, next_ex)
+    days_to_expiry = _days_between(snap.as_of, snap.expiry)
+    dividend_coverage: float | None = None
+    ee_relevant: bool | None = None
+    if next_amt is not None:
+        dividend_coverage = next_amt / max(time_value, 1e-9)
+        if days_to_ex is not None and days_to_expiry is not None:
+            ee_relevant = (dividend_coverage > 1.0) and (days_to_ex < days_to_expiry)
+
     if diag.ee_premium_anomaly:
         ee_assessment = (
             "Early-exercise premium printed negative — a numerical "
             "anomaly (engine/grid inconsistency), not a genuine exercise "
             "signal; see docs/dev/WORK_ORDER_REPORT.md."
         )
+    elif ee_relevant is True:
+        ee_assessment = (
+            f"Dividend coverage {dividend_coverage:.2f} (dividend ${next_amt:.4f} vs "
+            f"time value ${time_value:.4f}); ex-div is {days_to_ex}d out, expiry "
+            f"{days_to_expiry}d out — early exercise is economically relevant."
+        )
+    elif ee_relevant is False:
+        ee_assessment = (
+            f"Dividend coverage {dividend_coverage:.2f} — the dividend does not "
+            "exceed remaining time value, or the ex-div date does not land "
+            "before expiry. This is a carry/theta case, not an early-exercise "
+            "case, even if a premium is reported above."
+        )
     elif diag.early_exercise_premium is not None and diag.early_exercise_premium < 0.01:
         ee_assessment = (
             "Early-exercise premium vs European is negligible — "
             "immediate exercise is sub-optimal at current marks."
-        )
-    elif time_value > 0 and next_amt is not None and time_value > next_amt * 1.5:
-        ee_assessment = (
-            f"Time value (${time_value:.4f}) exceeds the next cash dividend "
-            f"(${next_amt:.4f}) — early-exercise risk is low near term."
-        )
-    elif intrinsic > 0 and time_value < (next_amt or 0.0):
-        ee_assessment = (
-            "ITM with time value below the next dividend — monitor early-exercise boundary."
         )
     else:
         ee_assessment = (
@@ -257,6 +292,10 @@ def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFac
         next_ex_div=next_ex,
         next_div_amount=next_amt,
         early_exercise_assessment=ee_assessment,
+        dividend_coverage=dividend_coverage,
+        days_to_ex=days_to_ex,
+        days_to_expiry=days_to_expiry,
+        ee_relevant=ee_relevant,
     )
 
 

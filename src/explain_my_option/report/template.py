@@ -189,6 +189,18 @@ def _residual_drill_section(
                 ),
                 f"* **Dividend PV effect** (European, same divs − no divs): "
                 f"`{_money(float(split.get('dividend_pv_effect') or 0.0))}`",
+                (
+                    f"* **Dividend coverage** (dividend / time value): "
+                    f"`{float(split.get('dividend_coverage')):.2f}` — "
+                    + (
+                        "early exercise is economically relevant"
+                        if split.get("ee_relevant")
+                        else "carry/theta case, not an early-exercise case"
+                    )
+                    if split.get("dividend_coverage") is not None
+                    and split.get("ee_relevant") is not None
+                    else "* **Dividend coverage**: n/a (no upcoming dividend or expiry data)"
+                ),
                 f"* **Vol (Taylor Vega PnL)**: `{_money(float(split.get('vega_pnl') or 0.0))}`",
                 f"* **Residual (Taylor ε)**: `{_money(float(split.get('residual_pnl') or 0.0))}`",
                 "* _Overlay only — not a trading edge. LSM/Heston stay diagnostic-only._",

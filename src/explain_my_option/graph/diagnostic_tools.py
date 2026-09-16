@@ -117,6 +117,9 @@ def american_dividend_exercise_check(
         "early_exercise_assessment": am.early_exercise_assessment,
         "days_to_ex_div": days_to_ex,
         "flag_ex_div_window": flag_window,
+        "dividend_coverage": am.dividend_coverage,
+        "days_to_expiry": am.days_to_expiry,
+        "ee_relevant": am.ee_relevant,
     }
 
 
@@ -162,6 +165,8 @@ def ex_div_attribution_split(
             and ee_f >= _EE_MATERIAL_USD
             and not am.get("ee_premium_anomaly")
         ),
+        "dividend_coverage": am.get("dividend_coverage"),
+        "ee_relevant": am.get("ee_relevant"),
         "vega_pnl": float(pricing.pnl.vega_pnl),
         "residual_pnl": float(pricing.pnl.residual_pnl),
         "note": (
