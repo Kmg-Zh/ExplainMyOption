@@ -46,10 +46,11 @@
 | Theta (decay) | -$0.0483 |
 | Residual (ε) | +$0.0354 |
 
-### Early exercise (flat FDM vs European analytic)
+### Early exercise (flat FDM, American vs European, same dividend schedule)
 - Official American price: 3.2858
-- European analytic (flat): 3.2498
-- Early-exercise premium (flat FDM − EU): +$0.0006
+- European analytic (no cash div, cross-check): 3.2498
+- Early-exercise premium (American − European, same divs): +$0.0000
+- Dividend PV effect (European, same divs − no divs): +$0.0000
 
 _Limitations: local_vol_t1_shifted_failed_
 

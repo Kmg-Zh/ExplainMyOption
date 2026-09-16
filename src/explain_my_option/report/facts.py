@@ -30,6 +30,8 @@ class AmericanFacts:
     american_price: float | None
     european_price: float | None
     early_exercise_premium: float | None
+    dividend_pv_effect: float | None
+    ee_premium_anomaly: bool
     intrinsic: float
     time_value: float
     spot_now: float
@@ -216,7 +218,13 @@ def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFac
             next_ex = future[0].ex_date
             next_amt = future[0].amount
 
-    if diag.early_exercise_premium is not None and diag.early_exercise_premium < 0.01:
+    if diag.ee_premium_anomaly:
+        ee_assessment = (
+            "Early-exercise premium printed negative — a numerical "
+            "anomaly (engine/grid inconsistency), not a genuine exercise "
+            "signal; see docs/dev/WORK_ORDER_REPORT.md."
+        )
+    elif diag.early_exercise_premium is not None and diag.early_exercise_premium < 0.01:
         ee_assessment = (
             "Early-exercise premium vs European is negligible — "
             "immediate exercise is sub-optimal at current marks."
@@ -240,6 +248,8 @@ def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFac
         american_price=diag.american_price,
         european_price=diag.european_price,
         early_exercise_premium=diag.early_exercise_premium,
+        dividend_pv_effect=diag.dividend_pv_effect,
+        ee_premium_anomaly=diag.ee_premium_anomaly,
         intrinsic=intrinsic,
         time_value=time_value,
         spot_now=snap.spot_now,

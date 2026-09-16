@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -276,8 +277,13 @@ def price_and_attribute(
         dt_days=_calendar_days_elapsed(snapshot),
     )
 
-    am_price = eu_price = ee_prem = None
+    am_price = eu_price = ee_prem = div_pv_effect = None
+    ee_anomaly = False
     try:
+        # Analytic European, no dividends -- kept as the legacy comparator
+        # (still exposed as ``european_price`` / ``european_analytic_no_div``
+        # for the existing ex-div overlay) and as a cross-check against the
+        # FDM no-div European below, per spec §2.1.
         eu_g = price_european_flat(
             spot=snapshot.spot_now,
             strike=snapshot.strike,
@@ -305,10 +311,46 @@ def price_and_attribute(
                     )
                 )
                 am_flat = g_flat.price
-            ee_prem = max(0.0, am_flat - eu_price)
+
+            # Same FDM engine and grid for both European legs (European
+            # exercise), so discretisation error cancels against am_flat --
+            # spec §2.1. P_eu_div carries snapshot.discrete_dividends;
+            # P_eu_nodiv carries none. Both replace the old comparator,
+            # which was European-analytic-with-NO-dividends regardless of
+            # snapshot.discrete_dividends.
+            eu_div_spec = _spec(
+                snapshot,
+                spot=snapshot.spot_now,
+                vol=iv_now,
+                eval_date=as_of,
+                surface=None,
+            )
+            eu_div_spec = dataclasses.replace(
+                eu_div_spec, exercise_style="european"
+            )
+            eu_nodiv_spec = dataclasses.replace(
+                eu_div_spec, discrete_dividends=()
+            )
+            g_eu_div, _ = FdmFlatEngine(cfg).price(eu_div_spec)
+            g_eu_nodiv, _ = FdmFlatEngine(cfg).price(eu_nodiv_spec)
+            eu_div_price = g_eu_div.price
+            eu_nodiv_price = g_eu_nodiv.price
+
+            if abs(eu_nodiv_price - eu_price) > 1e-2 * max(snapshot.spot_now, 1.0):
+                limitations.append("european_analytic_fdm_mismatch")
+
+            ee_prem = am_flat - eu_div_price  # signed, not floored
+            div_pv_effect = eu_div_price - eu_nodiv_price  # signed
+            legacy_am_minus_eunodiv = am_flat - eu_nodiv_price
+            if abs((ee_prem + div_pv_effect) - legacy_am_minus_eunodiv) > 1e-6:
+                limitations.append("ee_premium_identity_mismatch")
+            if ee_prem < -1e-6 * snapshot.spot_now:
+                ee_anomaly = True
+                limitations.append("ee_premium_anomaly")
         else:
             am_price = eu_price
             ee_prem = 0.0
+            div_pv_effect = 0.0
     except Exception:
         limitations.append("early_exercise_premium_unavailable")
         am_price = greeks_now.price
@@ -326,6 +368,8 @@ def price_and_attribute(
         european_price=eu_price,
         american_price=am_price,
         early_exercise_premium=ee_prem,
+        dividend_pv_effect=div_pv_effect,
+        ee_premium_anomaly=ee_anomaly,
         limitations=list(dict.fromkeys(limitations)),
     )
 

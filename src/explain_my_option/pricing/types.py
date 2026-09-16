@@ -172,6 +172,14 @@ class PricingDiagnostics:
     european_price: Optional[float] = None
     american_price: Optional[float] = None
     early_exercise_premium: Optional[float] = None
+    # P_eu_div - P_eu_nodiv (signed, same FDM grid both sides). Together
+    # with early_exercise_premium this reconstructs the legacy
+    # American-minus-no-div-European figure to 1e-9 (see facade.py).
+    dividend_pv_effect: Optional[float] = None
+    # True when early_exercise_premium < -1e-6*S -- a numerical anomaly
+    # (engine/grid inconsistency), not a genuine negative exercise value.
+    # Never clamped; commentary must not narrate this as a real signal.
+    ee_premium_anomaly: bool = False
     limitations: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:

@@ -227,6 +227,8 @@ _EE_MATERIAL_USD = 0.01
 
 def ee_premium_material(facts: PositionFacts) -> bool:
     prem = facts.american.early_exercise_premium
+    if facts.american.ee_premium_anomaly:
+        return False
     return prem is not None and prem >= _EE_MATERIAL_USD
 
 

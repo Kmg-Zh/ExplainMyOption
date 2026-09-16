@@ -112,6 +112,8 @@ def american_dividend_exercise_check(
         "next_ex_div": am.next_ex_div,
         "next_div_amount": am.next_div_amount,
         "early_exercise_premium": am.early_exercise_premium,
+        "dividend_pv_effect": am.dividend_pv_effect,
+        "ee_premium_anomaly": am.ee_premium_anomaly,
         "early_exercise_assessment": am.early_exercise_assessment,
         "days_to_ex_div": days_to_ex,
         "flag_ex_div_window": flag_window,
@@ -133,8 +135,10 @@ def ex_div_attribution_split(
     d_spot = float(snap.spot_now - snap.spot_prev)
     div = am.get("next_div_amount")
     ee = am.get("early_exercise_premium")
+    div_pv = am.get("dividend_pv_effect")
     div_f = float(div) if div is not None else None
     ee_f = float(ee) if ee is not None else None
+    div_pv_f = float(div_pv) if div_pv is not None else None
     spot_vs_div = None
     if div_f is not None:
         spot_vs_div = d_spot + div_f
@@ -151,7 +155,13 @@ def ex_div_attribution_split(
         "european_analytic_no_div": eu_f,
         "am_minus_eu": am_minus_eu,
         "ee_premium_now": ee_f,
-        "ee_premium_material": ee_f is not None and ee_f >= _EE_MATERIAL_USD,
+        "dividend_pv_effect": div_pv_f,
+        "ee_premium_anomaly": bool(am.get("ee_premium_anomaly")),
+        "ee_premium_material": (
+            ee_f is not None
+            and ee_f >= _EE_MATERIAL_USD
+            and not am.get("ee_premium_anomaly")
+        ),
         "vega_pnl": float(pricing.pnl.vega_pnl),
         "residual_pnl": float(pricing.pnl.residual_pnl),
         "note": (

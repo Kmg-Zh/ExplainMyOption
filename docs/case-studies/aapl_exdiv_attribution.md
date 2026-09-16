@@ -13,16 +13,20 @@ Official PnL stays **American FDM** Taylor. LSM / Heston stay diagnostic-only.
 
 ## What the overlay splits
 
-When `flag_ex_div_window` is true, the residual drill adds a four-way FO overlay (code, not LLM):
+When `flag_ex_div_window` is true, the residual drill adds a five-way FO overlay (code, not LLM):
 
 | Piece | What it is | AAPL 2023-11-09 | Synthetic deep ITM |
 |-------|------------|----------------:|-------------------:|
 | (a) Spot drop vs dividend | ΔS versus next cash dividend | −$0.30 vs $0.24 (gap −$0.06) | −$2.00 vs $2.00 (gap $0) |
-| (b) American vs European | FDM American price minus European analytic **without** cash divs | $12.12 vs $12.30 (gap −$0.18) | $28.01 vs $28.14 (gap −$0.13) |
+| (b1) Early exercise | `P_am_div − P_eu_div` (signed, same FDM grid + dividend schedule both sides) | +$0.0607 | +$1.8656 |
+| (b2) Dividend PV effect | `P_eu_div − P_eu_nodiv` (signed) | −$0.2389 | −$1.9997 |
+| (b, legacy) American vs European analytic (no div) | Cross-check only, kept for continuity: FDM American minus European **analytic**, no cash divs | $12.12 vs $12.30 (gap −$0.18) | $28.01 vs $28.14 (gap −$0.13) |
 | (c) Vol | Taylor Vega PnL | −$0.28 (IV 28% → 18%) | $0 (IV unchanged) |
 | (d) Residual | Taylor ε (official FDM ΔP minus Δ+Γ+V+Θ) | +$0.19 (~42% of \|model ΔP\|) | ~$0 |
 
-Shipped `early_exercise_premium` is `max(0, American flat FDM − European analytic with no cash dividend)`. On these fixtures that floor is **$0** — American FDM *with* the cash dividend can print *below* a no-div European. The overlay still shows the signed AM−EU gap. `american_commentary` mentions early exercise **only** when that floored premium is material (≥ $0.01).
+`early_exercise_premium` is `P_am_div − P_eu_div`: American and European priced on the same FDM grid with the same discrete dividend schedule. It is reported signed and is not floored. An earlier version of this repo compared the American price against a European with **no** dividends, which mixes the early exercise value with the dividend's present-value effect and produced a value that was floored to $0 on both fixtures. The two effects are now reported separately as `early_exercise_premium` and `dividend_pv_effect`.
+
+On both fixtures the corrected `early_exercise_premium` is materially positive (+$0.06 on AAPL, +$1.87 on the deep-ITM synthetic) — not the $0.00 the earlier, floored definition reported on both. `american_commentary` mentions early exercise when that premium is material (≥ $0.01) **and** not flagged `ee_premium_anomaly` (a negative premium below −1e-6·S, which would indicate an engine/grid inconsistency rather than a real signal — not observed on either fixture here).
 
 ---
 

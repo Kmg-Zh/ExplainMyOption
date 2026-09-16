@@ -12,6 +12,7 @@ if [[ -d .venv/bin ]]; then
 fi
 
 TESTS=(
+  ci/test_pricing_invariants
   ci/test_pricing_facade
   ci/test_data_pipeline
   ci/test_lsm_merton

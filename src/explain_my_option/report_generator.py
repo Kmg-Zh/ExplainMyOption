@@ -179,12 +179,22 @@ def build_quant_section(snap: MarketSnapshot, pricing: PricingResult) -> str:
         lines.extend(
             [
                 "",
-                "### Early exercise (flat FDM vs European analytic)",
+                "### Early exercise (flat FDM, American vs European, same dividend schedule)",
                 f"- Official American price: {_fmt(diag.american_price or 0.0)}",
-                f"- European analytic (flat): {_fmt(diag.european_price or 0.0)}",
-                f"- Early-exercise premium (flat FDM − EU): {_money(diag.early_exercise_premium)}",
+                f"- European analytic (no cash div, cross-check): {_fmt(diag.european_price or 0.0)}",
+                f"- Early-exercise premium (American − European, same divs): {_money(diag.early_exercise_premium)}",
             ]
         )
+        if diag.dividend_pv_effect is not None:
+            lines.append(
+                f"- Dividend PV effect (European, same divs − no divs): {_money(diag.dividend_pv_effect)}"
+            )
+        if diag.ee_premium_anomaly:
+            lines.append(
+                f"- early exercise premium: {diag.early_exercise_premium:.4f} "
+                "(NEGATIVE — numerical anomaly, engine/grid inconsistency; "
+                "see docs/dev/WORK_ORDER_REPORT.md)"
+            )
     if diag.limitations:
         lines.extend(
             [

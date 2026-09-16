@@ -175,21 +175,33 @@ def _residual_drill_section(
                 f"* **Spot drop vs dividend**: spot `{_money(float(split.get('spot_drop') or 0.0))}` "
                 f"vs next cash dividend `{_money(float(split.get('dividend_amount') or 0.0))}` "
                 f"(gap `{_money(float(split.get('spot_drop_vs_dividend') or 0.0))}`)",
-                f"* **American FDM vs European analytic (no cash div)**: "
+                f"* **American FDM vs European analytic (no cash div, cross-check)**: "
                 f"`{_money(float(split.get('american_price') or 0.0))}` vs "
                 f"`{_money(float(split.get('european_analytic_no_div') or 0.0))}` "
                 f"(gap `{_money(float(split.get('am_minus_eu') or 0.0))}`)",
-                f"* **Early-exercise premium** (floored at 0 in diagnostics): "
+                f"* **Early-exercise premium** (American vs European, same dividend "
+                f"schedule, signed, not floored): "
                 f"`{_money(float(split.get('ee_premium_now') or 0.0))}`"
                 + (
                     " — material"
                     if split.get("ee_premium_material")
                     else " — not material"
                 ),
+                f"* **Dividend PV effect** (European, same divs − no divs): "
+                f"`{_money(float(split.get('dividend_pv_effect') or 0.0))}`",
                 f"* **Vol (Taylor Vega PnL)**: `{_money(float(split.get('vega_pnl') or 0.0))}`",
                 f"* **Residual (Taylor ε)**: `{_money(float(split.get('residual_pnl') or 0.0))}`",
                 "* _Overlay only — not a trading edge. LSM/Heston stay diagnostic-only._",
             ]
+            + (
+                [
+                    f"* early exercise premium: {float(split.get('ee_premium_now') or 0.0):.4f} "
+                    "(NEGATIVE — numerical anomaly, engine/grid inconsistency; "
+                    "see docs/dev/WORK_ORDER_REPORT.md)"
+                ]
+                if split.get("ee_premium_anomaly")
+                else []
+            )
         )
     return "\n".join(lines)
 
