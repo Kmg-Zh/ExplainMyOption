@@ -1,4 +1,13 @@
-"""Bounded tool Controller for ``diagnostic_pass`` — deterministic, max 3 calls."""
+"""Bounded tool Controller for ``diagnostic_pass`` — deterministic, max 1 costly call.
+
+A7.1 widened ``FREE_TOOLS`` to include ``reconcile_mark_vs_model`` and
+``quote_quality_and_noise_band`` (both are pure arithmetic on
+already-computed facts, and a quiet day can only be recognized as quiet
+by running them, so A7.2's "zero costly tools" requirement needs them to
+not consume the budget). That leaves exactly one costly slot per pass --
+the single deep tool ``_pick_deep_tool`` selects -- so the budget shrank
+from 3 to 1 to match, not merely to relabel the same ceiling.
+"""
 
 from __future__ import annotations
 
@@ -9,22 +18,50 @@ from ..pricing.config import EngineConfig
 from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
 from . import diagnostic_tools as tools
 
-MAX_DIAGNOSTIC_TOOL_CALLS = 3
+MAX_DIAGNOSTIC_TOOL_CALLS = 1
 
-# A5.1: pure arithmetic on already-computed Greeks -- no repricing path, no
-# network, no LLM -- always runs when its precondition holds and never
-# competes with path_reprice/compare_to_official for the scarce budget
-# slot. (taylor_second_order does bump-and-revalue a handful of small
-# perturbations around the single already-priced t-1 point, which is why
-# it is cheap relative to path_reprice's full multi-factor sequential
-# reval -- "free" here means "does not consume the tool budget", not
-# "zero computation".)
-FREE_TOOLS = frozenset({"taylor_second_order"})
+# A5.1: pure arithmetic on already-computed Greeks/facts -- no repricing
+# path, no network, no LLM -- always runs when its precondition holds and
+# never competes with path_reprice/compare_to_official for the scarce
+# budget slot. (taylor_second_order does bump-and-revalue a handful of
+# small perturbations around the single already-priced t-1 point, which
+# is why it is cheap relative to path_reprice's full multi-factor
+# sequential reval -- "free" here means "does not consume the tool
+# budget", not "zero computation".)
+#
+# reconcile_mark_vs_model and quote_quality_and_noise_band fit the same
+# definition (both just read already-computed pricing/snapshot fields,
+# no repricing) and, unlike taylor_second_order, they are not optional --
+# every diagnostic pass needs them to even compute the severity/
+# escalation metric that decides whether anything else should run. A7.2
+# requires a quiet day to run *zero costly tools*; that is only
+# achievable if the tools that establish quietness are themselves free.
+FREE_TOOLS = frozenset(
+    {"taylor_second_order", "reconcile_mark_vs_model", "quote_quality_and_noise_band"}
+)
 
 # A5.3: the Taylor expansion is local -- on a large move it does not
 # converge slowly, it diverges. Provisional threshold; see README "Regime
 # rule" (added once the case table backing it exists).
 TAYLOR_REGIME_THRESHOLD = 0.35
+
+# A7.2: escalation_metric at or below this band means "nothing to
+# explain" -- the same cutoff _pick_deep_tool already uses to skip the
+# deep-tool slot entirely, reused here so "no deep tool ran" and
+# "no_escalation" agree by construction rather than by coincidence.
+LOW_SEVERITY_THRESHOLD_PCT = 10.0
+
+# A7.2, second half of the same gate: a small *ratio* is not sufficient on
+# its own -- it is also true of a large, dramatic move the Taylor
+# decomposition happens to explain well (e.g. a vol crush with residual
+# near zero), which is not "nothing to explain." A7.1's selection
+# criteria (|return| < 0.3%, no earnings/ex-div/macro that week) pick days
+# where the *absolute* move is tiny in the first place; the three
+# verified quiet-day cases (A7.1) show total_pnl of $0.03-$0.11 against
+# option_price_prev of $5-13 (0.4%-1.4% of premium). Provisional, like
+# TAYLOR_REGIME_THRESHOLD -- would benefit from a larger case table.
+NO_ESCALATION_MATERIALITY_PCT_OF_MID = 0.05
+NO_ESCALATION_MATERIALITY_ABS_USD = 0.50
 
 
 @dataclass
@@ -119,10 +156,10 @@ def _pick_deep_tool(
     severity = max(residual_pct, gap_pct)
     skipped: list[tuple[str, str]] = []
 
-    if severity <= 10.0 and not flag_ex_div:
+    if severity <= LOW_SEVERITY_THRESHOLD_PCT and not flag_ex_div:
         return None, skipped
 
-    if severity > 10.0:
+    if severity > LOW_SEVERITY_THRESHOLD_PCT:
         skipped.append(("compare_to_official", "path_reprice selected for severity >10%"))
         if flag_ex_div:
             skipped.append(

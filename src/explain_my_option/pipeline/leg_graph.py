@@ -8,11 +8,17 @@ from langgraph.graph import END, START, StateGraph
 
 from ..data.observation import NoComparableObservationError, check_basis_consistency
 from ..graph.deps import FixtureMarketLoader, GraphDeps, default_deps, fixture_deps
-from ..graph.diagnostic_controller import run_diagnostic_pass
+from ..graph.diagnostic_controller import (
+    LOW_SEVERITY_THRESHOLD_PCT,
+    NO_ESCALATION_MATERIALITY_ABS_USD,
+    NO_ESCALATION_MATERIALITY_PCT_OF_MID,
+    run_diagnostic_pass,
+)
 from ..graph.state import OptionState
 from ..intel.types import SearchPlan
 from ..report import PositionBundle, render_portfolio_report, synthesize_diagnosis
 from ..report.facts import build_position_facts
+from ..report.reconciliation import build_reconciliation_facts
 from ..report.schema import DiagnosticSynthesis
 from ..report_generator import build_quant_section
 from ..report.synthesis import fallback_synthesis, synthesis_to_legacy_diagnosis
@@ -31,6 +37,14 @@ from .types import LegResult
 from .verifier import apply_verifier_reflection, is_hard_verifier_fail, verify_synthesis
 
 
+# A7.3: verbatim, terminal no_escalation report text.
+NO_ESCALATION_TEXT = (
+    "Nothing to explain. The move is accounted for by carry and a small "
+    "spot move; the unexplained portion is within tolerance. No news "
+    "search was performed."
+)
+
+
 class LegState(OptionState, total=False):
     leg: BookLegSpec
     leg_error: str | None
@@ -39,6 +53,7 @@ class LegState(OptionState, total=False):
     observation_status_t1: str
     observation_status_t: str
     basis_mismatch_suspected: bool
+    no_escalation: bool
     diag_budget_remaining: int
     diag_iterations: int
     diag_tool_history: list[dict[str, Any]]
@@ -354,7 +369,61 @@ def build_leg_diagnosis_subgraph(
             state.get("diag_residual_pct", 0.0)
         ) > 15.0:
             findings["terminal_unexplained_break"] = True
-        return {"diagnostic_findings": findings}
+
+        # A7.2/A7.3: nothing to explain -- deterministic, no LLM call, no
+        # search. Computed directly from build_reconciliation_facts (A6)
+        # rather than read back off reconcile_mark_vs_model's tool-call
+        # result: that tool only runs when snap.option_price_now/prev are
+        # both positive (a pre-existing, unrelated gate in this function,
+        # above), which most synthetic fixtures leave at 0 -- the metric
+        # itself is always computable from state["snapshot"]/["pricing"].
+        rec = build_reconciliation_facts(state["snapshot"], state["pricing"])
+        metric = rec.escalation_metric_pct
+        # A7.2's ratio gate alone would also fire on a large, dramatic
+        # move the Taylor decomposition happens to explain well (e.g. a
+        # vol crush with near-zero residual) -- not "nothing to explain."
+        # Require the move itself to be small too.
+        snap = state["snapshot"]
+        mid = snap.mid or snap.option_price_prev
+        if mid and mid > 0:
+            materiality_floor = NO_ESCALATION_MATERIALITY_PCT_OF_MID * mid
+        else:
+            materiality_floor = NO_ESCALATION_MATERIALITY_ABS_USD
+        materiality_floor *= snap.position_scale()  # rec.model_pnl_usd is position-scaled
+        no_escalation = (
+            not findings.get("terminal_unexplained_break")
+            and metric <= LOW_SEVERITY_THRESHOLD_PCT
+            and abs(rec.model_pnl_usd) < materiality_floor
+        )
+        out: LegState = {"diagnostic_findings": findings}
+        if no_escalation:
+            findings["no_escalation"] = True
+            synthesis = DiagnosticSynthesis(
+                primary_driver="Theta / carry",
+                verdict=NO_ESCALATION_TEXT,
+                confidence_level="high",
+                confidence_rationale=(
+                    "Escalation metric is at or below the quiet-day threshold; see the "
+                    "Mark Reconciliation section for the exact figures."
+                ),
+                evidence=[],
+                takeaways=["No action needed; move is within theta/carry tolerance."],
+                american_commentary="",
+            )
+            out["diagnostic_synthesis"] = synthesis.model_dump()
+            out["no_escalation"] = True
+        return out
+
+    def route_after_diag_finalize(
+        state: LegState,
+    ) -> Literal["plan_search", "finalize_leg_report"]:
+        # A7.2: no search on a no_escalation day -- reuses the existing
+        # finalize_leg_report node (no new node), skipping
+        # plan_search/search/digest_news/challenge_catalyst/synthesize/
+        # verify entirely.
+        if bool(state.get("no_escalation")):
+            return "finalize_leg_report"
+        return "plan_search"
 
     def plan_search_node(state: LegState) -> LegState:
         leg = state["leg"]
@@ -445,6 +514,7 @@ def build_leg_diagnosis_subgraph(
             observation_reliable=bool(findings.get("observation_reliable", True)),
             news_titles=relevant_titles,
             catalyst_challenge=state.get("catalyst_challenge") or findings.get("catalyst_challenge"),
+            no_escalation=bool(findings.get("no_escalation")),
         )
         trace: list[dict[str, Any]] = list(state.get("verifier_trace") or [])
         trace.append(verdict.model_dump())
@@ -644,7 +714,11 @@ def build_leg_diagnosis_subgraph(
         route_residual_gate,
         ["react_plan", "diag_finalize"],
     )
-    graph.add_edge("diag_finalize", "plan_search")
+    graph.add_conditional_edges(
+        "diag_finalize",
+        route_after_diag_finalize,
+        ["plan_search", "finalize_leg_report"],
+    )
     graph.add_edge("plan_search", "search")
     graph.add_edge("search", "digest_news")
     graph.add_edge("digest_news", "challenge_catalyst")

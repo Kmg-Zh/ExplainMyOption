@@ -81,7 +81,10 @@ def test_diagnostic_pass_runs_mark_and_quote_tools():
     findings = run_diagnostic_pass(_snap(), _pricing())
     assert "reconcile_mark_vs_model" in findings.tools_run
     assert "quote_quality_and_noise_band" in findings.tools_run
-    assert findings.tool_calls_used >= 2
+    # A5.1/A7.2: both are free -- pure arithmetic on already-computed
+    # facts -- so they run without consuming the (now single) costly slot.
+    assert findings.tool_costs["reconcile_mark_vs_model"] == "free"
+    assert findings.tool_costs["quote_quality_and_noise_band"] == "free"
 
 
 def test_diagnostic_pass_suppresses_vega_inside_noise_band():

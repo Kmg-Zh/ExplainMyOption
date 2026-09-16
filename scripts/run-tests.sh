@@ -40,6 +40,7 @@ TESTS=(
   ci/test_historical_real_cases
   ci/test_regime_rule
   ci/test_residual_split
+  ci/test_quiet_day_non_escalation
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage

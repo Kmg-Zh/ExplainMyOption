@@ -26,18 +26,35 @@ events. A synthesis that attributes the method residual to any external cause (a
 event, "the market reacted to...") is a hard FAIL, flagged "method_residual_blamed" --
 regardless of whether the cited catalyst is otherwise real and well-evidenced.
 
+Quiet days (Task A7.5), the symmetric rule: on a run whose terminal state is no_escalation
+("nothing to explain" -- carry and a small spot move only, no search was performed), a
+synthesis that names a catalyst, an event, or any external cause is a hard FAIL, flagged
+"quiet_day_confabulation". There is no news evidence on a no_escalation run by construction, so
+any such claim is fabricated by definition, not merely unsupported.
+
 Verdict policy:
 - PASS: Layer A matches the dominant driver, Layer B is covered when headlines name a
   mechanism, and observation locks are respected.
 - PARTIAL (preferred over FAIL when unsure): evidence is thin, quote quality is weak, IV sits
   inside the noise band, OR headlines name a catalyst that verdict/takeaways omit.
   Use PARTIAL instead of FAIL for "cannot prove" and "missing catalyst layer" situations.
-- FAIL (hard violations only): numeric hallucination in narrative fields, or the method
-  residual attributed to an external cause (flag "method_residual_blamed").
+- FAIL (hard violations only): numeric hallucination in narrative fields, the method residual
+  attributed to an external cause (flag "method_residual_blamed"), or a catalyst claim on a
+  no_escalation run (flag "quiet_day_confabulation").
 
 Do not invent numbers or prices."""
 
-HARD_FAIL_POLICY_FLAGS = frozenset({"numeric_hallucination", "method_residual_blamed"})
+HARD_FAIL_POLICY_FLAGS = frozenset(
+    {"numeric_hallucination", "method_residual_blamed", "quiet_day_confabulation"}
+)
+
+
+def _quiet_day_catalyst_tags(synthesis: DiagnosticSynthesis) -> list[str]:
+    """A7.5: catalyst/event language in a synthesis, reusing the same
+    headline-mechanism vocabulary the narrator/verifier already use for
+    news -- applied here to the synthesis's own text instead."""
+    narrative = [synthesis.verdict, synthesis.confidence_rationale, *synthesis.takeaways]
+    return tags_from_headlines(narrative)
 
 
 def deterministic_precheck(
@@ -47,6 +64,7 @@ def deterministic_precheck(
     suppress_vega: bool,
     observation_reliable: bool,
     news_titles: list[str] | None = None,
+    no_escalation: bool = False,
 ) -> DiagnosticVerifierResult | None:
     errors = validate_synthesis(synthesis)
     if errors:
@@ -56,6 +74,20 @@ def deterministic_precheck(
             policy_flags=["numeric_hallucination"],
             rationale="validate_synthesis failed",
         )
+    if no_escalation:
+        tags = _quiet_day_catalyst_tags(synthesis)
+        if tags or synthesis.evidence:
+            return DiagnosticVerifierResult(
+                verdict="FAIL",
+                missing_evidence=[
+                    f"Catalyst claim on a no_escalation run: {tags or 'evidence cited'}"
+                ],
+                policy_flags=["quiet_day_confabulation"],
+                rationale=(
+                    "There is no news evidence on a no_escalation run by construction; "
+                    "any catalyst claim is fabricated."
+                ),
+            )
     driver_lower = synthesis.primary_driver.lower()
     if suppress_vega and "vega" in driver_lower:
         return DiagnosticVerifierResult(
@@ -168,6 +200,7 @@ def verify_synthesis(
     observation_reliable: bool,
     news_titles: list[str],
     catalyst_challenge: dict | None = None,
+    no_escalation: bool = False,
 ) -> DiagnosticVerifierResult:
     pre = deterministic_precheck(
         synthesis,
@@ -175,6 +208,7 @@ def verify_synthesis(
         suppress_vega=suppress_vega,
         observation_reliable=observation_reliable,
         news_titles=news_titles,
+        no_escalation=no_escalation,
     )
     if pre is not None:
         return pre

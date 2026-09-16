@@ -125,6 +125,71 @@ def test_is_hard_verifier_fail_only_on_policy_flags():
     assert is_hard_verifier_fail(hard)
 
 
+def test_deterministic_precheck_fails_catalyst_on_no_escalation():
+    """A7.5: any catalyst/event language on a no_escalation run is FAIL."""
+    syn = DiagnosticSynthesis(
+        primary_driver="Theta / carry",
+        verdict="Nothing to explain, though a short squeeze kept things contained.",
+        confidence_level="high",
+        confidence_rationale="quiet day",
+        evidence=[],
+        takeaways=[],
+    )
+    pre = deterministic_precheck(
+        syn,
+        _sample_facts(),
+        suppress_vega=False,
+        observation_reliable=True,
+        no_escalation=True,
+    )
+    assert pre is not None and pre.verdict == "FAIL"
+    assert "quiet_day_confabulation" in pre.policy_flags
+
+
+def test_deterministic_precheck_fails_evidence_on_no_escalation():
+    syn = DiagnosticSynthesis(
+        primary_driver="Theta / carry",
+        verdict="Nothing to explain. The move is accounted for by carry and a small spot move.",
+        confidence_level="high",
+        confidence_rationale="quiet day",
+        evidence=[EvidenceItem(headline="Some headline", source="wire", relevance="context")],
+        takeaways=[],
+    )
+    pre = deterministic_precheck(
+        syn,
+        _sample_facts(),
+        suppress_vega=False,
+        observation_reliable=True,
+        no_escalation=True,
+    )
+    assert pre is not None and pre.verdict == "FAIL"
+    assert "quiet_day_confabulation" in pre.policy_flags
+
+
+def test_deterministic_precheck_passes_clean_no_escalation_synthesis():
+    from explain_my_option.pipeline.leg_graph import NO_ESCALATION_TEXT
+
+    syn = DiagnosticSynthesis(
+        primary_driver="Theta / carry",
+        verdict=NO_ESCALATION_TEXT,
+        confidence_level="high",
+        confidence_rationale=(
+            "Escalation metric is at or below the quiet-day threshold; see the "
+            "Mark Reconciliation section for the exact figures."
+        ),
+        evidence=[],
+        takeaways=["No action needed; move is within theta/carry tolerance."],
+    )
+    pre = deterministic_precheck(
+        syn,
+        _sample_facts(),
+        suppress_vega=False,
+        observation_reliable=True,
+        no_escalation=True,
+    )
+    assert pre is None  # falls through to the LLM verifier -- nothing hard-coded to object to
+
+
 def test_is_hard_verifier_fail_on_method_residual_blamed():
     """A6.4/A6.5: a synthesis blaming news for the method residual is rejected."""
     hard = DiagnosticVerifierResult(
@@ -232,6 +297,9 @@ if __name__ == "__main__":
     test_deterministic_precheck_unreliable_with_evidence_is_partial()
     test_is_hard_verifier_fail_only_on_policy_flags()
     test_is_hard_verifier_fail_on_method_residual_blamed()
+    test_deterministic_precheck_fails_catalyst_on_no_escalation()
+    test_deterministic_precheck_fails_evidence_on_no_escalation()
+    test_deterministic_precheck_passes_clean_no_escalation_synthesis()
     test_apply_verifier_reflection_prefixes_verdict()
     test_verifier_pass_from_mock_role()
     test_deterministic_precheck_partial_when_headline_catalyst_omitted()

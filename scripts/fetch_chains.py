@@ -52,6 +52,37 @@ CASES = {
     ),
 }
 
+# A7.1: quiet-day cases, from scripts/find_quiet_days.py's deterministic
+# selection (tests/ci/fixtures/quiet_days/quiet_days_2023.json) -- a
+# near-ATM, ~25-45 DTE contract picked per selected date pair.
+QUIET_DAY_CASES = {
+    "quiet_aapl_2023-04-24": dict(
+        ticker="AAPL",
+        option_type="call",
+        strike=165.0,
+        expiry="2023-05-19",
+        as_of="2023-04-24",
+        prev_as_of="2023-04-21",
+    ),
+    "quiet_spy_2023-03-06": dict(
+        ticker="SPY",
+        option_type="call",
+        strike=404.0,
+        expiry="2023-03-31",
+        as_of="2023-03-06",
+        prev_as_of="2023-03-03",
+    ),
+    "quiet_spy_2023-04-24": dict(
+        ticker="SPY",
+        option_type="call",
+        strike=404.0,
+        expiry="2023-05-19",
+        as_of="2023-04-24",
+        prev_as_of="2023-04-21",
+    ),
+}
+CASES.update(QUIET_DAY_CASES)
+
 
 def fetch_one(name: str) -> None:
     params = CASES[name]
