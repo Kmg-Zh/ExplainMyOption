@@ -8,16 +8,16 @@ users with a full feed are not told the PnL is a toy.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
 
 # A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT or
 # pipeline.verifier.VERIFIER_SYSTEM_PROMPT changes -- a red-team result
 # (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
 # stated prompt version; without one the run log mixes measurements of
-# different systems. First version covering the A6.4/A7.5/A9.3/A9.4
-# additions (two residuals, regime, implied borrow, ee_relevant,
-# prohibited trade-advice phrases, the generated blotter field whitelist).
-PROMPT_VERSION = "v3.1-a9.1"
-from pathlib import Path
+# different systems.
+PROMPT_VERSION = "v3.1-b1.1"
 
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
 PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
@@ -127,7 +127,10 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
 - confidence_level must match the code-supplied confidence hint.
 - american_commentary may reference dividends/exercise only when the code-supplied
   early-exercise premium is material; otherwise leave it empty.
-- verdict and rationale are narrative prose; takeaways are desk risk bullets."""
+- verdict and rationale are narrative prose; takeaways are desk risk bullets.
+
+### Untrusted content (Task B1.1)
+""" + UNTRUSTED_SOURCE_INSTRUCTION
 
 # Alias — product default (plain-prose prompt removed 2026-08-19).
 DEFAULT_DIAGNOSE_SYSTEM_PROMPT = STRUCTURED_DIAGNOSE_SYSTEM_PROMPT

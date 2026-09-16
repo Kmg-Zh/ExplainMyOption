@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from ..data_loader import NewsItem
+from ..data_loader import NewsItem, format_untrusted_source
 from ..graph.prompts import compose_diagnose_system_prompt
 from ..intel.types import SearchPlan
 from ..pricing.types import MarketSnapshot, PricingResult
@@ -458,25 +458,46 @@ def _human_prompt(
             "### Layer B — intel digest (labels; all kept headlines are in the blotter)",
         ]
     )
+    # B1.1: headline text (and the digester's own brief, itself derived from
+    # untrusted headlines) is external content, delimited here too.
+    _src_idx = 0
     if digest.brief:
-        lines.append(f"Digest brief: {digest.brief}")
+        _src_idx += 1
+        lines.append(
+            "Digest brief: " + format_untrusted_source(digest.brief, idx=_src_idx, origin="digester")
+        )
     if digest.reason:
         lines.append(f"Digest note: {digest.reason}")
     if digest.relevant:
+        _src_idx += 1
         lines.append(
             "Relevant (subject / related issuer): "
-            + "; ".join(row.title for row in digest.relevant if row.title)
+            + format_untrusted_source(
+                "; ".join(row.title for row in digest.relevant if row.title),
+                idx=_src_idx,
+                origin="digester:relevant",
+            )
         )
     if digest.background:
+        _src_idx += 1
         lines.append(
             "Background (peer/sector; context only, not required Layer B): "
-            + "; ".join(row.title for row in digest.background if row.title)
+            + format_untrusted_source(
+                "; ".join(row.title for row in digest.background if row.title),
+                idx=_src_idx,
+                origin="digester:background",
+            )
         )
     if digest.discarded:
+        _src_idx += 1
         lines.append(
             "Discarded: "
-            + "; ".join(
-                f"{row.title} ({row.reason})" for row in digest.discarded if row.title
+            + format_untrusted_source(
+                "; ".join(
+                    f"{row.title} ({row.reason})" for row in digest.discarded if row.title
+                ),
+                idx=_src_idx,
+                origin="digester:discarded",
             )
         )
     if tags:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..report.catalysts import missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
@@ -50,7 +51,9 @@ Verdict policy:
   no_escalation run (flag "quiet_day_confabulation"), or trade-advice language anywhere
   (flag "prohibited_phrase").
 
-Do not invent numbers or prices."""
+Do not invent numbers or prices.
+
+""" + UNTRUSTED_SOURCE_INSTRUCTION
 
 HARD_FAIL_POLICY_FLAGS = frozenset(
     {
@@ -281,7 +284,9 @@ def verify_synthesis(
         f"Candidate verdict: {synthesis.verdict}\n"
         f"Candidate takeaways: {synthesis.takeaways}\n"
         f"Evidence count: {len(synthesis.evidence)}\n"
-        f"News titles: {news_titles[:3]}\n"
+        "News titles: "
+        + format_untrusted_source("; ".join(news_titles[:3]) or "none", idx=1, origin="news_titles")
+        + "\n"
         f"Headline mechanisms present in titles: {tags_from_headlines(news_titles) or 'none'}\n"
         f"Independent critic Layer B required: {(catalyst_challenge or {}).get('layer_b_required')}\n"
         f"Independent critic mechanisms: {(catalyst_challenge or {}).get('mechanisms') or 'none'}\n"

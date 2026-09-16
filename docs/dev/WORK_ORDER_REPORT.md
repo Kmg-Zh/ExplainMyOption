@@ -1,4 +1,4 @@
-# Work order report — v3.1 spec, Phase A (A1–A8) + A9
+# Work order report — v3.1 spec, Phase A (A1–A9) + B1
 
 Supersedes the prior version of this file, which covered only Phase 0/1 of
 an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
@@ -22,9 +22,10 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | A6 | `30ce560` | ε_method / ε_model split, `escalation_basis`, verifier rule `method_residual_blamed`. |
 | A7 | `3ed21ff` | `no_escalation` terminal state, `scripts/find_quiet_days.py`, verifier rule `quiet_day_confabulation`. |
 | A8 | `d5922a3` | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
-| A9 (user-added) | (this commit) | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
+| A9 (user-added) | `c6609f8` | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
+| B1 (B1.1, B1.4) | (this commit) | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
 
-`./scripts/run-tests.sh` passes all 37 registered CI modules as of this
+`./scripts/run-tests.sh` passes all 38 registered CI modules as of this
 commit (re-verify below).
 
 ## FINDINGS
@@ -154,6 +155,41 @@ papered over.
     case to be exactly right — but a future caller reading `llm_calls` for
     cost accounting (Task B4/C3.4) should know the counting mechanism, not
     just trust the number.
+13. **`pipeline/digest.py::_post_process_digest` silently dropped
+    `injection_observed`** — it rebuilds a fresh `IntelDigest` from the raw
+    LLM output's `relevant`/`background`/`discarded`/`brief`/`reason`
+    fields but never copied `injection_observed` through, so a digester
+    that correctly noticed and reported an injection attempt would still
+    report `False` after post-processing. Found by
+    `tests/ci/test_injection_containment.py::test_digest_reports_injection_observed_without_complying`,
+    which failed before the one-line fix. A real defect the B1.4 test
+    exists to catch, not a hypothetical.
+14. **B1.2 (constrained `figures[]` output with a `blotter_field`
+    reference) was not built as its own new mechanism.** The shipped
+    system already achieves the same intent more strongly:
+    `report/validate.py::validate_synthesis` bans dollar amounts,
+    percentages, and numeric PnL claims from LLM prose *entirely* (except
+    inside `evidence.headline`/`evidence.source`, where the system prompt
+    requires quoting a real headline near-verbatim) — a number can never
+    appear without a fixed rendering constraint in the first place, which
+    is a stronger guarantee than "a number is allowed but must reference a
+    real field." Building a parallel `figures[]` array would either
+    duplicate this guarantee or, if it relaxed the existing prose ban to
+    allow LLM-authored numbers again, weaken a currently-passing check —
+    prohibited by §0.3. Recorded as a deliberate implementation choice,
+    not a gap.
+15. **B1.3 (catalyst_name from a candidate list; dates fall in the search
+    window) is partially satisfied by an existing, differently-named
+    mechanism, not fully built.** `report/catalysts.py`'s
+    `CATALYST_TAGS`/`missing_catalyst_tags` already constrain which
+    catalyst *tags* a synthesis may cite to a code-supplied allow-list
+    (functionally the "candidate list produced by digest_news" B1.3
+    describes), but there is no literal `catalyst_name` field, and no
+    schema field carries a per-headline date at all — `EvidenceItem` has
+    `headline`/`source`/`relevance` only — so "dates must parse and fall
+    in the search window" cannot be checked today. Adding a date field to
+    `EvidenceItem` and a window-validation rule is a real, still-open gap,
+    deferred rather than built as a rushed schema extension this session.
 
 ## NOT DONE
 
@@ -162,11 +198,12 @@ papered over.
   (`tests/redteam/`, `scripts/run_redteam.py`), which does not exist yet.
   The verifier-side rule itself (`prohibited_phrase`, `find_prohibited_phrases`)
   is done and tested; only the red-team case authoring is deferred.
-- **B1–B4** (prompt injection defence, red team, determinism, cost/
-  latency) — not started. B3 is partially covered already:
-  `temperature=0.0` is pinned (`pipeline/llm_roles.py`), and
-  `PROMPT_VERSION` (A9.5) now gives B2's red team a fixed point to run
-  against once it exists.
+- **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
+  choice for B1.2; a real, deferred gap for B1.3's date-window check).
+- **B2–B4** (the red team, determinism, cost/latency) — not started. B3 is
+  partially covered already: `temperature=0.0` is pinned
+  (`pipeline/llm_roles.py`), and `PROMPT_VERSION` (A9.5) now gives B2's
+  red team a fixed point to run against once it exists.
 - **C1–C3** (committed sample reports, README rewrite, the live book/
   30-day run log) — not started. C2's README changes are intentionally
   deferred rather than done piecemeal: several (the thesis-lead
@@ -202,7 +239,7 @@ branch's own history, not restated here.)
 | Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
 | Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
 | `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this session |
-| Full CI suite | 37/37 modules pass (A9) | `./scripts/run-tests.sh` |
+| Full CI suite | 38/38 modules pass (B1) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
