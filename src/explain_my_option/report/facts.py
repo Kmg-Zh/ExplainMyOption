@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Literal
 
@@ -488,3 +488,16 @@ def build_portfolio_facts(bundles: list[PositionBundle]) -> PortfolioFacts:
         top_by_ticker=ticker_rows[:3],
         aggregate_attribution=agg,
     )
+
+
+# A9.2: the blotter's field whitelist, generated from the dataclasses
+# rather than hand-maintained, so a future field rename cannot silently
+# leave the narrator prompt describing a field that no longer exists.
+# PositionFacts is the template's own "sole source of numeric truth"; the
+# other three are its directly nested dataclasses -- what the narrator and
+# verifier actually read field-by-field.
+_BLOTTER_SCHEMA_CLASSES = (PositionFacts, AmericanFacts, ReconciliationFacts, AttributionRow)
+
+
+def blotter_field_names() -> frozenset[str]:
+    return frozenset(f.name for cls in _BLOTTER_SCHEMA_CLASSES for f in fields(cls))

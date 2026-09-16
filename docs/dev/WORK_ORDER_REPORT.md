@@ -1,4 +1,4 @@
-# Work order report — v3.1 spec, Phase A (A1–A8)
+# Work order report — v3.1 spec, Phase A (A1–A8) + A9
 
 Supersedes the prior version of this file, which covered only Phase 0/1 of
 an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
@@ -21,10 +21,11 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | A5 | `dee2c64` | Tool-budget reclassification (A5.1), `taylor_regime` (A5.3), materiality folding (A5.4), `aapl_exdiv_2023` "Where the residual went" (A5.5). |
 | A6 | `30ce560` | ε_method / ε_model split, `escalation_basis`, verifier rule `method_residual_blamed`. |
 | A7 | `3ed21ff` | `no_escalation` terminal state, `scripts/find_quiet_days.py`, verifier rule `quiet_day_confabulation`. |
-| A8 | (this commit) | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
+| A8 | `d5922a3` | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
+| A9 (user-added) | (this commit) | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
 
-`./scripts/run-tests.sh` passes all 35 registered CI modules as of the A7
-commit (re-verify after A8, below).
+`./scripts/run-tests.sh` passes all 37 registered CI modules as of this
+commit (re-verify below).
 
 ## FINDINGS
 
@@ -132,26 +133,49 @@ papered over.
     by any code path — constructing `HistoricalChainMarketLoader` always
     needs explicit `as_of`/`prev_as_of` dates no env toggle alone can
     supply.
+11. **The live narrator prompt is built by `graph/prompts.py`, reached via
+    `report/synthesis.py::synthesize_diagnosis` →
+    `compose_diagnose_system_prompt`** — not the inline `system = "Return
+    DiagnosticSynthesis JSON only..."` string in `pipeline/leg_graph.py`'s
+    `_synthesize_with_role`, which only runs for the non-`OpenAiRole`
+    (mock) branch used in tests. A9.3's verbatim prompt additions went
+    into `graph/prompts.py`'s `PRICING_ATTRIBUTION_CONTEXT`, confirmed by
+    tracing the real call path rather than assuming the more obviously-named
+    inline string was the live one.
+12. **`llm_calls` (A9.1) counts per-node execution, not per confirmed LLM
+    invocation, for `digest_news_node`/`challenge_catalyst_node`/
+    `verify_node`** — those three have internal short-circuits
+    (`run_intel_digest`, `run_catalyst_challenge`, and
+    `deterministic_precheck` inside `verify_synthesis`) that can return
+    without ever calling `role.structured_invoke`. Handled precisely for
+    all three (checking `digest.reason`, `challenge.suppress_reason`, and
+    `verdict.rationale` against `verifier.DETERMINISTIC_PRECHECK_RATIONALES`)
+    rather than left as a blind +1, since A9.1's own test needs the zero
+    case to be exactly right — but a future caller reading `llm_calls` for
+    cost accounting (Task B4/C3.4) should know the counting mechanism, not
+    just trust the number.
 
 ## NOT DONE
 
-- **A9** (user-added, not in the original v3.1 text) — align the LLM
-  contract with the changed blotter. Explicitly depends on fields this
-  session added (`taylor_regime`, `escalation_basis`, `q_implied`/
-  `borrow_regime`, `ee_relevant`) and on A6.4/A7.5's verifier rules
-  (both done). Next in line.
+- **A9.4's red-team cases** ("add one red-team case per phrase under
+  `non_dollar_fabrication`") — depends on Task B2's red-team framework
+  (`tests/redteam/`, `scripts/run_redteam.py`), which does not exist yet.
+  The verifier-side rule itself (`prohibited_phrase`, `find_prohibited_phrases`)
+  is done and tested; only the red-team case authoring is deferred.
 - **B1–B4** (prompt injection defence, red team, determinism, cost/
-  latency) — not started.
+  latency) — not started. B3 is partially covered already:
+  `temperature=0.0` is pinned (`pipeline/llm_roles.py`), and
+  `PROMPT_VERSION` (A9.5) now gives B2's red team a fixed point to run
+  against once it exists.
 - **C1–C3** (committed sample reports, README rewrite, the live book/
   30-day run log) — not started. C2's README changes are intentionally
   deferred rather than done piecemeal: several (the thesis-lead
   paragraph, `## Validation`, `## Two residuals`, `## Regime rule`) read
-  best written once, after the fields they describe are finalized by A9.
-  Two small, unambiguous README edits *were* made incidentally while
-  their own tasks were in flight (not a start on C2): A4's historical-case
-  table split and the `no historical option chain` → real-source Scope
-  line (both A4.6's own instruction), and A5.2's `charm and rho` Scope
-  line.
+  best written once. Two small, unambiguous README edits *were* made
+  incidentally while their own tasks were in flight (not a start on C2):
+  A4's historical-case table split and the `no historical option chain` →
+  real-source Scope line (both A4.6's own instruction), and A5.2's `charm
+  and rho` Scope line.
 - **D1–D4** (packaging, dependency pinning, pytest/CI, LICENSE) — not
   started.
 
@@ -178,7 +202,7 @@ branch's own history, not restated here.)
 | Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
 | Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
 | `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this session |
-| Full CI suite | 35/35 modules pass | `./scripts/run-tests.sh` |
+| Full CI suite | 37/37 modules pass (A9) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 

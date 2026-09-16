@@ -34,7 +34,12 @@ from .diagnostic_loop import (
 )
 from .llm_roles import LlmRole, LlmRoleRegistry, OpenAiRole, default_openai_roles
 from .types import LegResult
-from .verifier import apply_verifier_reflection, is_hard_verifier_fail, verify_synthesis
+from .verifier import (
+    DETERMINISTIC_PRECHECK_RATIONALES,
+    apply_verifier_reflection,
+    is_hard_verifier_fail,
+    verify_synthesis,
+)
 
 
 # A7.3: verbatim, terminal no_escalation report text.
@@ -54,6 +59,7 @@ class LegState(OptionState, total=False):
     observation_status_t: str
     basis_mismatch_suspected: bool
     no_escalation: bool
+    llm_calls: int
     diag_budget_remaining: int
     diag_iterations: int
     diag_tool_history: list[dict[str, Any]]
@@ -458,7 +464,14 @@ def build_leg_diagnosis_subgraph(
         )
         findings = dict(state.get("diagnostic_findings") or {})
         findings["intel_digest"] = digest.model_dump()
-        return {"intel_digest": digest.model_dump(), "diagnostic_findings": findings}
+        calls = int(state.get("llm_calls", 0))
+        if not digest.reason:  # A9.1: only count an actual LLM invocation
+            calls += 1
+        return {
+            "intel_digest": digest.model_dump(),
+            "diagnostic_findings": findings,
+            "llm_calls": calls,
+        }
 
     def challenge_catalyst_node(state: LegState) -> LegState:
         challenge = run_catalyst_challenge(
@@ -472,7 +485,10 @@ def build_leg_diagnosis_subgraph(
         payload = challenge.model_dump()
         findings = dict(state.get("diagnostic_findings") or {})
         findings["catalyst_challenge"] = payload
-        return {"catalyst_challenge": payload, "diagnostic_findings": findings}
+        calls = int(state.get("llm_calls", 0))
+        if not challenge.suppress_reason:  # A9.1: only count an actual LLM invocation
+            calls += 1
+        return {"catalyst_challenge": payload, "diagnostic_findings": findings, "llm_calls": calls}
 
     def synthesize_node(state: LegState) -> LegState:
         leg = state["leg"]
@@ -480,7 +496,10 @@ def build_leg_diagnosis_subgraph(
         findings = state.get("diagnostic_findings") or {}
         syn = _synthesize_with_role(role=roles.narrator, state=state, ports=ports)
         syn = _apply_observation_lock_to_synthesis(syn, findings)
-        return {"diagnostic_synthesis": syn.model_dump()}
+        return {
+            "diagnostic_synthesis": syn.model_dump(),
+            "llm_calls": int(state.get("llm_calls", 0)) + 1,
+        }
 
     def reconcile_debate_node(state: LegState) -> LegState:
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
@@ -519,7 +538,16 @@ def build_leg_diagnosis_subgraph(
         trace: list[dict[str, Any]] = list(state.get("verifier_trace") or [])
         trace.append(verdict.model_dump())
         remaining = int(state.get("verify_budget_remaining", config.verify_budget)) - 1
-        return {"verifier_trace": trace, "verify_budget_remaining": remaining}
+        # A9.1: deterministic_precheck (inside verify_synthesis) intercepts
+        # most hard-rule violations before any LLM call; rationale strings
+        # from that path are fixed, code-authored sentences, never the
+        # LLM's own prose -- a cheap, if slightly indirect, "was this
+        # deterministic" signal without changing verify_synthesis's return
+        # type for two call sites over one counter.
+        calls = int(state.get("llm_calls", 0))
+        if verdict.rationale not in DETERMINISTIC_PRECHECK_RATIONALES:
+            calls += 1
+        return {"verifier_trace": trace, "verify_budget_remaining": remaining, "llm_calls": calls}
 
     def route_verify_result(
         state: LegState,
@@ -585,7 +613,10 @@ def build_leg_diagnosis_subgraph(
         findings = state.get("diagnostic_findings") or {}
         syn = _synthesize_with_role(role=roles.narrator, state=state, ports=ports)
         syn = _apply_observation_lock_to_synthesis(syn, findings)
-        return {"diagnostic_synthesis": syn.model_dump()}
+        return {
+            "diagnostic_synthesis": syn.model_dump(),
+            "llm_calls": int(state.get("llm_calls", 0)) + 1,
+        }
 
     def terminal_unexplained_break_node(state: LegState) -> LegState:
         findings = dict(state.get("diagnostic_findings") or {})

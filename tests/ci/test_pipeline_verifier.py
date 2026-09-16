@@ -125,6 +125,40 @@ def test_is_hard_verifier_fail_only_on_policy_flags():
     assert is_hard_verifier_fail(hard)
 
 
+def test_deterministic_precheck_fails_prohibited_trade_advice_phrase():
+    """A9.4: opportunity/mispricing/arbitrage/etc. are hard FAILs regardless
+    of context -- the borrow field (A9.3) makes these newly likely."""
+    syn = DiagnosticSynthesis(
+        primary_driver="Vega",
+        verdict="The elevated borrow looks like an arbitrage opportunity for the desk.",
+        confidence_level="high",
+        confidence_rationale="Test",
+        evidence=[],
+        takeaways=[],
+    )
+    pre = deterministic_precheck(
+        syn, _sample_facts(), suppress_vega=False, observation_reliable=True
+    )
+    assert pre is not None and pre.verdict == "FAIL"
+    assert "prohibited_phrase" in pre.policy_flags
+
+
+def test_deterministic_precheck_fails_should_have_language():
+    syn = DiagnosticSynthesis(
+        primary_driver="Delta",
+        verdict="The desk should have exercised the deep ITM call before the drop.",
+        confidence_level="medium",
+        confidence_rationale="Test",
+        evidence=[],
+        takeaways=[],
+    )
+    pre = deterministic_precheck(
+        syn, _sample_facts(), suppress_vega=False, observation_reliable=True
+    )
+    assert pre is not None and pre.verdict == "FAIL"
+    assert "prohibited_phrase" in pre.policy_flags
+
+
 def test_deterministic_precheck_fails_catalyst_on_no_escalation():
     """A7.5: any catalyst/event language on a no_escalation run is FAIL."""
     syn = DiagnosticSynthesis(
@@ -297,6 +331,8 @@ if __name__ == "__main__":
     test_deterministic_precheck_unreliable_with_evidence_is_partial()
     test_is_hard_verifier_fail_only_on_policy_flags()
     test_is_hard_verifier_fail_on_method_residual_blamed()
+    test_deterministic_precheck_fails_prohibited_trade_advice_phrase()
+    test_deterministic_precheck_fails_should_have_language()
     test_deterministic_precheck_fails_catalyst_on_no_escalation()
     test_deterministic_precheck_fails_evidence_on_no_escalation()
     test_deterministic_precheck_passes_clean_no_escalation_synthesis()

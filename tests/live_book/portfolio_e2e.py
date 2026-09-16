@@ -60,6 +60,7 @@ from explain_my_option.graph.deps import (
     YFinanceMarketLoader,
     default_deps,
 )
+from explain_my_option.graph.prompts import PROMPT_VERSION
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource
 from explain_my_option.paths import LIVE_BOOK_OUTPUT_DIR, TESTS_DIR
 from ci.engine_config import engine_config_for_tests
@@ -314,6 +315,7 @@ def _persist_run(
         "cache_path": str(DEFAULT_CACHE),
         "cache_as_of_dates": list_as_of_dates(),
         "cache_snapshot_count": count_snapshots(),
+        "prompt_version": PROMPT_VERSION,
         **extra_manifest,
     }
     (run_dir / "manifest.json").write_text(

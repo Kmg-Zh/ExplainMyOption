@@ -24,10 +24,8 @@ _PNL_CLAIM = re.compile(
 )
 
 
-def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
-    """Return validation errors; empty list means safe to render."""
-    errors: list[str] = []
-    narrative_texts = [
+def _narrative_texts(synthesis: DiagnosticSynthesis) -> list[str]:
+    return [
         synthesis.primary_driver,
         synthesis.verdict,
         synthesis.confidence_rationale,
@@ -35,7 +33,12 @@ def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
         *[e.relevance for e in synthesis.evidence],
         *synthesis.takeaways,
     ]
-    for text in narrative_texts:
+
+
+def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
+    """Return validation errors; empty list means safe to render."""
+    errors: list[str] = []
+    for text in _narrative_texts(synthesis):
         if not text:
             continue
         if _DOLLAR.search(text):
@@ -45,3 +48,37 @@ def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
         if _PNL_CLAIM.search(text):
             errors.append("LLM prose must not embed numeric PnL claims.")
     return list(dict.fromkeys(errors))
+
+
+# A9.4: the borrow field (A9.3) makes "opportunity"/"mispricing"/
+# "arbitrage"/"free money" newly likely -- a real elevated/extreme
+# q_implied is easy to misdescribe as a tradeable edge instead of a cost
+# now inside the model. "riskless", "should have", "cheap", "rich" are the
+# project's pre-existing red line (no trade advice, no "should have
+# exercised") made explicit and enforced, not new ground.
+PROHIBITED_TRADE_ADVICE_PHRASES: tuple[str, ...] = (
+    "arbitrage",
+    "mispricing",
+    "mispriced",
+    "free money",
+    "riskless",
+    "opportunity",
+    "should have",
+    "cheap",
+    "rich",
+)
+_PROHIBITED_PHRASE_RE = re.compile(
+    r"\b(" + "|".join(re.escape(p) for p in PROHIBITED_TRADE_ADVICE_PHRASES) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def find_prohibited_phrases(synthesis: DiagnosticSynthesis) -> list[str]:
+    """A9.4: trade-advice-adjacent language, distinct from numeric
+    hallucination (validate_synthesis) -- no dollar figure is involved."""
+    hits: list[str] = []
+    for text in _narrative_texts(synthesis):
+        if not text:
+            continue
+        hits.extend(m.group(1).lower() for m in _PROHIBITED_PHRASE_RE.finditer(text))
+    return list(dict.fromkeys(hits))

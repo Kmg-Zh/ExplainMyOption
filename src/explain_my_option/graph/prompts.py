@@ -8,6 +8,15 @@ users with a full feed are not told the PnL is a toy.
 from __future__ import annotations
 
 import os
+
+# A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT or
+# pipeline.verifier.VERIFIER_SYSTEM_PROMPT changes -- a red-team result
+# (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
+# stated prompt version; without one the run log mixes measurements of
+# different systems. First version covering the A6.4/A7.5/A9.3/A9.4
+# additions (two residuals, regime, implied borrow, ee_relevant,
+# prohibited trade-advice phrases, the generated blotter field whitelist).
+PROMPT_VERSION = "v3.1-a9.1"
 from pathlib import Path
 
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
@@ -34,6 +43,19 @@ Greek decomposition. It is arithmetic, not news. Only the model residual — the
 the market's price change and the model's — may be discussed in terms of events. If only the
 method residual is available, say that the run explains a model price change and name no
 catalyst.
+
+**Regime (Task A9.3):** When `taylor_regime` is INVALID, the Greek decomposition is a
+reference view only and the headline attribution is the full revaluation. Describe the full
+revaluation figures. Do not present a Greek term as the explanation of the move.
+
+**Implied borrow (Task A9.3):** `q_implied` is a borrow rate backed out of put-call parity,
+not a forecast and not a cost quote. When `borrow_regime` is elevated or extreme, state that
+the observed parity gap implies a borrow cost of that size and that this cost is now inside
+the model. Do not describe it as an opportunity, a mispricing, or an arbitrage.
+
+**Early exercise relevance (Task A9.3):** When `ee_relevant` is false, the early exercise
+premium is not a finding. State that the dividend does not cover the remaining time value,
+and do not present a near-zero premium as a result.
 
 **When diagnostic tools ran:** sequential full revaluation (order **t → S → σ → r**) reprices the
 same engine after each input move; step sum equals model ΔP (audit residual ≈ 0 vs Taylor).
@@ -127,6 +149,25 @@ def extra_from_env() -> str:
     return "\n\n".join(parts)
 
 
+def blotter_field_whitelist_section() -> str:
+    """A9.2: the blotter fields the narrator may cite, generated from the
+    dataclasses (report.facts.blotter_field_names) rather than
+    hand-maintained -- a future field rename cannot silently leave this
+    describing a field that no longer exists. Deferred import: report.facts
+    (via report/__init__.py -> report.synthesis) imports this module, so a
+    module-level import here would be circular.
+    """
+    from ..report.facts import blotter_field_names
+
+    names = ", ".join(f"`{n}`" for n in sorted(blotter_field_names()))
+    return (
+        "### Blotter fields you may cite\n\n"
+        "Every number you reference must trace to one of these fields "
+        "(generated from the blotter dataclasses, not hand-typed):\n\n"
+        f"{names}"
+    )
+
+
 def compose_diagnose_system_prompt(
     *,
     base: str | None = None,
@@ -134,6 +175,7 @@ def compose_diagnose_system_prompt(
 ) -> str:
     """``extra=None`` means 'not provided here' (caller already resolved env)."""
     body = (base or STRUCTURED_DIAGNOSE_SYSTEM_PROMPT).strip()
+    body = body + "\n\n" + blotter_field_whitelist_section()
     add = (extra or "").strip()
     if add:
         return body + "\n\n" + add

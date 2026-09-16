@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..report.catalysts import missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
-from ..report.validate import validate_synthesis
+from ..report.validate import find_prohibited_phrases, validate_synthesis
 from .llm_roles import LlmRole
 from .verifier_schema import DiagnosticVerifierResult
 
@@ -32,6 +32,13 @@ synthesis that names a catalyst, an event, or any external cause is a hard FAIL,
 "quiet_day_confabulation". There is no news evidence on a no_escalation run by construction, so
 any such claim is fabricated by definition, not merely unsupported.
 
+Trade-advice language (Task A9.4): the implied-borrow field (A9.3) makes "opportunity",
+"mispricing" and "arbitrage" newly tempting -- an elevated/extreme q_implied is a cost now
+inside the model, not a tradeable edge. Any of these words, or "free money", "riskless",
+"cheap", "rich", "should have" (as in "should have exercised"), anywhere in narrative fields is
+a hard FAIL, flagged "prohibited_phrase" -- this product explains a price move, it never
+advises a trade, regardless of how well-evidenced the rest of the synthesis is.
+
 Verdict policy:
 - PASS: Layer A matches the dominant driver, Layer B is covered when headlines name a
   mechanism, and observation locks are respected.
@@ -39,13 +46,19 @@ Verdict policy:
   inside the noise band, OR headlines name a catalyst that verdict/takeaways omit.
   Use PARTIAL instead of FAIL for "cannot prove" and "missing catalyst layer" situations.
 - FAIL (hard violations only): numeric hallucination in narrative fields, the method residual
-  attributed to an external cause (flag "method_residual_blamed"), or a catalyst claim on a
-  no_escalation run (flag "quiet_day_confabulation").
+  attributed to an external cause (flag "method_residual_blamed"), a catalyst claim on a
+  no_escalation run (flag "quiet_day_confabulation"), or trade-advice language anywhere
+  (flag "prohibited_phrase").
 
 Do not invent numbers or prices."""
 
 HARD_FAIL_POLICY_FLAGS = frozenset(
-    {"numeric_hallucination", "method_residual_blamed", "quiet_day_confabulation"}
+    {
+        "numeric_hallucination",
+        "method_residual_blamed",
+        "quiet_day_confabulation",
+        "prohibited_phrase",
+    }
 )
 
 
@@ -55,6 +68,53 @@ def _quiet_day_catalyst_tags(synthesis: DiagnosticSynthesis) -> list[str]:
     news -- applied here to the synthesis's own text instead."""
     narrative = [synthesis.verdict, synthesis.confidence_rationale, *synthesis.takeaways]
     return tags_from_headlines(narrative)
+
+
+def _quiet_day_rationale() -> str:
+    return (
+        "There is no news evidence on a no_escalation run by construction; "
+        "any catalyst claim is fabricated."
+    )
+
+
+def _observation_lock_rationale() -> str:
+    return (
+        "Direction may be OK, but quote quality limits falsifiability; "
+        "treat factor attribution as indicative."
+    )
+
+
+def _missing_catalyst_rationale() -> str:
+    return (
+        "Layer B omitted mechanisms present in headlines; residual truncation "
+        "does not replace those catalysts."
+    )
+
+
+def _prohibited_phrase_rationale() -> str:
+    return (
+        "Trade-advice-adjacent language (arbitrage/mispricing/opportunity/riskless/"
+        "cheap/rich/'should have') is out of scope regardless of context -- this "
+        "product explains a price move, it does not advise a trade."
+    )
+
+
+# A9.1: the fixed set of rationale strings deterministic_precheck can return
+# -- code-authored sentences, never the LLM's own prose. Lets a caller with
+# only the returned DiagnosticVerifierResult (not a bool from this module)
+# tell a deterministic precheck apart from an actual LLM verdict, e.g. to
+# count llm_calls accurately without changing verify_synthesis's return
+# type for its two call sites.
+DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
+    {
+        "validate_synthesis failed",
+        _prohibited_phrase_rationale(),
+        _quiet_day_rationale(),
+        "Vega story not falsifiable from quote",
+        _observation_lock_rationale(),
+        _missing_catalyst_rationale(),
+    }
+)
 
 
 def deterministic_precheck(
@@ -74,6 +134,14 @@ def deterministic_precheck(
             policy_flags=["numeric_hallucination"],
             rationale="validate_synthesis failed",
         )
+    phrases = find_prohibited_phrases(synthesis)
+    if phrases:
+        return DiagnosticVerifierResult(
+            verdict="FAIL",
+            missing_evidence=[f"Prohibited trade-advice phrase: {p}" for p in phrases],
+            policy_flags=["prohibited_phrase"],
+            rationale=_prohibited_phrase_rationale(),
+        )
     if no_escalation:
         tags = _quiet_day_catalyst_tags(synthesis)
         if tags or synthesis.evidence:
@@ -83,10 +151,7 @@ def deterministic_precheck(
                     f"Catalyst claim on a no_escalation run: {tags or 'evidence cited'}"
                 ],
                 policy_flags=["quiet_day_confabulation"],
-                rationale=(
-                    "There is no news evidence on a no_escalation run by construction; "
-                    "any catalyst claim is fabricated."
-                ),
+                rationale=_quiet_day_rationale(),
             )
     driver_lower = synthesis.primary_driver.lower()
     if suppress_vega and "vega" in driver_lower:
@@ -101,10 +166,7 @@ def deterministic_precheck(
             verdict="PARTIAL",
             missing_evidence=["Observation lock — quote tier or IV noise band"],
             policy_flags=["observation_soft_lock"],
-            rationale=(
-                "Direction may be OK, but quote quality limits falsifiability; "
-                "treat factor attribution as indicative."
-            ),
+            rationale=_observation_lock_rationale(),
         )
 
     titles = list(news_titles or [])
@@ -124,10 +186,7 @@ def deterministic_precheck(
             verdict="PARTIAL",
             missing_evidence=[f"Headline catalyst not used in narrative: {tag}" for tag in missing],
             policy_flags=["missing_catalyst_layer"],
-            rationale=(
-                "Layer B omitted mechanisms present in headlines; residual truncation "
-                "does not replace those catalysts."
-            ),
+            rationale=_missing_catalyst_rationale(),
         )
     return None
 
