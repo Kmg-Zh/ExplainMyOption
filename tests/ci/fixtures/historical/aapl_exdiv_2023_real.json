@@ -1,0 +1,39 @@
+{
+  "snapshot": {
+    "as_of": "2023-11-09",
+    "ask": 4.4,
+    "bid": 4.15,
+    "data_source": "historical",
+    "discrete_dividends": [
+      {
+        "amount": 0.24,
+        "ex_date": "2023-11-10"
+      }
+    ],
+    "dividend_yield": 0.04174926181687065,
+    "exercise_style": "american",
+    "expiry": "2023-11-24",
+    "hv20_now": null,
+    "hv20_prev": null,
+    "iv_now": 0.19566031514451385,
+    "iv_prev": 0.19698133035854815,
+    "iv_prev_source": "chain_t1",
+    "mid": 4.275,
+    "multiplier": 1.0,
+    "open_interest": null,
+    "option_price_now": 4.275,
+    "option_price_prev": 4.425000000000001,
+    "option_type": "call",
+    "prev_as_of": "2023-11-08",
+    "quantity": 1.0,
+    "risk_free_rate": 0.05263000011444092,
+    "risk_free_rate_prev": 0.0526800012588501,
+    "risk_free_rate_source": "irx",
+    "spot_now": 182.41000366210938,
+    "spot_prev": 182.88999938964844,
+    "strike": 180.0,
+    "ticker": "AAPL",
+    "time_to_expiry_years": 0.0410958904109589,
+    "volume": null
+  }
+}

@@ -1,8 +1,29 @@
-# Data sources — real historical option chains (Work Order v3, Task A3)
+# Data sources — real historical option chains (Work Order v3.1, Task A4)
 
-Status: **A3.0-bis gate FAILED for GME. Work stopped before A3.3 per the
-amendment's instruction ("If the bases differ, STOP and report — do not
-attempt a correction factor").** A3.2-bis, A3.3 and A3.4-bis are not started.
+**Update (v3.1, Task A4): both cases are now live.** v3.1's A4.5 explicitly
+asks for the GME case with the instruction "Predates the July 2022 4-for-1
+split — A3.5 must pass before this case is trusted" — i.e. apply the known,
+documented split correction (not a guessed one) and let the basis guard
+verify it, rather than stopping forever. `HistoricalChainMarketLoader`
+(`src/explain_my_option/data/historical_chain.py`) does exactly that:
+`_as_traded_close()` multiplies yfinance's post-split close by the product
+of split ratios (from `yf.Ticker(...).splits`, not a hardcoded GME
+constant) for every split ex-dated after `as_of`. Recomputed here with the
+live adapter, 2026-09-16: `19.1975 * 4 = 76.79000091552734` for
+2021-01-25, matching the independently-confirmed as-traded close below to
+7 significant figures, and `check_basis_consistency` (A3.5) now passes for
+both dates. `gme_squeeze_2021_real` and `aapl_exdiv_2023_real` are both
+committed as frozen slices under `tests/ci/fixtures/historical/`
+(`scripts/fetch_chains.py`), exercised offline by
+`tests/ci/test_historical_real_cases.py`.
+
+The A3.0-bis analysis below is kept verbatim as the record of *why* the
+split mismatch exists and how it was diagnosed — that reasoning doesn't
+change, only the stopping point does.
+
+Prior status (superseded): **A3.0-bis gate FAILED for GME. Work stopped
+before A3.3 per the amendment's instruction ("If the bases differ, STOP and
+report — do not attempt a correction factor").**
 
 ## Source inventory
 

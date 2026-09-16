@@ -27,6 +27,7 @@ from explain_my_option.paths import (
     LIVE_BOOK_OUTPUT_DIR,
     REPO_ROOT,
     ROOT_MARKDOWN_ALLOWLIST,
+    STRESS_FIXTURES_DIR,
     ensure_report_output_dir,
     resolve_report_output_path,
 )
@@ -41,6 +42,7 @@ def test_paths_match_repo_layout():
     assert (REPO_ROOT / "notebooks" / "langgraph_architecture.ipynb").is_file()
     assert CI_DIR == REPO_ROOT / "tests" / "ci"
     assert FIXTURES_DIR == CI_DIR / "fixtures"
+    assert STRESS_FIXTURES_DIR == CI_DIR / "stress_fixtures"
     assert GOLDEN_DIR == CI_DIR / "golden"
     assert LIVE_BOOK_DIR == REPO_ROOT / "tests" / "live_book"
     assert HISTORICAL_DIR == REPO_ROOT / "tests" / "historical"
@@ -83,9 +85,12 @@ def test_eval_runners_stay_out_of_product_src():
 
 def test_fixtures_dir_has_json():
     names = list_fixtures()
-    assert names, "expected JSON under tests/ci/fixtures/"
+    assert names, "expected JSON under tests/ci/fixtures/ or tests/ci/stress_fixtures/"
     for name in names:
-        assert (FIXTURES_DIR / f"{name}.json").is_file(), name
+        assert (
+            (FIXTURES_DIR / f"{name}.json").is_file()
+            or (STRESS_FIXTURES_DIR / f"{name}.json").is_file()
+        ), name
 
 
 def test_fixture_schema_contract():

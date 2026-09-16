@@ -122,13 +122,23 @@ Layout and notebooks: [tests/README.md](tests/README.md) · [notebooks/README.md
 
 ## Historical cases
 
-Synthetic fixtures with frozen as-of news. Headlines must have `published <= as_of`.
+**Historical cases (real chains)** — real quotes both days, from DoltHub
+`post-no-preference/options` (`src/explain_my_option/data/historical_chain.py`).
+
+| Case | As-of | Desk lesson | Walkthrough |
+|------|-------|-------------|-------------|
+| GME squeeze (real) | 2021-01-25 | Real IV ~308% → 358%, borrow regime `extreme` (`q_implied` ≈ 58%) | — |
+| AAPL ex-div (real) | 2023-11-09 | Real dividend ($0.24, ex 2023-11-10); Taylor misses the div vs early-exercise split | [aapl_exdiv_attribution.md](docs/case-studies/aapl_exdiv_attribution.md) |
+
+**Stress fixtures (synthetic inputs)** — hand-chosen spot and implied vol to
+force specific residual regimes. Regression tests for the attribution code;
+not evidence about any real trading day (`tests/ci/stress_fixtures/README.md`).
 
 | Case | As-of | Desk lesson | Walkthrough |
 |------|-------|-------------|-------------|
 | META earnings gap | 2022-02-03 | Overnight gap + IV crush on the blotter | — |
-| AAPL ex-div | 2023-11-09 | Taylor misses the div vs early-exercise split | [aapl_exdiv_attribution.md](docs/case-studies/aapl_exdiv_attribution.md) |
-| GME squeeze | 2021-01-25 | Borrow / squeeze is tape context, not an engine factor | — |
+| AAPL ex-div (synthetic) | 2023-11-09 | Taylor misses the div vs early-exercise split | [aapl_exdiv_attribution.md](docs/case-studies/aapl_exdiv_attribution.md) |
+| GME squeeze (synthetic) | 2021-01-25 | Borrow / squeeze is tape context, not an engine factor | — |
 | VW float squeeze | 2008-10-27 | Large residual → escalate, don't invent | [vow_float_squeeze_2008.md](docs/case-studies/vow_float_squeeze_2008.md) |
 | VMW HTB | 2008-01-28 | Borrow is not modeled → low residual is expected | — |
 
@@ -138,7 +148,10 @@ Index: [docs/case-studies/README.md](docs/case-studies/README.md).
 
 - Official PnL: American FDM (`FdBlackScholesVanillaEngine`). Local vol when Dupire is safe; otherwise flat IV.
 - Heston is diagnostic-only. LSM-BS / LSM-Merton are an analysis API, not the `quant` node.
-- No historical option chain. Live `iv_prev`: SQLite t-1, else HV20 proxy.
+- Real historical option chains (DoltHub, ~2019+, US-listed only) back the
+  two real cases above; live `iv_prev` still resolves via SQLite t-1, else
+  HV20 proxy. Coverage gaps, strike-window bias and licensing:
+  `docs/dev/DATA_SOURCES.md`.
 - `--book` is per-leg fan-out + roll-up, not cross-gamma.
 - Users cannot custom-prompt or pick an alternate path.
 - Not in scope: trading edge, price prediction, book-level cross-gamma.

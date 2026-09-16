@@ -17,6 +17,11 @@ LIVE_BOOK_DIR = TESTS_DIR / "live_book"
 HISTORICAL_DIR = TESTS_DIR / "historical"
 
 FIXTURES_DIR = CI_DIR / "fixtures"
+# Task A4.6: the five hand-tuned "case" fixtures (spot/IV chosen to force a
+# specific residual regime), relabeled out of FIXTURES_DIR to make clear
+# they are regression tests for the attribution code, not evidence about
+# any real trading day -- see tests/ci/stress_fixtures/README.md.
+STRESS_FIXTURES_DIR = CI_DIR / "stress_fixtures"
 GOLDEN_DIR = CI_DIR / "golden"
 HISTORICAL_SUMMARY_PATH = HISTORICAL_DIR / "historical_benchmark_summary.json"
 

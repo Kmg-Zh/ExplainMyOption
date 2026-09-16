@@ -8,7 +8,7 @@ from typing import Literal, Optional, Sequence
 
 OptionType = Literal["call", "put"]
 ExerciseStyle = Literal["american", "european"]
-DataSource = Literal["synthetic", "yfinance"]
+DataSource = Literal["synthetic", "yfinance", "historical"]
 IvPrevSource = Literal["fixture", "chain_t1", "hv20_proxy", "copied"]
 RateSource = Literal["fixture", "irx", "default"]
 EngineId = Literal[
