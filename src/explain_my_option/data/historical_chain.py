@@ -206,6 +206,11 @@ class HygieneResult:
     volume_oi_check_applicable: bool = False
 
 
+def tier_for_spread(rel_spread: float) -> str:
+    """A4.2/A6.2 shared tier bands: tight <=5%, normal <=15%, else wide."""
+    return "tight" if rel_spread <= 0.05 else "normal" if rel_spread <= 0.15 else "wide"
+
+
 def quote_hygiene(
     rows: list[dict], *, as_of: date, min_dte: int = 7, max_dte: int = 180
 ) -> HygieneResult:
@@ -245,9 +250,7 @@ def quote_hygiene(
         row["mid"] = mid
         row["rel_spread"] = rel_spread
         row["dte"] = dte
-        row["quote_tier"] = (
-            "tight" if rel_spread <= 0.05 else "normal" if rel_spread <= 0.15 else "wide"
-        )
+        row["quote_tier"] = tier_for_spread(rel_spread)
         kept.append(row)
     return HygieneResult(kept=kept, rejected=rejected)
 
@@ -475,6 +478,11 @@ class HistoricalChainMarketLoader:
         c_prev = dict(contract_t1)
         mid_now = 0.5 * (float(c_now["bid"]) + float(c_now["ask"]))
         mid_prev = 0.5 * (float(c_prev["bid"]) + float(c_prev["ask"]))
+        # A6.2: per-date quote tier for the target contract itself (not the
+        # whole chain -- that's what quote_hygiene()/hyg_t above already
+        # tiered for the borrow calc's survivors).
+        tier_now = tier_for_spread((float(c_now["ask"]) - float(c_now["bid"])) / mid_now)
+        tier_prev = tier_for_spread((float(c_prev["ask"]) - float(c_prev["bid"])) / mid_prev)
 
         # A3.5 runs on both dates -- a mis-based day is not guaranteed to be
         # t rather than t-1.
@@ -567,6 +575,8 @@ class HistoricalChainMarketLoader:
             ask=float(c_now["ask"]),
             mid=mid_now,
             risk_free_rate_source=rate_now_src,  # type: ignore[arg-type]
+            quote_tier_now=tier_now,
+            quote_tier_prev=tier_prev,
         )
         return LoadedData(snapshot=snapshot, news=[], surface=None, surface_prev=None)
 

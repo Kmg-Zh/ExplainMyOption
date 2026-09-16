@@ -21,6 +21,8 @@
     "option_type": "put",
     "prev_as_of": "2021-01-22",
     "quantity": 1.0,
+    "quote_tier_now": "normal",
+    "quote_tier_prev": "normal",
     "risk_free_rate": 0.0007000000029802323,
     "risk_free_rate_prev": 0.0007000000029802323,
     "risk_free_rate_source": "irx",

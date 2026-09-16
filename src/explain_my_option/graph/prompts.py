@@ -28,6 +28,13 @@ Display scales engine-per-option math by `quantity × multiplier` (default 1 con
 Taylor truncation bites (extreme spot jumps), American early-exercise boundary shifts, vol skew
 curvature (Vanna/Volga), discrete dividends, or mark/quote gaps — not necessarily a "data bug."
 
+**Two residuals (Task A6) — read this before naming a cause for either one:**
+The method residual is the part of the model's own price change not captured by the chosen
+Greek decomposition. It is arithmetic, not news. Only the model residual — the gap between
+the market's price change and the model's — may be discussed in terms of events. If only the
+method residual is available, say that the run explains a model price change and name no
+catalyst.
+
 **When diagnostic tools ran:** sequential full revaluation (order **t → S → σ → r**) reprices the
 same engine after each input move; step sum equals model ΔP (audit residual ≈ 0 vs Taylor).
 

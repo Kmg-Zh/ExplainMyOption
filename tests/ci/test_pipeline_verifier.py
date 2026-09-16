@@ -125,6 +125,16 @@ def test_is_hard_verifier_fail_only_on_policy_flags():
     assert is_hard_verifier_fail(hard)
 
 
+def test_is_hard_verifier_fail_on_method_residual_blamed():
+    """A6.4/A6.5: a synthesis blaming news for the method residual is rejected."""
+    hard = DiagnosticVerifierResult(
+        verdict="FAIL",
+        policy_flags=["method_residual_blamed"],
+        rationale="verdict attributes the arithmetic residual to an earnings headline",
+    )
+    assert is_hard_verifier_fail(hard)
+
+
 def test_apply_verifier_reflection_prefixes_verdict():
     syn = DiagnosticSynthesis(
         primary_driver="Delta",
@@ -221,6 +231,7 @@ if __name__ == "__main__":
     test_deterministic_precheck_partial_when_observation_unreliable()
     test_deterministic_precheck_unreliable_with_evidence_is_partial()
     test_is_hard_verifier_fail_only_on_policy_flags()
+    test_is_hard_verifier_fail_on_method_residual_blamed()
     test_apply_verifier_reflection_prefixes_verdict()
     test_verifier_pass_from_mock_role()
     test_deterministic_precheck_partial_when_headline_catalyst_omitted()

@@ -106,6 +106,13 @@ class MarketSnapshot:
     volume: Optional[float] = None
     open_interest: Optional[float] = None
     risk_free_rate_source: RateSource = "fixture"
+    # A6.2: per-date quote tier, "tight"|"normal"|"wide" (data.historical_chain's
+    # vocabulary) when known -- only HistoricalChainMarketLoader populates
+    # these today, since it is the only source that quotes t-1 directly
+    # rather than deriving iv_prev from a cache/HV20 proxy. None means
+    # unknown, which marks_reliable() treats as not reliable.
+    quote_tier_now: Optional[str] = None
+    quote_tier_prev: Optional[str] = None
 
     # Display / blotter scale. Engine PnL stays per 1 option.
     quantity: float = 1.0

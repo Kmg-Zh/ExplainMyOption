@@ -7,6 +7,7 @@ from typing import Any
 from ..data_loader import NewsItem
 from ..intel.types import SearchPlan
 from .facts import PositionBundle, PositionFacts, build_portfolio_facts, build_position_facts
+from .reconciliation import ReconciliationFacts
 from .schema import DiagnosticSynthesis
 
 
@@ -78,6 +79,7 @@ def _reconciliation_section(facts: PositionFacts) -> str:
         lines.append("* **Mark ΔP**: unavailable — no valid marks on both dates.")
         explained = facts.model_pnl_usd - facts.attribution[-1].usd
         lines.append(f"* **Explained ΔP (Taylor ex-residual)**: `{_money(explained)}`")
+        lines.extend(_two_residuals_lines(facts, rec))
         return "\n".join(lines)
 
     lines.append(f"* **Mark ΔP (MTM)**: `{_money(rec.mark_pnl_usd)}`")
@@ -95,7 +97,40 @@ def _reconciliation_section(facts: PositionFacts) -> str:
     lines.append(f"* **Explained ΔP (Taylor ex-residual)**: `{_money(explained)}`")
     if rec.mark_calibrated:
         lines.append("* **Mark calibration**: active (`diagnostics.mark_calibrated`)")
+    lines.extend(_two_residuals_lines(facts, rec))
     return "\n".join(lines)
+
+
+def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) -> list[str]:
+    """A6.1/A6.3: print ε_method and ε_model as separate lines, always."""
+    method = rec.residual_method_usd if rec is not None else facts.attribution[-1].usd
+    lines = [
+        "",
+        f"* **Method residual (ε_method)**: `{_money(method)}` — arithmetic, "
+        "not news (ΔP_model minus the Taylor components).",
+    ]
+    if rec is None or rec.residual_model_usd is None:
+        lines.append(
+            "* **Model residual (ε_model)**: n/a (no reliable marks) — "
+            "the gap between the market's price change and the model's."
+        )
+    else:
+        lines.append(
+            f"* **Model residual (ε_model)**: `{_money(rec.residual_model_usd)}` — "
+            "ΔP_market − ΔP_model; the only residual a catalyst may explain."
+        )
+    basis = rec.escalation_basis if rec is not None else "method"
+    metric = rec.escalation_metric_pct if rec is not None else None
+    metric_note = f" ({metric:.1f}%)" if metric is not None else ""
+    lines.append(f"* **Escalation basis**: `{basis}`{metric_note}")
+    if basis == "method":
+        dates = f"{facts.eval_date}" if not facts.prev_as_of_note else f"{facts.prev_as_of_note} and/or {facts.eval_date}"
+        lines.append(
+            f"  Escalation basis: method residual — reliable option marks were "
+            f"unavailable on {dates}, so this run explains a model price "
+            "change, not a market price change."
+        )
+    return lines
 
 
 def _attribution_table(facts: PositionFacts) -> str:

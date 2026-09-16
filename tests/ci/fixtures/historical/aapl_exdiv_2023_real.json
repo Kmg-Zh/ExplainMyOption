@@ -26,6 +26,8 @@
     "option_type": "call",
     "prev_as_of": "2023-11-08",
     "quantity": 1.0,
+    "quote_tier_now": "normal",
+    "quote_tier_prev": "normal",
     "risk_free_rate": 0.05263000011444092,
     "risk_free_rate_prev": 0.0526800012588501,
     "risk_free_rate_source": "irx",

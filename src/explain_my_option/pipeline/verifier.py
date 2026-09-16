@@ -19,17 +19,25 @@ The narrator must cover TWO layers when evidence exists:
   replace Layer B. An independent catalyst critic may have required Layer B mechanisms;
   omitting those is PARTIAL, not FAIL.
 
+Two residuals (Task A6.4): the method residual is the part of the model's own price change not
+captured by the chosen Greek decomposition -- arithmetic, not news. Only the model residual --
+the gap between the market's price change and the model's -- may be discussed in terms of
+events. A synthesis that attributes the method residual to any external cause (a headline, an
+event, "the market reacted to...") is a hard FAIL, flagged "method_residual_blamed" --
+regardless of whether the cited catalyst is otherwise real and well-evidenced.
+
 Verdict policy:
 - PASS: Layer A matches the dominant driver, Layer B is covered when headlines name a
   mechanism, and observation locks are respected.
 - PARTIAL (preferred over FAIL when unsure): evidence is thin, quote quality is weak, IV sits
   inside the noise band, OR headlines name a catalyst that verdict/takeaways omit.
   Use PARTIAL instead of FAIL for "cannot prove" and "missing catalyst layer" situations.
-- FAIL (hard violations only): numeric hallucination in narrative fields.
+- FAIL (hard violations only): numeric hallucination in narrative fields, or the method
+  residual attributed to an external cause (flag "method_residual_blamed").
 
 Do not invent numbers or prices."""
 
-HARD_FAIL_POLICY_FLAGS = frozenset({"numeric_hallucination"})
+HARD_FAIL_POLICY_FLAGS = frozenset({"numeric_hallucination", "method_residual_blamed"})
 
 
 def deterministic_precheck(

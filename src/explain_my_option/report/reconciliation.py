@@ -34,6 +34,18 @@ class ReconciliationFacts:
     observation_reliable: bool
     deep_otm_itm: bool
     pct_uses_abs_share: bool
+    # A6.1: the two residuals, named separately.
+    # residual_method = pnl.residual_pnl unchanged (ΔP_model - Taylor
+    # components) -- arithmetic, never news. residual_model =
+    # ΔP_market - ΔP_model, the only quantity a catalyst may explain; None
+    # without reliable marks on both dates.
+    residual_method_usd: float
+    residual_model_usd: float | None
+    marks_reliable_now: bool
+    marks_reliable_prev: bool
+    # A6.2: which residual actually drives escalation this run.
+    escalation_basis: str  # "model" | "method"
+    escalation_metric_pct: float
 
 
 def quote_tier(
@@ -52,6 +64,13 @@ def quote_tier(
     if thin:
         return "thin"
     return "reliable"
+
+
+def marks_reliable(quote_tier: str | None) -> bool:
+    """A6.2: quote tier in {tight, normal} -- data.historical_chain's
+    vocabulary -- or this module's own "reliable" label, so both feed the
+    same gate. None (unknown/never verified) is never reliable."""
+    return quote_tier in ("tight", "normal", "reliable")
 
 
 def iv_noise_band_pts(spread: float | None, vega_per_vol_point: float) -> float | None:
@@ -103,6 +122,25 @@ def build_reconciliation_facts(
     total_abs = abs(model_pnl)
     pct_uses_abs_share = total_abs < MIN_TOTAL_USD_FOR_PCT
 
+    # A6.1/A6.2: the two residuals, and which one drives escalation.
+    # Scaled by position size (quantity * multiplier), matching model_pnl/
+    # mark_pnl above -- residual_method_usd is a blotter dollar figure, not
+    # the raw per-option pnl.residual_pnl.
+    residual_method = float(pnl.residual_pnl) * scale
+    residual_model = (mark_pnl - model_pnl) if mark_pnl is not None else None
+    tier_now = snap.quote_tier_now if snap.quote_tier_now is not None else tier
+    tier_prev = snap.quote_tier_prev
+    reliable_now = marks_reliable(tier_now)
+    reliable_prev = marks_reliable(tier_prev)
+    if reliable_now and reliable_prev and mark_pnl is not None and abs(mark_pnl) > 1e-12:
+        escalation_basis = "model"
+        escalation_metric_pct = 100.0 * abs(residual_model or 0.0) / abs(mark_pnl)
+    else:
+        escalation_basis = "method"
+        escalation_metric_pct = (
+            100.0 * abs(residual_method) / abs(model_pnl) if abs(model_pnl) > 1e-12 else 0.0
+        )
+
     return ReconciliationFacts(
         quote_tier=tier,
         spread=spread,
@@ -118,4 +156,10 @@ def build_reconciliation_facts(
         observation_reliable=observation_reliable,
         deep_otm_itm=deep_otm_itm,
         pct_uses_abs_share=pct_uses_abs_share,
+        residual_method_usd=residual_method,
+        residual_model_usd=residual_model,
+        marks_reliable_now=reliable_now,
+        marks_reliable_prev=reliable_prev,
+        escalation_basis=escalation_basis,
+        escalation_metric_pct=escalation_metric_pct,
     )

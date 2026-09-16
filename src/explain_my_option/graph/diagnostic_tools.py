@@ -23,6 +23,12 @@ def reconcile_mark_vs_model(
         "model_vs_mark_gap_usd": rec.model_vs_mark_gap_usd,
         "gap_pct_of_model": rec.gap_pct_of_model,
         "mark_calibrated": rec.mark_calibrated,
+        "residual_method_usd": rec.residual_method_usd,
+        "residual_model_usd": rec.residual_model_usd,
+        "marks_reliable_now": rec.marks_reliable_now,
+        "marks_reliable_prev": rec.marks_reliable_prev,
+        "escalation_basis": rec.escalation_basis,
+        "escalation_metric_pct": rec.escalation_metric_pct,
     }
 
 
