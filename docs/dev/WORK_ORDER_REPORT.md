@@ -1,162 +1,194 @@
-# Work order report — Phase 0 + Phase 1 (v2 spec)
+# Work order report — v3.1 spec, Phase A (A1–A8)
 
-Covers §0.4 (discovery) and Phase 1 (Tasks 1–2) of the "ExplainMyOption
-Improvement Work Order v2" only — a 15-task, 9-phase spec supplied outside
-this repo. Phases 2–9 were not attempted in this pass — see `NOT DONE` below
-for why. Branch: `phase1/quant-correctness`.
+Supersedes the prior version of this file, which covered only Phase 0/1 of
+an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
+`main` in `65c0bfd`). That work is still valid — v2's Task 1/Task 2 are
+v3.1's A1/A2 — and is folded into `DONE` below under its v3.1 numbers.
+Everything from A2.3 onward was done in this session, branch
+`fix/pinned-book-test-2026-09-14`, against the "ExplainMyOption
+Implementation Work Order v3.1" (private, supplied outside this repo).
 
 ## DONE
 
 | Task | Commit | What |
 |---|---|---|
-| §0.4 Discovery | `b7d937e` | `docs/dev/CODE_MAP.md` — verified signatures, QuantLib 1.43 dividend/engine wiring, the actual early-exercise-premium defect, the market-data port (already extraction-ready), unit conventions. |
-| Task 1 | `6b3f6d8` | `tests/ci/test_pricing_invariants.py` — 8 invariant checks (put-call parity w/ discrete dividends, American call = European when q=0, early-exercise non-negativity, FDM grid convergence, bumped Greeks vs closed-form BS, Taylor decomposition identity, published American put benchmarks, unit conventions). Registered in `scripts/run-tests.sh`. |
-| Task 2 | `8401b39` | Fixed `early_exercise_premium` in `pricing/facade.py` to compare American vs European on the same FDM grid and dividend schedule; added `dividend_pv_effect` and `ee_premium_anomaly`; threaded through diagnostics/report layers; regenerated 7 golden reports; updated `docs/case-studies/aapl_exdiv_attribution.md`. |
+| Pre-existing test fix | `10ebd14` | `tests/live_book/test_portfolio_mixed.py::test_pinned_book_has_ten_fixed_contracts` asserted the 2026-09-01 pinned book's values after `main` had already rolled to `book_2026-09-14.json` (`ddf9193`, predates this branch). Updated assertions to match. |
+| A1 (pre-session) | `6b3f6d8` (main) | `tests/ci/test_pricing_invariants.py` — 8 invariant checks. |
+| A2 (pre-session) | `8401b39` (main) | Signed, non-floored `early_exercise_premium` on the same FDM grid/dividend schedule; `dividend_pv_effect` added. |
+| A3 | `c900091` | `data/observation.py` — `ObservationStatus`, the continuity gate (`NoComparableObservationError`), `check_basis_consistency`. Wired into `data_loader.py` (live path's two real failure modes) and `leg_graph.py`'s `fetch_market_node`. |
+| A2.3 | `6fe4b7b` | `dividend_coverage` / `ee_relevant` economic screen on `AmericanFacts`. |
+| A4 | `6b27be9` | `data/historical_chain.py` — DoltHub adapter, quote hygiene, implied borrow, IV inversion (reused `pricing.calibrate.implied_vol_flat`), the two verified real cases, A4.6 fixture relabeling. |
+| A5 | `dee2c64` | Tool-budget reclassification (A5.1), `taylor_regime` (A5.3), materiality folding (A5.4), `aapl_exdiv_2023` "Where the residual went" (A5.5). |
+| A6 | `30ce560` | ε_method / ε_model split, `escalation_basis`, verifier rule `method_residual_blamed`. |
+| A7 | `3ed21ff` | `no_escalation` terminal state, `scripts/find_quiet_days.py`, verifier rule `quiet_day_confabulation`. |
+| A8 | (this commit) | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
+
+`./scripts/run-tests.sh` passes all 35 registered CI modules as of the A7
+commit (re-verify after A8, below).
 
 ## FINDINGS
 
-Recorded here per §0.2.1 (never weaken a failing check, never silently
-widen a tolerance) — every item below is a real defect or a real, checked
-numerical limit, not something papered over.
+Recorded per §0.2.1 — every item below is a real defect, real numerical
+limit, or a real design tension found while building the above; none
+papered over.
 
-1. **`price_european_flat`'s `discrete_dividends` argument is inert.**
-   `pricing/ql_engine.py:118-142` computes a `DividendSchedule` via
-   `build_bsm_process(...)` but never attaches it to `AnalyticEuropeanEngine`,
-   which only ever consumes the continuous-yield curve. Any caller passing
-   discrete dividends to this function gets silently ignored dividends. This
-   is a second, independent defect from the one Task 2 fixed (which used the
-   FDM engine, not this function, to route around it). Not fixed in this
-   pass — out of Phase 1 scope, and the callers that mattered for Task 2 no
-   longer rely on it for anything beyond a cross-check. Anyone touching this
-   function later should know it does not do what its signature implies.
-
-2. **Test 1.1 (put-call parity) could not validate discrete-dividend parity
-   through the analytic European engine**, for the same reason as (1). The
-   test instead validates the no-dividend case through the analytic engine
-   (tight, 1e-4·S) and the one/two-dividend cases through the FDM European
-   engine on the shipped grid (1e-3·S, per spec's own stated fallback
-   tolerance for the FDM case) — both pass.
-
-3. **Widely-cited American-option "reference value" tables are themselves
-   approximation formulas, not exact ground truth**, and disagree with this
-   repo's essentially-exact FDM engine by far more than a naive 5e-3
-   tolerance in most parameter regimes. Verified this session by fetching
-   `test-suite/americanoption.cpp` from QuantLib's own GitHub repo (raw
-   `curl`, not an AI-summarized fetch, specifically to avoid a transcription
-   error in a hard-coded numeric citation) and pricing every row against the
-   shipped engine:
-   - The `testBaroneAdesiWhaleyValues` table (Haug 1998, the parameters the
-     spec's own example most closely resembles): of the American-put rows
-     checked, none landed within 5e-3 once the underlying calendar-date
-     rounding (below) was controlled for; several differ by 1–3 cents on
-     options worth $2–$10.
-   - The `juValues` long-dated call table (Ju 1999, T=3.0 exactly, so no
-     date-rounding ambiguity at all — the cleanest possible comparison): of
-     20 rows checked, only 1 landed within 5e-3; the rest differ by
-     0.6 cents to 7.3 cents. This reflects the Ju/BAW approximation's own
-     known accuracy limits (larger dividend/rate spreads and longer
-     maturities), not a bug in the shipped FDM engine — Test 1.4's grid
-     convergence check and Test 1.6's exact Taylor identity both pass,
-     which they would not if the engine itself were unreliable.
-   - Task 1.7 instead uses Ju (1999)'s short-dated American **put** exhibit
-     (Exhibit 3, q=0, low vol), where the approximation is known to be
-     highly accurate; all 4 selected values land within 5e-3 (one matches
-     to 7e-15).
-
-4. **Whole-calendar-day expiries (`ql.Date`, Act/365Fixed) cannot exactly
-   reproduce a literature "T=0.10y" or "T=0.5y" target.** 0.10·365=36.5 and
-   0.50·365=182.5 are not integers, so any date built from a nominal T
-   carries a residual T-error of up to ±0.5/365 (≈0.14%). For short-dated,
-   near-the-money contracts this alone produced price errors above 5e-3
-   (observed: 0.012–0.013 on a $1.88 put). This is why Task 1.5's Greeks
-   cross-check advances `eval_date` by exactly one calendar day for the
-   theta/charm forward difference (exact under Act/365Fixed) instead of
-   re-deriving a new expiry from a shifted nominal T (which can round to
-   the same day, or a different day than intended, non-obviously) — and why
-   Task 1.7's benchmark selection above was constrained to cases where this
-   effect is small enough to still land inside 5e-3.
-
-5. **`test_fdm_grid_convergence` (Task 1.4):** shipped grid (t=200, x=400)
-   error vs the (800,800) grid = **0.000962** (0.00096% of S), which is
-   *below* the spec's 5e-4·S concern threshold (5e-4·100 = 0.05) — command:
-   `python tests/ci/test_pricing_invariants.py` (printed as "Task 1.4").
-   Observed convergence order printed no assertion failure — successive
-   differences shrink monotonically and land inside spec's `[0.8, 2.5]`
-   band (exact number is not separately logged; the test only fails outside
-   the band).
-
-6. **Vanna/Volga/Charm cross-check (Task 1.5):** all landed inside the
-   spec's 5e-2 soft tolerance for both call and put in this session's run —
-   no entries were appended to the in-file `FINDINGS` list for this check.
-   (The mechanism exists and is exercised by finding #7 below.)
-
-7. **Rho is not a field on the shipped `Greeks` dataclass**
-   (`pricing/types.py`). The §0.5 "raw ÷ 10000 → per bp" convention has no
-   corresponding shipped code path — `test_unit_conventions` records this
-   as an observation rather than skipping it silently.
-
-8. **Pre-existing, unrelated test failure**, not touched by this work:
-   `tests/live_book/test_portfolio_mixed.py::test_pinned_book_has_ten_fixed_contracts`
-   asserts `baseline == "2026-09-01"`, but `main` already pinned a newer
-   book (`tests/live_book/pinned_books/book_2026-09-14.json`, per commit
-   `ddf9193` predating this branch). Confirmed by stashing this branch's
-   changes and re-running against the Task-0.4-only commit — same failure.
-   Not caused by, or fixed by, Phase 1.
+1. **`fetch_irx_rate`/`fetch_irx_rate_as_of` (`data/rates.py`) divided
+   `^IRX` by 100 only when the raw value was `> 1.0`.** Wrong during
+   near-zero-rate regimes where `^IRX` itself prints below 1 — GME's
+   2021-01-25 rate read back as 7% instead of 0.07%. Fixed: always divide
+   by 100 (`^IRX` is always a percent quote). Confirmed against
+   `docs/dev/DATA_SOURCES.md`'s independently-verified `r=0.0008`.
+2. **yfinance's historical `Close` is always split-adjusted**, even with
+   `auto_adjust=False` (that flag only toggles dividend adjustment) —
+   confirmed empirically for GME's 2022-07-22 4-for-1 split. This is why
+   an earlier pass (pre-v3.1, recorded in `docs/dev/DATA_SOURCES.md`)
+   stopped rather than risk a guessed correction. v3.1's A4.5 explicitly
+   asks for the documented correction instead:
+   `_as_traded_close()` multiplies by the cumulative split ratio from
+   `yf.Ticker(...).splits` (not a hardcoded constant). Verified:
+   `19.1975 * 4 = 76.79000091552734`, matching the independently-confirmed
+   as-traded close to 7 significant figures; `check_basis_consistency`
+   (A3.5) now passes for both GME dates.
+3. **DoltHub's `option_chain` table has no volume/open_interest columns**
+   — its `vol` column is implied volatility, not trading volume. A4.2's
+   `volume > 0 OR open_interest > 0` hygiene check cannot be evaluated
+   against this source; `HygieneResult.volume_oi_check_applicable` is
+   hardcoded `False` and recorded, not silently dropped.
+4. **The scarce deep-tool-slot bug (A5.1's stated motivation) existed in
+   two independent places**, not one. `graph/diagnostic_controller.py`'s
+   `_pick_deep_tool` was the one the spec named; `pipeline/
+   diagnostic_loop.py`'s `choose_a2_tool` (the react loop `leg_graph.py`
+   runs *after* the initial pass) had the identical
+   `taylor_second_order`-vs-`path_reprice` severity-band exclusivity,
+   independently. Fixed both; `choose_a2_tool` no longer offers
+   `taylor_second_order` at all (it already ran, free, upstream).
+5. **A7.2's "zero costly tools" requirement is unsatisfiable as originally
+   scoped.** `reconcile_mark_vs_model` and `quote_quality_and_noise_band`
+   were classified `costly` after A5.1, but they are the tools that
+   *compute* the severity metric a quiet day is recognized by — a pass
+   cannot know it's quiet without running them. Reclassified both `free`
+   (they meet A5.1's own definition: pure arithmetic on already-computed
+   facts, no repricing/network/LLM). Consequence: only one costly slot
+   (the deep tool) remains per pass, so `MAX_DIAGNOSTIC_TOOL_CALLS`
+   dropped from 3 to 1 to match — a stale 3 would have made
+   `terminal_unexplained_break` permanently unreachable (`tool_calls_used`
+   could never reach 3 again). Verified against
+   `test_governance_scorecard.py`'s budget-exhaustion case, still passes.
+6. **A low `escalation_metric_pct` alone does not mean "nothing
+   happened."** Found via the pre-existing `vol_crush` fixture:
+   `escalation_metric_pct=4.35%` (would pass A7.2's ratio gate) but
+   `total_pnl=-$1.47` — an order of magnitude larger than the three real
+   quiet days' `$0.03`–`$0.11`. A dramatic move the Taylor decomposition
+   explains well is not the same as a quiet day. Added a second,
+   absolute-magnitude gate (`NO_ESCALATION_MATERIALITY_PCT_OF_MID` = 5%
+   of mid, or a `$0.50` floor without reliable marks) — provisional, like
+   `TAYLOR_REGIME_THRESHOLD`, and would benefit from a larger case table.
+   Four other existing synthetic fixtures (`american_call_div`,
+   `american_put_div`, `flat_only`, `deep_itm_exdiv`) had the same
+   low-ratio/large-PnL shape and are excluded by the same guard.
+7. **`scripts/find_quiet_days.py` never found an MSFT survivor** within
+   its checked-candidate budget (60 candidates, round-robin across AAPL/
+   MSFT/SPY) — every MSFT candidate that passed the cheap local checks
+   failed DoltHub's quote-tier check. Not investigated further (each
+   DoltHub query costs 45–55s); recorded in
+   `tests/ci/fixtures/quiet_days/README.md`. The 5 quiet days found span
+   only AAPL and SPY.
+8. **A3's continuity gate caught a real coverage gap while building A7's
+   cases**: `AAPL 172.5C exp 2023-11-17` was `CONTRACT_MISSING` on
+   2023-10-20 (present the next trading day) — not a bug, evidence the
+   gate works. Substituted with a validated alternative
+   (`quiet_spy_2023-04-24`) rather than forcing the original.
+9. **`report/schema.py`'s `DiagnosticSynthesis.watchlist` field is
+   described to the LLM as "Actionable risk watchlist bullets for the
+   trading desk,"** and `report/template.py::_watchlist_section` renders
+   a `"## N. Trading Desk Watchlist"` heading in every product report —
+   both matched the A8 grep for prohibited language ("watchlist") and sit
+   in real tension with §0.3's "no trade advice" red line, since
+   "actionable" is instructing the LLM toward exactly that. **Not fixed
+   in this pass** — A8's stated scope is the single VW walkthrough file;
+   changing the schema/template touches every report this product
+   generates and deserves its own task and commit, not scope creep inside
+   A8. Grep results in full (`grep -rniI "action item|watchlist|
+   recommend|should" src tests docs README.md AGENTS.md`, filtered to
+   drop `tests/ci/golden`, `output/`, `private/`): "action item" — zero
+   hits anywhere. "watchlist" — `report/schema.py:39`,
+   `report/synthesis.py:515`, `report/template.py:428,435,541`,
+   `tests/ci/test_report_template.py:52`, `tests/historical/run.py:180`,
+   `docs/samples/{unexplained_break,historical,live}.md`,
+   `docs/knowledge/pnl-attribution-framework.md:81,134`,
+   `docs/samples/README.md:13`, `README.md:67`. "recommend" —
+   `docs/references/third-party-rules.md:14` (about a LangChain API
+   choice, unrelated) and this file's own A8 replacement text
+   (`vow_float_squeeze_2008.md:88`, "observations, not recommendations" —
+   the fix, not a violation). "should" — no user-facing hits; all in code
+   comments, docstrings, or test assertion messages (`tests/`, dev docs).
+10. **A4.3's "static arbitrage filter" (chain-wide monotonicity/convexity
+    re-check after the borrow correction) was not built.** The two
+    verified real cases only ever need the target contract's own quote
+    plus the borrow-implying strike pairs, not a full filtered chain;
+    building a general chain-wide filter with no second consumer to
+    validate it against felt like scaffolding ahead of need.
+    `EMO_MARKET_SOURCE` is documented (A4's module docstring) but not read
+    by any code path — constructing `HistoricalChainMarketLoader` always
+    needs explicit `as_of`/`prev_as_of` dates no env toggle alone can
+    supply.
 
 ## NOT DONE
 
-Phases 2–9 of the v2 spec, per the approved plan, with reasons:
-
-- **Task 3** (real historical option chains) — requires a data-source
-  decision (DoltHub vs HistoricalData.net vs other), a licence review, and
-  possibly installing the `dolt` CLI (confirmed not present on this
-  machine). A decision with cost/licensing implications, not made
-  unilaterally.
-- **Task 3.4** (residual distribution study) — depends on Task 3.
-- **Task 4** (second-order terms in the shipped blotter) — self-contained,
-  good next-session candidate; not started.
-- **Tasks 6–7** (SVI calibration, Dupire local vol) — depend on Task 3.
-- **Task 5** (Shapley revaluation) — self-contained; not started.
-- **Task 8** (vol PnL decomposition) — depends on Tasks 6–7.
-- **Task 9** (scenario ladder, `--no-llm`, performance) — not started.
-- **Tasks 10–13** (hedged view, proxy degradation, README, samples) — not
-  started.
-- **Task 14** (30-day run log) — cannot be completed faster than 30 real
-  trading days elapse by construction ("do not backfill, do not simulate").
-  Not started this pass; standing up `scripts/daily_run.py` is a good
-  candidate for the very next session so the clock starts sooner.
-- **Task 15** (packaging/CI hygiene) — lowest priority per spec; not
+- **A9** (user-added, not in the original v3.1 text) — align the LLM
+  contract with the changed blotter. Explicitly depends on fields this
+  session added (`taylor_regime`, `escalation_basis`, `q_implied`/
+  `borrow_regime`, `ee_relevant`) and on A6.4/A7.5's verifier rules
+  (both done). Next in line.
+- **B1–B4** (prompt injection defence, red team, determinism, cost/
+  latency) — not started.
+- **C1–C3** (committed sample reports, README rewrite, the live book/
+  30-day run log) — not started. C2's README changes are intentionally
+  deferred rather than done piecemeal: several (the thesis-lead
+  paragraph, `## Validation`, `## Two residuals`, `## Regime rule`) read
+  best written once, after the fields they describe are finalized by A9.
+  Two small, unambiguous README edits *were* made incidentally while
+  their own tasks were in flight (not a start on C2): A4's historical-case
+  table split and the `no historical option chain` → real-source Scope
+  line (both A4.6's own instruction), and A5.2's `charm and rho` Scope
+  line.
+- **D1–D4** (packaging, dependency pinning, pytest/CI, LICENSE) — not
   started.
 
 ## NUMBERS
 
-Every user-facing figure in this report, with the command that produced it.
+Every user-facing figure in this session's commits, with the command that
+produced it. (Figures from the pre-session A1/A2 work are in that
+branch's own history, not restated here.)
 
 | Figure | Value | Command |
 |---|---|---|
-| QuantLib version | 1.43 | `.venv/bin/python -c "import QuantLib; print(QuantLib.__version__)"` |
-| Shipped FDM grid | t_grid=200, x_grid=400 | Read from `src/explain_my_option/pricing/config.py` |
-| AAPL 2023-11-09 `early_exercise_premium` (before) | 0.0000 | `python tests/ci/test_pricing_invariants.py` run against pre-Task-2 `facade.py` (commit `6b3f6d8`) |
-| AAPL 2023-11-09 `early_exercise_premium` (after) | +0.060691 | `python tests/ci/test_pricing_invariants.py` (Task 1.3 printout), post-Task-2 |
-| AAPL 2023-11-09 `dividend_pv_effect` (after) | −0.238880 | Same run, via `graph.diagnostic_controller.run_diagnostic_pass` |
-| `deep_itm_exdiv` `early_exercise_premium` (before) | 0.0000 | Same as above, pre-Task-2 |
-| `deep_itm_exdiv` `early_exercise_premium` (after) | +1.865584 | Same as above, post-Task-2 |
-| `deep_itm_exdiv` `dividend_pv_effect` (after) | −1.999724 | Same as above, post-Task-2 |
-| `american_put_div` `early_exercise_premium`: 0.2325 → | +0.0735 | Golden regeneration diff, `tests/ci/golden/american_put_div.md` |
-| `american_put_div` `dividend_pv_effect` (new) | +0.1579 | Same |
-| Test 1.4 shipped-grid error vs P_800 | 0.000962 | `python tests/ci/test_pricing_invariants.py` (Task 1.4 printout) |
-| Full CI suite runtime (`scripts/run-tests.sh`, through the pre-existing unrelated failure) | ~72s | `time ./scripts/run-tests.sh` |
+| GME `2021-01-25` as-traded spot | `76.79000091552734` | `python scripts/fetch_chains.py gme_squeeze_2021_real` |
+| GME `2021-01-22` as-traded spot | `65.01000213623047` | same |
+| GME IV (`t-1` → `t`) | `3.0813` → `3.5821` | same |
+| GME `q_implied` (`borrow_regime`) | `0.5807` (`extreme`) | same |
+| AAPL real case spot (`t-1`/`t`) | `182.88999938964844` / `182.41000366210938` | `python scripts/fetch_chains.py aapl_exdiv_2023_real` |
+| AAPL real case `q_implied` | `0.0417` | same |
+| AAPL real case `ee_relevant` | `False`, `dividend_coverage=0.13` | `tests/ci/test_historical_real_cases.py` |
+| `aapl_exdiv_2023` (synthetic) second-order table | model ΔP `-0.4508`; Vega `-0.2813` (62.4%); residual before `+0.1883` (41.8%); Vanna `-0.0181`; Volga `+0.1684` (37.4%); residual after `+0.0381` (8.4%); `residual_reduction_pct=79.8` | `docs/case-studies/aapl_exdiv_attribution.md`'s own recorded `python -c` snippet (commit `dee2c64`) |
+| `taylor_regime` — `vow_float_squeeze_2008` | `INVALID`, `r_spot=8.03` | `tests/ci/test_regime_rule.py::test_regime_rule_squeeze_stress_fixture_is_invalid` |
+| `taylor_regime` — `aapl_exdiv_2023_real` | `VALID`, `r_spot=0.019`, `r_vol=0.009` | `tests/ci/test_regime_rule.py::test_regime_rule_real_exdiv_case_is_valid` |
+| `escalation_basis` — both real cases (A4) | `model`, `residual_model≈$0` | `tests/ci/test_residual_split.py` |
+| `escalation_basis` — live/fixture path | always `method` (t-1 marks never verified) | same |
+| Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
+| Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
+| `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this session |
+| Full CI suite | 35/35 modules pass | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
-- Discovery (Task 0.4): not separately timed; folded into overall session time.
-- Task 1 (invariant suite, incl. debugging benchmark selection): majority
-  of session wall-clock — the benchmark-table verification (finding #3)
-  required fetching and empirically checking ~55 published values against
-  the shipped engine to find ones that actually land inside 5e-3.
-- Task 2 (fix + plumbing + golden regeneration + doc): remainder.
-- `./scripts/run-tests.sh` itself: **71.67s** wall clock (measured via
-  `time`), covering 24 of 26 registered CI modules before the pre-existing
-  unrelated failure stopped the script (`set -euo pipefail`); the two
-  `live_book` modules were run individually and both passed (excluding the
-  one pre-existing, unrelated assertion).
+Not separately profiled this session (Task B4's job). Qualitatively:
+DoltHub's SQL API is the dominant cost — 45–55s per query regardless of
+row count — so `scripts/find_quiet_days.py` and `scripts/fetch_chains.py`
+each ran for several minutes per case/candidate. `./scripts/run-tests.sh`
+itself grew noticeably slower after A5.1 (every fixture now also runs
+`taylor_second_order`'s bump-and-revalue unconditionally, not only the
+minority that used to hit the 10–20% severity band) — not measured
+precisely, but visibly on the order of ~2 minutes for the full 35-module
+suite by the end of this session, versus ~72s recorded for the pre-A5
+24-module suite in the prior report.
