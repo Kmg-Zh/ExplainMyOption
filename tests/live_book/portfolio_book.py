@@ -54,6 +54,7 @@ class PinnedLeg:
     multiplier: float = 1.0
     moneyness_at_pin: str = ""
     notes: str = ""
+    leg_id: str = ""
 
 
 OFFLINE_AS_OF = "2026-08-14"
@@ -125,6 +126,7 @@ def load_pinned_book(
             multiplier=float(row.get("multiplier", 1.0)),
             moneyness_at_pin=str(row.get("moneyness_at_pin", "")),
             notes=str(row.get("notes", "")),
+            leg_id=str(row.get("leg_id", "")),
         )
         for row in payload["legs"]
     )

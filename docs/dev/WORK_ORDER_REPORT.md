@@ -1,4 +1,4 @@
-# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B4 + C1–C2
+# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B4 + C1–C3
 
 Supersedes the prior version of this file, which covered only Phase 0/1 of
 an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
@@ -32,7 +32,9 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | C1 | (this commit) | `scripts/generate_samples.py` — 5 committed sample reports from real runs (`docs/samples/`): `sample_abstain.md` (real GME data, scripted narrator, disclosed — see FINDING #20), `sample_quiet_day.md` (real AAPL quiet day, `no_escalation`), `sample_real_chain.md` (real AAPL ex-div, reconciled marks), `sample_no_llm.md` (live `app.py --no-llm`), `sample_injection_contained.md` (`vol_crush` fixture + injected headline, `injection_observed=True` — see FINDING #21). `docs/samples/README.md` states command/model/data-source/real-vs-synthetic per file, per C1's own requirement. Superseded the pre-v3.1 3-file sample set (`live.md`/`historical.md`/`unexplained_break.md`, removed); `tests/ci/test_repo_layout.py::test_docs_samples_are_committed_product_reports` updated to check the new 5 files. |
 | C2 | (this commit) | README rewrite, exactly the edits C2.1–C2.6 specify: two-sided thesis lead, the `LangGraph is the runtime` sentence, `## What is proven offline` → `## What the offline suite covers` + the redteam-results pointer paragraph, new `## Validation` (the 8-row invariants table) and `## Two residuals` and `## Regime rule` sections (the last with a real 5-case `r_spot`/`r_vol`/`\|ε_method\|/\|ΔP\|` table, computed this session), the A5.2 extended attribution formula, 3 new `## Scope` bullets. `## Sample output` also rewritten to match C1's new file set (not one of the numbered C2 sub-edits, but required since the old set it linked no longer exists). C2.6's "delete `No historical option chain.`" and the diagram-placement requirement were already satisfied by earlier A4.6/A5.2 work and the file's existing structure respectively — confirmed, not re-done. |
 
-`./scripts/run-tests.sh` passes all 41 registered CI modules as of this
+| C3 (infra + day 1) | (this commit) | `docs/runlog/book.json` — 8 real, live-discovered legs (Task C3.1: 2-leg AAPL vertical spread, 2-leg JPM straddle spanning JPM's real 2026-10-13 earnings, 2-leg SPY risk reversal, 1 ITM VZ call ex-div 2026-10-08, 1 deep-OTM PLUG call), all ≥35 DTE at inception (nearest listed expiry ≥ target), so no roll policy is needed inside the 30-day window. C3.2 (per-expiry/per-strike IV keying) needed no migration — `data/cache.py`'s schema already keys on `(ticker, expiry, strike, option_type, as_of)`, not ticker alone; the spec's own worry doesn't apply to this codebase (FINDING below). `scripts/daily_run.py` — prices all 8 legs through the real graph, computes the C3.3 skew proxy for the SPY pair, records C3.4's `legs_narrated`/`legs_silent`/`llm_calls` (reusing A7's existing `no_escalation` gate, not new logic), writes `docs/runlog/YYYY-MM-DD/report.md` + appends to `docs/runlog/metrics.jsonl` in the spec's exact schema. Also caches every leg's snapshot (`data.cache.upsert_snapshot`) so day 2 has a real t-1. Ran for real today (2026-09-17, day 1): 8/8 legs priced, 8 real LLM calls, $0.0365, all 8 PARTIAL. `tests/ci/test_runlog_book.py` — offline structural checks on the book file. Two real bugs found and fixed in the process of building this, not the shipped pipeline — see FINDINGS below. |
+
+`./scripts/run-tests.sh` passes all 42 registered CI modules as of this
 commit (re-verify below).
 
 ## FINDINGS
@@ -289,14 +291,69 @@ papered over.
     result — real and correct, not a sign containment failed. Disclosed in
     `docs/samples/README.md` rather than re-run repeatedly to get a cleaner
     PASS.
+22. **C3.2's premise doesn't hold against this codebase.** The spec worries
+    the SQLite snapshot cache is keyed by ticker alone, which would be wrong
+    for a multi-expiry book. Checked `data/cache.py` directly: the schema's
+    primary key has always been `(ticker, expiry, strike, option_type,
+    as_of)`, and `load_t1`'s query filters on all four before `as_of <`. No
+    migration built, because there is nothing to migrate — confirmed by
+    reading the schema, not assumed.
+23. **A real, if minor, bug in `diagnostic_findings["terminal_unexplained_break"]`'s
+    semantics, found by this book's own day-1 run.** `diag_finalize_node`
+    (`pipeline/leg_graph.py`) can set this flag `True` early — when
+    `diag_residual_pct > 15%` and the diagnostic-tool budget is exhausted —
+    without the leg actually terminating there: the leg still proceeds
+    through the normal search/narrate/verify path afterward and can land on
+    a genuine PASS/PARTIAL, and nothing clears the early flag when that
+    happens. The real terminal state (`terminal_unexplained_break_node`)
+    always also sets `verifier_status="FAIL"`; this book's day-1 run showed
+    6/8 legs with the stale flag `True` and a real, verifier-confirmed
+    PARTIAL verdict in the rendered report — a direct contradiction if the
+    flag alone is trusted. `scripts/daily_run.py` now requires both
+    conditions (flag `True` **and** `verifier_status=="FAIL"`) to classify a
+    leg as terminal; the underlying flag in the shipped pipeline is
+    unchanged (fixing it is a real, separate task — this session's
+    `daily_run.py` works around it correctly rather than silently, which is
+    enough to not corrupt the metrics.jsonl record, but the shipped
+    semantics are still worth a dedicated fix).
+24. **Day 1 of any brand-new book position is necessarily noisy — not a bug,
+    an architectural fact worth stating plainly.** `load_market_data` only
+    finds a real t-1 snapshot via a prior `upsert_snapshot` call; a
+    brand-new contract has no cache row yet, so every leg falls back to the
+    `hv20_proxy` estimate for `iv_prev`. This book's real day-1 run confirms
+    it: `residual_method_pct` computed to `371290144254.743` (a division-
+    near-zero artifact, `total_pnl≈0` against a synthetic prior), and every
+    leg's quote tier read `unquoted` (a live-quote artifact of the names
+    picked, not the proxy). `scripts/daily_run.py` now detects this
+    (`iv_prev_source != "chain_t1"` for every leg) and prints an explicit
+    caveat at the top of the day's report rather than presenting day-1
+    noise as a normal reading, and caches every leg's snapshot so day 2
+    compares against something real.
+25. **C3.4's "book-level synthesis" is implemented as the existing
+    deterministic `render_portfolio_report()` roll-up, not a new LLM call.**
+    The spec's own ground rules (§0.2: agent graph topology frozen, no new
+    LLM calls) and C3.4's own stated point (scarce inference allocated by a
+    number the LLM does not control) are in tension with literally adding
+    one guaranteed LLM call every day regardless of materiality — the
+    ground rule wins. `legs_narrated`/`legs_silent`/`llm_calls` are recorded
+    from each leg's own A7 `no_escalation` outcome (not new decision logic
+    — that gate already existed); the "book-level synthesis" is the
+    already-shipped, already-deterministic multi-leg report renderer,
+    which already runs unconditionally across every leg.
 
 ## NOT DONE
 
 - **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
   choice for B1.2; a real, deferred gap for B1.3's date-window check).
-- **C3** (the live book and the 30-day run log) — infrastructure and day 1
-  not yet built; C3.2 (per-expiry/per-strike IV keying) must land before the
-  first logged run and cannot be back-filled once it does.
+- **C3's remaining 29 trading days.** Infrastructure (book, skew proxy,
+  budget accounting, `daily_run.py`) is built and day 1 (2026-09-17) is
+  real and committed. Per the spec's own rule (§C3.5: "do not backfill, do
+  not simulate, do not generate a run for a day it did not run"), the
+  other ~29 entries cannot be produced in this session regardless of
+  effort — they require that many real calendar trading days to actually
+  elapse, each with its own `python scripts/daily_run.py` invocation and
+  commit. `docs/studies/runlog_summary.md` (the post-hoc distribution
+  analysis) follows once 20+ real entries exist, not before.
 - **D1–D4** (packaging, dependency pinning, pytest/CI, LICENSE) — not
   started.
 
@@ -334,7 +391,9 @@ branch's own history, not restated here.)
 | B4 study: terminal-state distribution, n=12 | `terminal_unexplained_break` 6, `completed` 3, `no_escalation` 2, `PARTIAL` 1 | same |
 | Regime-rule table (README `## Regime rule`, C2.5), 5 cases | `r_spot`/`r_vol`/`\|ε_method\|/\|ΔP\|`: AAPL ex-div 0.0188/0.0088/0.0056 (VALID); GME squeeze 0.1451/0.0247/0.1843 (VALID); AAPL quiet day 0.0098/0.0001/0.5908 (VALID); VW squeeze 8.0283/0.5248/0.8783 (INVALID); `vol_crush` 0.0185/0.0003/0.0435 (VALID) | ad hoc `python -c` calling `run_diagnostic_pass` on each case, this session |
 | C1 sample cost, 5 runs (4 with an LLM call) | well under $0.01 total (`gpt-5.4-mini`, same per-call cost order as B4's study) | `scripts/generate_samples.py` |
-| Full CI suite | 41/41 modules pass (C2) | `./scripts/run-tests.sh` |
+| Live book day 1 (2026-09-17), 8 real legs | 8/8 priced, 8 real LLM calls, 8 narrated / 0 silent, all 8 PARTIAL, $0.036482, 37.3s wall | `python scripts/daily_run.py`, `docs/runlog/metrics.jsonl` |
+| Day-1 residual_method_pct (proxy-vs-proxy artifact, documented) | `371290144254.743` | same |
+| Full CI suite | 42/42 modules pass (C3) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
