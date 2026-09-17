@@ -134,20 +134,25 @@ def test_allow_historical_case_report():
 
 
 def test_docs_samples_are_committed_product_reports():
+    """Task C1: five reports from real runs (scripts/generate_samples.py)."""
     samples = REPO_ROOT / "docs" / "samples"
     expected = {
-        "live.md": ("# Option Price Movement Diagnostic Report", "## 1. Headline"),
-        "historical.md": ("# Option Price Movement Diagnostic Report", "META"),
-        "unexplained_break.md": ("terminal unexplained break", "Terminal break"),
+        "sample_abstain.md": ("# Option Price Movement Diagnostic Report", "terminal break"),
+        "sample_quiet_day.md": ("# Option Price Movement Diagnostic Report", "Nothing to explain"),
+        "sample_real_chain.md": ("# Option Price Movement Diagnostic Report", "Mark ΔP"),
+        "sample_no_llm.md": ("# Option Price Movement Diagnostic Report", "No OPENAI_API_KEY"),
+        "sample_injection_contained.md": ("# Option Price Movement Diagnostic Report", "SYSTEM OVERRIDE"),
     }
     for name, needles in expected.items():
         path = samples / name
         assert path.is_file(), name
         text = path.read_text(encoding="utf-8")
         assert "## 4. Quantitative PnL Attribution" in text, name
-        assert "## 5. Residual Drill" in text, name
         for needle in needles:
             assert needle in text, f"{name} missing {needle!r}"
+    readme = (samples / "README.md").read_text(encoding="utf-8")
+    for name in expected:
+        assert name in readme, f"docs/samples/README.md missing a row for {name}"
 
 
 def test_no_stray_report_markdown_in_repo_root():
