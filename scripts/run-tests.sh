@@ -45,6 +45,7 @@ TESTS=(
   ci/test_prompt_schema_sync
   ci/test_injection_containment
   ci/test_redteam_framework
+  ci/test_determinism_quant
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage

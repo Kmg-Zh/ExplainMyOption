@@ -26,6 +26,11 @@ class OpenAiRole:
     model: str
     temperature: float = 0.0
     timeout: float = 45.0
+    # B3: fixed seed for the OpenAI API's own `seed` param (best-effort
+    # determinism on the provider side -- OpenAI does not guarantee
+    # bit-identical output even with temperature=0 and a fixed seed, only
+    # that the same seed+params combination is more likely to reproduce).
+    seed: int = 0
 
     def structured_invoke(
         self,
@@ -41,6 +46,7 @@ class OpenAiRole:
             model=self.model,
             temperature=self.temperature,
             timeout=self.timeout,
+            seed=self.seed,
         )
         structured = llm.with_structured_output(schema)
         result = structured.invoke(
@@ -49,6 +55,13 @@ class OpenAiRole:
         if isinstance(result, schema):
             return result
         return schema.model_validate(result)
+
+    def run_metadata(self) -> dict:
+        return {
+            "model": self.model,
+            "temperature": self.temperature,
+            "seed": self.seed,
+        }
 
 
 @dataclass
@@ -69,6 +82,26 @@ def default_openai_roles() -> LlmRoleRegistry:
         challenger=OpenAiRole(model=os.getenv("EMO_CHALLENGER_MODEL", model)),
         digester=OpenAiRole(model=digester_model),
     )
+
+
+def llm_run_metadata(registry: LlmRoleRegistry) -> dict:
+    """B3: model string, temperature, and seed for every configured role, in
+    one place, for the run manifest. Roles that are not ``OpenAiRole`` (mocks
+    in offline/CI runs) are recorded by type name only, no fabricated params."""
+
+    def _one(role) -> dict | None:
+        if role is None:
+            return None
+        if isinstance(role, OpenAiRole):
+            return role.run_metadata()
+        return {"role_type": type(role).__name__}
+
+    return {
+        "narrator": _one(registry.narrator),
+        "verifier": _one(registry.verifier),
+        "challenger": _one(registry.challenger),
+        "digester": _one(registry.digester),
+    }
 
 
 def require_openai_key() -> None:

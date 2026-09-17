@@ -11,7 +11,7 @@ Three suites under `tests/`. Run the offline parts check with:
 | Folder | What it is | Needs network / API key? |
 |--------|------------|--------------------------|
 | `ci/` | Parts check: engine, graph, report. Fake markets in `ci/fixtures/`, expected blotters in `ci/golden/` | No |
-| `live_book/` | Recent real-data book (full diagnosis). Archives in `live_book/output/` (not on GitHub) | Live run yes; `--offline` and archive replay use frozen snapshots |
+| `live_book/` | Recent real-data book (full diagnosis). Archives in `live_book/output/` (not on GitHub) | Live run yes; `--offline` and archive replay use frozen snapshots; `test_determinism_llm.py` needs `OPENAI_API_KEY` |
 | `historical/` | Famous-event fixtures with frozen as-of news | `run.py` needs `OPENAI_API_KEY` |
 
 Retired names (`tests/experiments`, `tests/benchmark_compare`, `tests/historical_benchmark`) must not come back — `ci/test_repo_layout.py` guards that.
@@ -57,6 +57,7 @@ Walkthroughs: [docs/case-studies/README.md](../docs/case-studies/README.md). Fro
 ./scripts/run-portfolio-e2e.sh
 python tests/live_book/portfolio_e2e.py --offline
 python tests/live_book/replay_archives.py
+python tests/live_book/test_determinism_llm.py  # needs OPENAI_API_KEY
 ```
 
 Pin: `tests/live_book/pinned_books/book_2026-09-14.json`. Replay uses archived
