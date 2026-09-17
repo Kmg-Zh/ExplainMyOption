@@ -1,4 +1,4 @@
-# Work order report — v3.1 spec, Phase A (A1–A9) + B1
+# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B2
 
 Supersedes the prior version of this file, which covered only Phase 0/1 of
 an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
@@ -23,9 +23,10 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | A7 | `3ed21ff` | `no_escalation` terminal state, `scripts/find_quiet_days.py`, verifier rule `quiet_day_confabulation`. |
 | A8 | `d5922a3` | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
 | A9 (user-added) | `c6609f8` | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
-| B1 (B1.1, B1.4) | (this commit) | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
+| B1 (B1.1, B1.4) | `459c745` | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
+| B2 | (this commit) | `scripts/generate_redteam_cases.py` — 56 attack cases across 9 categories, built from 4 real `PositionFacts` blotters (two real DoltHub chains, one real quiet day, one stress fixture), written to `tests/redteam/attack_cases.json`. `scripts/run_redteam.py` — runs every case N=3 through `verifier.deterministic_precheck` + a fixed baseline-PASS mock, writes `docs/studies/redteam_results.md` with detection/miss/false-alarm/stability rates, per-category table, full confusion matrix, and every individual miss named. `tests/ci/test_redteam_framework.py` — CI smoke test (schema/import drift only, not a full 56-case re-run). |
 
-`./scripts/run-tests.sh` passes all 38 registered CI modules as of this
+`./scripts/run-tests.sh` passes all 39 registered CI modules as of this
 commit (re-verify below).
 
 ## FINDINGS
@@ -190,20 +191,44 @@ papered over.
     in the search window" cannot be checked today. Adding a date field to
     `EvidenceItem` and a window-validation rule is a real, still-open gap,
     deferred rather than built as a rushed schema extension this session.
+16. **B2's measured detection rate (57.9%) is honest but not a model
+    measurement** — no `OPENAI_API_KEY` is configured in this environment,
+    so every case that `deterministic_precheck` does not intercept falls
+    through to a fixed baseline mock that always returns `PASS`
+    (`_BaselineRole` in `scripts/run_redteam.py`). This measures the
+    deterministic layer's own floor, not what a real verifier LLM would
+    catch on top of it. Reported as such in `docs/studies/redteam_results.md`
+    rather than presented as a model result; `run_case()` takes any
+    `LlmRole`, so re-running against a real model needs no framework
+    changes, only an API key.
+17. **`quiet_day_confabulation` misses (4/6, 66.7%) are systematic, not
+    random.** `_missing_catalyst_rationale`'s deterministic check (A7.5)
+    is gated by `report/catalysts.py::CATALYST_TAGS`, an 8-word vocabulary
+    (`earnings`, `guidance`, `split`, `merger`, `acquisition`, `fda`,
+    `downgrade`, `upgrade`). The two detected misses used in-vocabulary
+    words; the four undetected ones used real but out-of-vocabulary
+    catalyst language ("buyout", "Fed commentary", "sector rotation",
+    "merger arb" phrasing not matching the literal tags). A7.5's rule is
+    stated as "any external cause," but the deterministic implementation
+    only catches the tagged subset — a real, open vocabulary-coverage gap,
+    not a framework bug. Same shape as finding #15: a stated rule broader
+    than what's actually implemented.
 
 ## NOT DONE
 
 - **A9.4's red-team cases** ("add one red-team case per phrase under
-  `non_dollar_fabrication`") — depends on Task B2's red-team framework
-  (`tests/redteam/`, `scripts/run_redteam.py`), which does not exist yet.
-  The verifier-side rule itself (`prohibited_phrase`, `find_prohibited_phrases`)
-  is done and tested; only the red-team case authoring is deferred.
+  `non_dollar_fabrication`") — B2's red-team framework now exists
+  (`tests/redteam/`, `scripts/run_redteam.py`), but the 7 phrase-specific
+  cases (one per `PROHIBITED_TRADE_ADVICE_PHRASES` entry) have not been
+  added to `attack_cases.json` yet. The verifier-side rule itself
+  (`prohibited_phrase`, `find_prohibited_phrases`) is done and tested.
 - **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
   choice for B1.2; a real, deferred gap for B1.3's date-window check).
-- **B2–B4** (the red team, determinism, cost/latency) — not started. B3 is
-  partially covered already: `temperature=0.0` is pinned
-  (`pipeline/llm_roles.py`), and `PROMPT_VERSION` (A9.5) now gives B2's
-  red team a fixed point to run against once it exists.
+- **B3–B4** (determinism, cost/latency) — not started. B3 is partially
+  covered already: `temperature=0.0` is pinned (`pipeline/llm_roles.py`),
+  and `PROMPT_VERSION` (A9.5) now gives B2's red team a fixed point to run
+  against. B2 itself is done for the deterministic layer — see FINDINGS
+  #16 for why a real-model re-run is still open.
 - **C1–C3** (committed sample reports, README rewrite, the live book/
   30-day run log) — not started. C2's README changes are intentionally
   deferred rather than done piecemeal: several (the thesis-lead
@@ -239,7 +264,11 @@ branch's own history, not restated here.)
 | Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
 | Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
 | `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this session |
-| Full CI suite | 38/38 modules pass (B1) | `./scripts/run-tests.sh` |
+| Red-team detection rate (B2, deterministic layer only) | 57.9% (22/38 violations caught) | `python scripts/run_redteam.py` |
+| Red-team miss rate (B2) | 42.1% | same |
+| Red-team false-alarm rate (B2) | 0.0% (0/10 `clean_control`) | same |
+| Red-team per-category detection (B2) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `non_dollar_fabrication` 16.7%, `method_residual_blamed` 0% | same, `docs/studies/redteam_results.md` |
+| Full CI suite | 39/39 modules pass (B2) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 

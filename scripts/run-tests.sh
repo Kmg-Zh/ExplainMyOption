@@ -44,6 +44,7 @@ TESTS=(
   ci/test_llm_call_budget
   ci/test_prompt_schema_sync
   ci/test_injection_containment
+  ci/test_redteam_framework
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage
