@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, TypeVar
 
 from pydantic import BaseModel
@@ -31,6 +31,10 @@ class OpenAiRole:
     # bit-identical output even with temperature=0 and a fixed seed, only
     # that the same seed+params combination is more likely to reproduce).
     seed: int = 0
+    # B4: token usage from the most recent structured_invoke() call, for
+    # cost/latency accounting (docs/studies/agent_budget.md). Not part of
+    # equality/repr -- purely an observability side channel.
+    last_usage: dict | None = field(default=None, init=False, repr=False, compare=False)
 
     def structured_invoke(
         self,
@@ -48,13 +52,21 @@ class OpenAiRole:
             timeout=self.timeout,
             seed=self.seed,
         )
-        structured = llm.with_structured_output(schema)
-        result = structured.invoke(
+        structured = llm.with_structured_output(schema, include_raw=True)
+        raw_result = structured.invoke(
             [SystemMessage(content=system), HumanMessage(content=human)]
         )
-        if isinstance(result, schema):
-            return result
-        return schema.model_validate(result)
+        raw_msg = raw_result.get("raw")
+        usage = getattr(raw_msg, "usage_metadata", None) if raw_msg is not None else None
+        self.last_usage = dict(usage) if usage else None
+        parsed = raw_result.get("parsed")
+        if parsed is None:
+            raise RuntimeError(
+                f"{self.model}: structured parse failed: {raw_result.get('parsing_error')}"
+            )
+        if isinstance(parsed, schema):
+            return parsed
+        return schema.model_validate(parsed)
 
     def run_metadata(self) -> dict:
         return {

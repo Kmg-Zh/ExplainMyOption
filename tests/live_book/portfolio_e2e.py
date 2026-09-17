@@ -518,7 +518,7 @@ def run_live_portfolio_e2e(
                 DiagnosticSynthesis.model_validate(syn_raw)
                 if syn_raw
                 else synthesize_diagnosis(
-                    snap, pricing, state.get("news") or [], ports=deps
+                    snap, pricing, state.get("news") or [], ports=deps, role=roles.narrator
                 )
             )
             bundles.append(

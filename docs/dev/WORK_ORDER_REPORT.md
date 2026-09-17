@@ -1,4 +1,4 @@
-# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B3
+# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B4
 
 Supersedes the prior version of this file, which covered only Phase 0/1 of
 an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
@@ -25,9 +25,10 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | A9 (user-added) | `c6609f8` | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
 | B1 (B1.1, B1.4) | `459c745` | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
 | B2 | `b715140` | `scripts/generate_redteam_cases.py` — 56 attack cases across 9 categories, built from 4 real `PositionFacts` blotters (two real DoltHub chains, one real quiet day, one stress fixture), written to `tests/redteam/attack_cases.json`. `scripts/run_redteam.py` — runs every case N=3 through `verifier.deterministic_precheck` + a fixed baseline-PASS mock, writes `docs/studies/redteam_results.md` with detection/miss/false-alarm/stability rates, per-category table, full confusion matrix, and every individual miss named. `tests/ci/test_redteam_framework.py` — CI smoke test (schema/import drift only, not a full 56-case re-run). |
-| B3 | (this commit) | `pipeline/llm_roles.py` — `OpenAiRole.seed` (fixed, default `0`), passed through to `ChatOpenAI`; `llm_run_metadata()` records model/temperature/seed for every configured role in one place, wired into the live/offline-through-graph run manifest (`tests/live_book/portfolio_e2e.py`). `tests/ci/test_determinism_quant.py` — 4 fixtures/real cases, each run 3× through `price_and_attribute` + `build_position_facts`, asserted bit-identical (`==`, not a tolerance) on both `pricing.as_dict()` and the `PositionFacts` dataclass. `tests/live_book/test_determinism_llm.py` — the real narrator+verifier path (not a mock), same fixture 3×, requires `OPENAI_API_KEY` (not in `run-tests.sh`, same convention as `historical/run.py`); actually run this session against `gpt-5.4-mini`, passed. |
+| B3 | `9dfde71` | `pipeline/llm_roles.py` — `OpenAiRole.seed` (fixed, default `0`), passed through to `ChatOpenAI`; `llm_run_metadata()` records model/temperature/seed for every configured role in one place, wired into the live/offline-through-graph run manifest (`tests/live_book/portfolio_e2e.py`). `tests/ci/test_determinism_quant.py` — 4 fixtures/real cases, each run 3× through `price_and_attribute` + `build_position_facts`, asserted bit-identical (`==`, not a tolerance) on both `pricing.as_dict()` and the `PositionFacts` dataclass. `tests/live_book/test_determinism_llm.py` — the real narrator+verifier path (not a mock), same fixture 3×, requires `OPENAI_API_KEY` (not in `run-tests.sh`, same convention as `historical/run.py`); actually run this session against `gpt-5.4-mini`, passed. |
+| B4 | (this commit) | `app.py --no-llm` — the quant path only (data fetch, pricing, PnL attribution, `fallback_synthesis`), zero LLM calls, no `OPENAI_API_KEY` needed; `tests/ci/test_no_llm_flag.py`. `scripts/agent_budget_study.py` — runs the real leg graph for the 10 offline legs + 2 real historical cases through a real `gpt-5.4-mini`, writes `docs/studies/agent_budget.md` (wall-clock per stage, tokens/cost by role, `tools_run`/skip-reason/terminal-state distributions). Found and fixed a real bug in the process: `report/synthesis.py::synthesize_diagnosis` built its own bare `ChatOpenAI` from `EMO_LLM_MODEL` instead of using the `role` the graph passed in, silently ignoring B3's seed pin and making narrator cost/tokens unobservable — see FINDING below. `pipeline/leg_graph.py` gained observability-only `stage_timings` (per-node wall clock) and `OpenAiRole.last_usage` (per-call token usage), both hardening, no topology/decision change. |
 
-`./scripts/run-tests.sh` passes all 40 registered CI modules as of this
+`./scripts/run-tests.sh` passes all 41 registered CI modules as of this
 commit (re-verify below).
 
 ## FINDINGS
@@ -225,6 +226,34 @@ papered over.
     `OPENAI_API_KEY` present in `.env`) on `aapl_exdiv_2023`, 3 runs, all
     three fields identical across runs — a real (if single-fixture,
     single-model) determinism measurement, not a hypothetical.
+19. **`report/synthesis.py::synthesize_diagnosis` never used the `role`
+    object the graph configured — a real bug, found while building B4's
+    cost study, not a naming/scoping choice like most findings above.**
+    `pipeline/leg_graph.py::_synthesize_with_role` gates on
+    `isinstance(role, OpenAiRole)` and then, for the true branch, called
+    `synthesize_diagnosis(...)` — which built its **own** bare
+    `ChatOpenAI(model=os.getenv("EMO_LLM_MODEL", ...), temperature=0,
+    timeout=45)` from scratch, never reading `role.model`,
+    `role.temperature`, or (Task B3's) `role.seed`, and never populating
+    `role.last_usage` (Task B4's token capture). Confirmed empirically:
+    before the fix, a 12-run `scripts/agent_budget_study.py` pass showed
+    `narrator: 0 calls` and `verifier: 12 calls` even though the narrator
+    plainly ran (`stage_timings["synthesize"]` was several seconds every
+    time) — the LLM call was real, just invisible to anything reading the
+    passed-in role. Practical consequence before the fix: a caller that
+    built a custom `LlmRoleRegistry` with a different narrator model or a
+    pinned seed would have that setting silently ignored for the narrator
+    specifically (verifier/digester/challenger were unaffected — they call
+    `role.structured_invoke` directly). **Fixed**: `synthesize_diagnosis`
+    now takes an optional `role` parameter and calls
+    `role.structured_invoke(...)` when given one, falling back to the old
+    inline `ChatOpenAI` construction only when no role is passed (keeps the
+    function usable standalone). Both call sites
+    (`leg_graph.py::_synthesize_with_role`, `portfolio_e2e.py`'s
+    graph-miss fallback) now pass their role through. Re-verified after
+    the fix: the same study run showed `narrator: 12 calls`, real
+    input/output token counts, and `tests/live_book/test_determinism_llm.py`
+    still passes against the real model.
 
 ## NOT DONE
 
@@ -236,7 +265,6 @@ papered over.
   (`prohibited_phrase`, `find_prohibited_phrases`) is done and tested.
 - **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
   choice for B1.2; a real, deferred gap for B1.3's date-window check).
-- **B4** (cost, latency, `--no-llm`) — not started.
 - **C1–C3** (committed sample reports, README rewrite, the live book/
   30-day run log) — not started. C2's README changes are intentionally
   deferred rather than done piecemeal: several (the thesis-lead
@@ -278,17 +306,32 @@ branch's own history, not restated here.)
 | Red-team per-category detection (B2) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `non_dollar_fabrication` 16.7%, `method_residual_blamed` 0% | same, `docs/studies/redteam_results.md` |
 | Quant-path determinism (B3), 4 fixtures/cases × 3 runs | bit-identical (`==`) on `pricing.as_dict()` + `PositionFacts` every time | `python tests/ci/test_determinism_quant.py` |
 | LLM-path determinism (B3), real `gpt-5.4-mini`, `aapl_exdiv_2023` × 3 runs | `confidence_level`, `primary_driver`, `evidence[].headline` set identical every run | `python tests/live_book/test_determinism_llm.py` |
-| Full CI suite | 40/40 modules pass (B3) | `./scripts/run-tests.sh` |
+| B4 study: 12-leg run, total LLM cost | `$0.0667` (narrator `$0.0505` / verifier `$0.0163`), 47527+3296 narrator tokens, 12973+1450 verifier tokens | `python scripts/agent_budget_study.py`, `docs/studies/agent_budget.md` |
+| B4 study: wall-clock p50/p95 by stage (s) | `llm_roles` 4.39/6.69, `data_fetch` 0.0002/2.47, `pricing` 0.023/1.86, total-per-run 5.56/6.41 | same |
+| B4 study: terminal-state distribution, n=12 | `terminal_unexplained_break` 6, `completed` 3, `no_escalation` 2, `PARTIAL` 1 | same |
+| Full CI suite | 41/41 modules pass (B4) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
-Not separately profiled this session (Task B4's job). Qualitatively:
-DoltHub's SQL API is the dominant cost — 45–55s per query regardless of
-row count — so `scripts/find_quiet_days.py` and `scripts/fetch_chains.py`
-each ran for several minutes per case/candidate. `./scripts/run-tests.sh`
-itself grew noticeably slower after A5.1 (every fixture now also runs
-`taylor_second_order`'s bump-and-revalue unconditionally, not only the
-minority that used to hit the 10–20% severity band) — not measured
-precisely, but visibly on the order of ~2 minutes for the full 35-module
-suite by the end of this session, versus ~72s recorded for the pre-A5
-24-module suite in the prior report.
+Profiled for the first time this session (Task B4): see
+`docs/studies/agent_budget.md` for the full stage/token/cost/terminal-state
+breakdown from a real 12-leg run (10 offline + 2 real historical cases)
+against `gpt-5.4-mini`. Headline: the LLM roles stage dominates wall clock
+(p50 4.39s of a 5.56s median total run) far more than pricing or the
+diagnostic tools, which are sub-30ms; the two real-DoltHub-chain legs are
+the only ones where `data_fetch` is comparable in size (2.5-3.0s, still
+dwarfed by DoltHub's actual 45-55s query latency when run standalone via
+`scripts/fetch_chains.py` — the study's fetch numbers are the in-process
+`fetch_market` node only, not a fresh DoltHub round trip, since
+`HistoricalChainMarketLoader` was constructed once and its underlying
+client may reuse a connection/session).
+
+Also recorded (context from earlier sessions, not re-measured this pass):
+DoltHub's SQL API is the dominant cost for `scripts/find_quiet_days.py`/
+`scripts/fetch_chains.py` — 45–55s per query regardless of row count, so
+those scripts each ran for several minutes per case/candidate.
+`./scripts/run-tests.sh` grew noticeably slower after A5.1 (every fixture
+now also runs `taylor_second_order`'s bump-and-revalue unconditionally) —
+not measured precisely, but visibly on the order of ~2 minutes for the
+full 41-module suite by the end of this session, versus ~72s recorded for
+the pre-A5 24-module suite in the prior report.

@@ -17,3 +17,7 @@ class LegResult(TypedDict, total=False):
     report: str
     blotter: str
     diagnosis: str
+    stage_timings: dict[str, float]
+    llm_calls: int | None
+    no_escalation: bool
+    terminal_no_comparable_observation: bool

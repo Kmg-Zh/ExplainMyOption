@@ -66,7 +66,20 @@ def run_cli() -> None:
         metavar="PATH",
         help="write report Markdown to PATH (default: stdout). Eval suites use tests/live_book/output/ and tests/historical/output/<case>/.",
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help=(
+            "B4: run the quant path only (data fetch, pricing, PnL attribution) — "
+            "zero LLM calls, no OPENAI_API_KEY needed. The report's narrative "
+            "section is the same deterministic fallback used when no key is "
+            "configured (report.synthesis.fallback_synthesis)."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.no_llm and args.book:
+        parser.error("--no-llm does not support --book yet (single-leg/fixture only)")
 
     deps = None
     if args.book and (args.ticker or args.fixture):
@@ -112,16 +125,35 @@ def run_cli() -> None:
     else:
         option_type = args.type or "call"
 
-    result = run_pipeline(
-        ticker=ticker,
-        option_type=option_type,
-        strike=args.strike,
-        expiry=args.expiry,
-        quantity=args.quantity,
-        multiplier=args.multiplier,
-        deps=deps,
-    )
-    report = result["report"] + "\n"
+    if args.no_llm:
+        from explain_my_option.graph.deps import OfficialFdmPnlSource, YFinanceMarketLoader
+        from explain_my_option.report.facts import build_position_facts
+        from explain_my_option.report.synthesis import fallback_synthesis
+        from explain_my_option.report.template import render_position_report
+
+        loader = deps.market if deps is not None else YFinanceMarketLoader()
+        loaded = loader.load(
+            ticker=ticker, option_type=option_type, strike=args.strike, expiry=args.expiry
+        )
+        loaded.snapshot.quantity = args.quantity
+        loaded.snapshot.multiplier = args.multiplier
+        pricing = OfficialFdmPnlSource().attribute(
+            loaded.snapshot, loaded.surface, loaded.surface_prev
+        )
+        facts = build_position_facts(loaded.snapshot, pricing)
+        synthesis = fallback_synthesis(facts, llm_unavailable=True, news=loaded.news)
+        report = render_position_report(facts, synthesis, news=loaded.news) + "\n"
+    else:
+        result = run_pipeline(
+            ticker=ticker,
+            option_type=option_type,
+            strike=args.strike,
+            expiry=args.expiry,
+            quantity=args.quantity,
+            multiplier=args.multiplier,
+            deps=deps,
+        )
+        report = result["report"] + "\n"
     if args.output:
         from explain_my_option.paths import ReportPathError, resolve_report_output_path
 

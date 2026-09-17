@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+import time
+from typing import Any, Callable, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -42,6 +43,25 @@ from .verifier import (
 )
 
 
+def _timed_node(name: str, fn: Callable[["LegState"], dict]) -> Callable[["LegState"], dict]:
+    """B4: wrap a node with wall-clock timing into ``state["stage_timings"]``.
+
+    Pure observability -- times the node's own body, merges the elapsed
+    seconds into whatever dict the node already returns, and changes no
+    routing/decision. See docs/studies/agent_budget.md.
+    """
+
+    def wrapped(state: "LegState") -> dict:
+        t0 = time.perf_counter()
+        result = fn(state) or {}
+        elapsed = time.perf_counter() - t0
+        timings = dict(state.get("stage_timings") or {})
+        timings[name] = timings.get(name, 0.0) + elapsed
+        return {**result, "stage_timings": timings}
+
+    return wrapped
+
+
 # A7.3: verbatim, terminal no_escalation report text.
 NO_ESCALATION_TEXT = (
     "Nothing to explain. The move is accounted for by carry and a small "
@@ -68,6 +88,9 @@ class LegState(OptionState, total=False):
     catalyst_challenge: dict[str, Any]
     verifier_trace: list[dict[str, Any]]
     verify_budget_remaining: int
+    # B4: wall-clock per node, keyed by graph node name -- pure observability,
+    # no effect on routing/decisions. See docs/studies/agent_budget.md.
+    stage_timings: dict[str, float]
 
 
 class LegBranchState(LegState, total=False):
@@ -117,6 +140,7 @@ def _synthesize_with_role(
             plan=state.get("search_plan"),
             ports=ports,
             diagnostic_findings=state.get("diagnostic_findings"),
+            role=role,
         )
     facts = build_position_facts(
         state["snapshot"], state["pricing"], news_count=len(state.get("news", []))
@@ -714,7 +738,7 @@ def build_leg_diagnosis_subgraph(
         ("finalize_leg_report", finalize_leg_report_node),
         ("leg_failure_finalize", leg_failure_finalize_node),
     ):
-        graph.add_node(name, fn)
+        graph.add_node(name, _timed_node(name, fn))
 
     graph.add_edge(START, "fetch_market")
     graph.add_conditional_edges(
@@ -825,6 +849,12 @@ def build_leg_branch_subgraph(
                         "report": state.get("report", ""),
                         "blotter": state.get("blotter", ""),
                         "diagnosis": state.get("diagnosis", msg),
+                        "stage_timings": state.get("stage_timings") or {},
+                        "llm_calls": state.get("llm_calls"),
+                        "no_escalation": bool(state.get("no_escalation")),
+                        "terminal_no_comparable_observation": bool(
+                            state.get("terminal_no_comparable_observation")
+                        ),
                     }
                 ]
             }
@@ -846,6 +876,12 @@ def build_leg_branch_subgraph(
                     "report": state.get("report", ""),
                     "blotter": state.get("blotter", ""),
                     "diagnosis": state.get("diagnosis", ""),
+                    "stage_timings": state.get("stage_timings") or {},
+                    "llm_calls": state.get("llm_calls"),
+                    "no_escalation": bool(state.get("no_escalation")),
+                    "terminal_no_comparable_observation": bool(
+                        state.get("terminal_no_comparable_observation")
+                    ),
                 }
             ]
         }

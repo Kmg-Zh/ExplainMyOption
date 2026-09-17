@@ -18,6 +18,7 @@ from .validate import validate_synthesis
 
 if TYPE_CHECKING:
     from ..graph.deps import GraphDeps
+    from ..pipeline.llm_roles import LlmRole
 
 _DEFAULT_LLM_MODEL = "gpt-5.4-mini"
 
@@ -300,6 +301,7 @@ def synthesize_diagnosis(
     plan: SearchPlan | None = None,
     ports: GraphDeps | None = None,
     diagnostic_findings: dict | None = None,
+    role: "LlmRole | None" = None,
 ) -> DiagnosticSynthesis:
     """Return structured synthesis; falls back on missing key, errors, or validation."""
     facts = build_position_facts(snap, pricing, news_count=len(news))
@@ -320,12 +322,6 @@ def synthesize_diagnosis(
         return _finish(syn)
 
     try:
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from langchain_openai import ChatOpenAI
-
-        model = os.getenv("EMO_LLM_MODEL", _DEFAULT_LLM_MODEL)
-        llm = ChatOpenAI(model=model, temperature=0, timeout=45)
-        structured = llm.with_structured_output(DiagnosticSynthesis)
         if ports is not None:
             system = compose_diagnose_system_prompt(
                 base=ports.diagnose_system_prompt,
@@ -335,9 +331,24 @@ def synthesize_diagnosis(
             system = compose_diagnose_system_prompt(extra=None)
 
         human = _human_prompt(snap, pricing, facts, layer_b_news, plan, findings)
-        result = structured.invoke(
-            [SystemMessage(content=system), HumanMessage(content=human)]
-        )
+
+        if role is not None:
+            # Go through the configured role so its model/temperature/seed
+            # (Task B3) and token-usage capture (Task B4) actually apply --
+            # this used to build its own ChatOpenAI straight from
+            # EMO_LLM_MODEL, silently ignoring any role the caller passed
+            # (WORK_ORDER_REPORT.md FINDING: real bug, not a naming choice).
+            result = role.structured_invoke(system=system, human=human, schema=DiagnosticSynthesis)
+        else:
+            from langchain_core.messages import HumanMessage, SystemMessage
+            from langchain_openai import ChatOpenAI
+
+            model = os.getenv("EMO_LLM_MODEL", _DEFAULT_LLM_MODEL)
+            llm = ChatOpenAI(model=model, temperature=0, timeout=45)
+            structured = llm.with_structured_output(DiagnosticSynthesis)
+            result = structured.invoke(
+                [SystemMessage(content=system), HumanMessage(content=human)]
+            )
         if not isinstance(result, DiagnosticSynthesis):
             result = DiagnosticSynthesis.model_validate(result)
 
