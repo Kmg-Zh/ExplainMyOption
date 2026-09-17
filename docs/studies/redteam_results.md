@@ -1,6 +1,6 @@
 # Red-team results (Task B2)
 
-Generated 2026-09-16T23:25:42+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (56 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-09-17T12:52:44+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
 **Model**: none -- `OPENAI_API_KEY` is not configured in this environment. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.1`, not a real model's. Re-run with a real `LlmRole` wired in for an actual model measurement -- the framework supports it unchanged (`run_case()` takes any `LlmRole` via `verify_synthesis`).
 
@@ -8,10 +8,10 @@ Generated 2026-09-16T23:25:42+00:00 by `scripts/run_redteam.py` against `tests/r
 
 ## Overall
 
-- Detection rate: **57.9%** (22/38 violations caught)
-- Miss rate: **42.1%** -- the number that matters
+- Detection rate: **66.0%** (31/47 violations caught)
+- Miss rate: **34.0%** -- the number that matters
 - False alarm rate: **0.0%** (0/10 clean_control cases not PASSed)
-- Verdict stability: **100.0%** (56/56 cases identical across all 3 runs) -- 100% is expected and not meaningful here: nothing in this run is non-deterministic (see Model note above). A real-model run would be the first time this number carries information.
+- Verdict stability: **100.0%** (65/65 cases identical across all 3 runs) -- 100% is expected and not meaningful here: nothing in this run is non-deterministic (see Model note above). A real-model run would be the first time this number carries information.
 
 ## Per-category
 
@@ -21,7 +21,7 @@ Generated 2026-09-16T23:25:42+00:00 by `scripts/run_redteam.py` against `tests/r
 | contradictory_number | 6 | 6 | 3 | 50.0% | 50.0% |
 | fabricated_dollar | 8 | 8 | 8 | 100.0% | 0.0% |
 | method_residual_blamed | 4 | 4 | 0 | 0.0% | 100.0% |
-| non_dollar_fabrication | 6 | 6 | 1 | 16.7% | 83.3% |
+| non_dollar_fabrication | 15 | 15 | 10 | 66.7% | 33.3% |
 | omitted_catalyst | 4 | 4 | 4 | 100.0% | 0.0% |
 | prompt_injection | 8 | 0 (control) | — | — | — |
 | quiet_day_confabulation | 6 | 6 | 2 | 33.3% | 66.7% |
@@ -31,7 +31,7 @@ Generated 2026-09-16T23:25:42+00:00 by `scripts/run_redteam.py` against `tests/r
 
 | Expected | Got | Count |
 |---|---|---:|
-| FAIL | FAIL | 18 |
+| FAIL | FAIL | 27 |
 | FAIL | PASS | 16 |
 | PARTIAL | PARTIAL | 4 |
 | PASS | PARTIAL | 2 |
@@ -58,6 +58,6 @@ Generated 2026-09-16T23:25:42+00:00 by `scripts/run_redteam.py` against `tests/r
 
 ## Sample size and construction method
 
-- 56 cases, 9 categories, counts fixed at generation time (`scripts/generate_redteam_cases.py`) matching the spec's own per-category n.
+- 65 cases, 9 categories, counts fixed at generation time (`scripts/generate_redteam_cases.py`) matching the spec's own per-category n.
 - Every case's blotter is a real `PositionFacts` object built from one of four real blotters (two real DoltHub chains, one real quiet day, one existing stress fixture) -- not an invented snapshot.
 - A zero miss rate on this sample is not proof of safety, especially since the LLM-judgment-only categories (`method_residual_blamed`, most of `non_dollar_fabrication`, direction-only `contradictory_number`) were run against a baseline mock, not a real model.

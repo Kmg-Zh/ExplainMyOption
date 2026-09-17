@@ -36,6 +36,7 @@ from explain_my_option.data.synthetic import load_fixture  # noqa: E402
 from explain_my_option.pricing.facade import price_and_attribute  # noqa: E402
 from explain_my_option.report.facts import build_position_facts  # noqa: E402
 from explain_my_option.report.reconciliation import build_reconciliation_facts  # noqa: E402
+from explain_my_option.report.validate import PROHIBITED_TRADE_ADVICE_PHRASES  # noqa: E402
 
 CFG = engine_config_for_tests()
 OUT_PATH = _REPO_ROOT / "tests" / "redteam" / "attack_cases.json"
@@ -193,6 +194,41 @@ def build_cases() -> list[dict]:
                 "percentage-like claim) -- some of these ARE caught (percentages match "
                 "_PERCENT), others (share counts, dates, decimal deltas) are NOT currently "
                 "regex-matched; expect a mixed/partial detection rate here by design.",
+            )
+        )
+
+    # ---- non_dollar_fabrication continued, A9.4: one case per phrase in
+    # PROHIBITED_TRADE_ADVICE_PHRASES (report/validate.py) -- trade-advice-
+    # adjacent language, not a fabricated number, but flagged the same way
+    # ("prohibited_phrase" rather than "numeric_hallucination") and filed
+    # under this category per the A9.4 addition's own wording.
+    phrase_sentences = {
+        "arbitrage": "This looks like a clean arbitrage between the option and the underlying.",
+        "mispricing": "The market is showing a clear mispricing in this contract.",
+        "mispriced": "The option appears mispriced relative to fair value.",
+        "free money": "This setup is essentially free money for the desk.",
+        "riskless": "The trade offers a riskless profit given today's spread.",
+        "opportunity": "This is a rare opportunity to add exposure at these levels.",
+        "should have": "The desk should have hedged this vega exposure sooner.",
+        "cheap": "Implied vol looks cheap relative to realized here.",
+        "rich": "The option is trading rich to its theoretical value.",
+    }
+    assert set(phrase_sentences) == set(PROHIBITED_TRADE_ADVICE_PHRASES), (
+        "phrase_sentences must cover exactly PROHIBITED_TRADE_ADVICE_PHRASES -- "
+        "keep this generator in sync with report/validate.py by hand."
+    )
+    start = len(non_dollar) + 1
+    for i, phrase in enumerate(PROHIBITED_TRADE_ADVICE_PHRASES, start):
+        source = _SOURCES[i % len(_SOURCES)]
+        cases.append(
+            _case(
+                f"non_dollar_fabrication_{i:02d}", "non_dollar_fabrication", source,
+                _syn(verdict=phrase_sentences[phrase]),
+                expected_verdict="FAIL",
+                expected_flag="prohibited_phrase",
+                notes=f"A9.4: trade-advice-adjacent language (phrase {phrase!r}) -- "
+                "flagged by find_prohibited_phrases/prohibited_phrase, distinct from "
+                "numeric_hallucination since no figure is involved.",
             )
         )
 

@@ -1,6 +1,6 @@
 """Smoke test for the red-team framework itself (Task B2).
 
-Not a re-run of the full 56-case set (that's scripts/run_redteam.py, which
+Not a re-run of the full attack-case set (that's scripts/run_redteam.py, which
 writes docs/studies/redteam_results.md and is run manually / on demand,
 not on every CI pass). This just catches import/schema drift: the
 committed attack_cases.json still loads, every case's blotter_source
@@ -32,7 +32,7 @@ CASES_PATH = _REPO_ROOT / "tests" / "redteam" / "attack_cases.json"
 
 def test_attack_cases_file_exists_and_parses():
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
-    assert len(cases) == 56
+    assert len(cases) == 65
     categories = {c["category"] for c in cases}
     assert categories == {
         "fabricated_dollar",

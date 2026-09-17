@@ -26,7 +26,8 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | B1 (B1.1, B1.4) | `459c745` | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
 | B2 | `b715140` | `scripts/generate_redteam_cases.py` — 56 attack cases across 9 categories, built from 4 real `PositionFacts` blotters (two real DoltHub chains, one real quiet day, one stress fixture), written to `tests/redteam/attack_cases.json`. `scripts/run_redteam.py` — runs every case N=3 through `verifier.deterministic_precheck` + a fixed baseline-PASS mock, writes `docs/studies/redteam_results.md` with detection/miss/false-alarm/stability rates, per-category table, full confusion matrix, and every individual miss named. `tests/ci/test_redteam_framework.py` — CI smoke test (schema/import drift only, not a full 56-case re-run). |
 | B3 | `9dfde71` | `pipeline/llm_roles.py` — `OpenAiRole.seed` (fixed, default `0`), passed through to `ChatOpenAI`; `llm_run_metadata()` records model/temperature/seed for every configured role in one place, wired into the live/offline-through-graph run manifest (`tests/live_book/portfolio_e2e.py`). `tests/ci/test_determinism_quant.py` — 4 fixtures/real cases, each run 3× through `price_and_attribute` + `build_position_facts`, asserted bit-identical (`==`, not a tolerance) on both `pricing.as_dict()` and the `PositionFacts` dataclass. `tests/live_book/test_determinism_llm.py` — the real narrator+verifier path (not a mock), same fixture 3×, requires `OPENAI_API_KEY` (not in `run-tests.sh`, same convention as `historical/run.py`); actually run this session against `gpt-5.4-mini`, passed. |
-| B4 | (this commit) | `app.py --no-llm` — the quant path only (data fetch, pricing, PnL attribution, `fallback_synthesis`), zero LLM calls, no `OPENAI_API_KEY` needed; `tests/ci/test_no_llm_flag.py`. `scripts/agent_budget_study.py` — runs the real leg graph for the 10 offline legs + 2 real historical cases through a real `gpt-5.4-mini`, writes `docs/studies/agent_budget.md` (wall-clock per stage, tokens/cost by role, `tools_run`/skip-reason/terminal-state distributions). Found and fixed a real bug in the process: `report/synthesis.py::synthesize_diagnosis` built its own bare `ChatOpenAI` from `EMO_LLM_MODEL` instead of using the `role` the graph passed in, silently ignoring B3's seed pin and making narrator cost/tokens unobservable — see FINDING below. `pipeline/leg_graph.py` gained observability-only `stage_timings` (per-node wall clock) and `OpenAiRole.last_usage` (per-call token usage), both hardening, no topology/decision change. |
+| B4 | `a1c277d` | `app.py --no-llm` — the quant path only (data fetch, pricing, PnL attribution, `fallback_synthesis`), zero LLM calls, no `OPENAI_API_KEY` needed; `tests/ci/test_no_llm_flag.py`. `scripts/agent_budget_study.py` — runs the real leg graph for the 10 offline legs + 2 real historical cases through a real `gpt-5.4-mini`, writes `docs/studies/agent_budget.md` (wall-clock per stage, tokens/cost by role, `tools_run`/skip-reason/terminal-state distributions). Found and fixed a real bug in the process: `report/synthesis.py::synthesize_diagnosis` built its own bare `ChatOpenAI` from `EMO_LLM_MODEL` instead of using the `role` the graph passed in, silently ignoring B3's seed pin and making narrator cost/tokens unobservable — see FINDING below. `pipeline/leg_graph.py` gained observability-only `stage_timings` (per-node wall clock) and `OpenAiRole.last_usage` (per-call token usage), both hardening, no topology/decision change. |
+| A9.4 (remainder) | (this commit) | The 9 red-team cases deferred at B2 time (framework didn't exist yet) — one per `PROHIBITED_TRADE_ADVICE_PHRASES` entry (`arbitrage`, `mispricing`, `mispriced`, `free money`, `riskless`, `opportunity`, `should have`, `cheap`, `rich`), added to `non_dollar_fabrication` in `scripts/generate_redteam_cases.py` with `expected_flag="prohibited_phrase"`. `attack_cases.json` grew from 56 to 65 cases; `docs/studies/redteam_results.md` regenerated — detection rate rose from 57.9% to 66.0% (all 9 new cases detected deterministically; `non_dollar_fabrication`'s own rate rose from 1/6 to 10/15 since the phrase check, unlike the vol-points/share-count/date checks, already existed and just lacked test coverage). |
 
 `./scripts/run-tests.sh` passes all 41 registered CI modules as of this
 commit (re-verify below).
@@ -193,8 +194,9 @@ papered over.
     in the search window" cannot be checked today. Adding a date field to
     `EvidenceItem` and a window-validation rule is a real, still-open gap,
     deferred rather than built as a rushed schema extension this session.
-16. **B2's measured detection rate (57.9%) is honest but not a model
-    measurement** — no `OPENAI_API_KEY` is configured in this environment,
+16. **B2's measured detection rate (66.0% as of A9.4's additions; 57.9% at
+    B2's original 56-case set) is honest but not a model measurement** —
+    no `OPENAI_API_KEY` is configured in this environment,
     so every case that `deterministic_precheck` does not intercept falls
     through to a fixed baseline mock that always returns `PASS`
     (`_BaselineRole` in `scripts/run_redteam.py`). This measures the
@@ -257,12 +259,6 @@ papered over.
 
 ## NOT DONE
 
-- **A9.4's red-team cases** ("add one red-team case per phrase under
-  `non_dollar_fabrication`") — B2's red-team framework now exists
-  (`tests/redteam/`, `scripts/run_redteam.py`), but the 7 phrase-specific
-  cases (one per `PROHIBITED_TRADE_ADVICE_PHRASES` entry) have not been
-  added to `attack_cases.json` yet. The verifier-side rule itself
-  (`prohibited_phrase`, `find_prohibited_phrases`) is done and tested.
 - **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
   choice for B1.2; a real, deferred gap for B1.3's date-window check).
 - **C1–C3** (committed sample reports, README rewrite, the live book/
@@ -300,10 +296,10 @@ branch's own history, not restated here.)
 | Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
 | Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
 | `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this session |
-| Red-team detection rate (B2, deterministic layer only) | 57.9% (22/38 violations caught) | `python scripts/run_redteam.py` |
-| Red-team miss rate (B2) | 42.1% | same |
-| Red-team false-alarm rate (B2) | 0.0% (0/10 `clean_control`) | same |
-| Red-team per-category detection (B2) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `non_dollar_fabrication` 16.7%, `method_residual_blamed` 0% | same, `docs/studies/redteam_results.md` |
+| Red-team detection rate (B2+A9.4, deterministic layer only) | 66.0% (31/47 violations caught) | `python scripts/run_redteam.py` |
+| Red-team miss rate (B2+A9.4) | 34.0% | same |
+| Red-team false-alarm rate (B2+A9.4) | 0.0% (0/10 `clean_control`) | same |
+| Red-team per-category detection (B2+A9.4) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `non_dollar_fabrication` 66.7% (10/15, up from 1/6 pre-A9.4), `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `method_residual_blamed` 0% | same, `docs/studies/redteam_results.md` |
 | Quant-path determinism (B3), 4 fixtures/cases × 3 runs | bit-identical (`==`) on `pricing.as_dict()` + `PositionFacts` every time | `python tests/ci/test_determinism_quant.py` |
 | LLM-path determinism (B3), real `gpt-5.4-mini`, `aapl_exdiv_2023` × 3 runs | `confidence_level`, `primary_driver`, `evidence[].headline` set identical every run | `python tests/live_book/test_determinism_llm.py` |
 | B4 study: 12-leg run, total LLM cost | `$0.0667` (narrator `$0.0505` / verifier `$0.0163`), 47527+3296 narrator tokens, 12973+1450 verifier tokens | `python scripts/agent_budget_study.py`, `docs/studies/agent_budget.md` |
