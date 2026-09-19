@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from .data.cache import load_t1, upsert_snapshot
+from .data.cache import MIN_PLAUSIBLE_IV, load_t1, upsert_snapshot
 from .data.dividends import normalize_dividend_yield, project_dividends
 from .data.observation import ObservationStatus, continuity_gate
 from .data.rates import DEFAULT_RATE, fetch_irx_rate
@@ -151,9 +151,27 @@ def _clean_iv(raw) -> Optional[float]:
         iv = float(raw)
     except (TypeError, ValueError):
         return None
-    if not np.isfinite(iv) or iv <= 0:
+    if not np.isfinite(iv) or iv < MIN_PLAUSIBLE_IV:
         return None
     return iv
+
+
+def latest_two_closes(hist: pd.DataFrame) -> tuple[float, float]:
+    """(spot_now, spot_prev) from the last two *valid* daily closes.
+
+    Yahoo can append a trailing row with a NaN Close in the evening (the new
+    session's bar before it has a price); float(NaN) then reaches QuantLib as
+    "negative or null underlying given" for every leg. Drop non-finite/
+    non-positive closes first, and fail loudly with the real cause if fewer
+    than two remain.
+    """
+    closes = pd.to_numeric(hist["Close"], errors="coerce")
+    closes = closes[np.isfinite(closes) & (closes > 0)]
+    if len(closes) < 2:
+        raise RuntimeError(
+            f"fewer than 2 valid daily closes in history ({len(closes)} of {len(hist)} rows usable)"
+        )
+    return float(closes.iloc[-1]), float(closes.iloc[-2])
 
 
 def fetch_vol_surface(
@@ -284,8 +302,8 @@ def load_market_data(
             date_t1="t-1",
             date_t=as_of,
         )
-    spot_now = float(hist["Close"].iloc[-1])
-    spot_prev = float(hist["Close"].iloc[-2])
+    spot_now, spot_prev = latest_two_closes(hist)
+    hist = hist[np.isfinite(pd.to_numeric(hist["Close"], errors="coerce"))]
 
     expiry = expiry or _pick_nearest_expiry(tk)
     chain = tk.option_chain(expiry)

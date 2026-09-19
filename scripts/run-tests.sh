@@ -48,6 +48,7 @@ TESTS=(
   ci/test_determinism_quant
   ci/test_no_llm_flag
   ci/test_runlog_book
+  ci/test_data_robustness
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage

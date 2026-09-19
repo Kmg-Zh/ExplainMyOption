@@ -176,7 +176,9 @@ def main() -> int:
             # option_price_now off the cached snapshot, not the surface, so
             # this still fixes the day-1 problem -- local-vol continuity
             # across days is the only thing narrower here.
-            upsert_snapshot(state["snapshot"], None)
+            if not upsert_snapshot(state["snapshot"], None):
+                print(f"  not cached as t-1: {leg_id} has a sentinel IV "
+                      f"({state['snapshot'].iv_now:g})", file=sys.stderr)
         synthesis = DiagnosticSynthesis.model_validate(state["diagnostic_synthesis"])
         syntheses.append(synthesis)
         findings = state.get("diagnostic_findings") or {}
@@ -327,6 +329,18 @@ def main() -> int:
     }
 
     print(json.dumps(metrics_line, indent=2))
+
+    if not bundles_by_id:
+        # Every leg failed: there is no run to record. Writing an all-errors
+        # entry (and exiting 0, so the launchd wrapper commits it) would put
+        # a failed day into the permanent log as if it were a real one.
+        # A gap is honest (docs/runlog/README.md); a failed-run row isn't
+        # information the summary can use. The errors are in the stderr log.
+        print(
+            f"\nAll {len(legs)} legs failed -- writing nothing and exiting 1.",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.dry_run:
         print("\n--dry-run: not writing report.md or metrics.jsonl", file=sys.stderr)
