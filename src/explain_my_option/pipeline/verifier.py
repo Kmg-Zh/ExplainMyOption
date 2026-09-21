@@ -218,7 +218,8 @@ def apply_verifier_reflection(
             "this move to a single Greek."
         )
     if rationale:
-        reflect_bits.append(rationale)
+        first = rationale.split(". ")[0].strip()
+        reflect_bits.append(first if len(first) <= 200 else first[:199].rstrip() + "…")
     if missing:
         reflect_bits.append(f"Gaps: {'; '.join(missing[:3])}")
     reflect_text = " ".join(reflect_bits) or (

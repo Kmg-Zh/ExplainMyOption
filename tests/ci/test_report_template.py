@@ -49,7 +49,7 @@ def test_position_report_has_seven_sections():
         "## 4. Quantitative PnL Attribution",
         "## 5. Residual Drill",
         "## 6. Root-Cause Market Intelligence",
-        "## 7. Trading Desk Watchlist",
+        "## 7. Risk Watchlist",
     ):
         assert heading in md, heading
     assert "Gamma PnL" in md

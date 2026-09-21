@@ -125,10 +125,20 @@ def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) 
     lines.append(f"* **Escalation basis**: `{basis}`{metric_note}")
     if basis == "method":
         dates = f"{facts.eval_date}" if not facts.prev_as_of_note else f"{facts.prev_as_of_note} and/or {facts.eval_date}"
+        if facts.iv_prev_source in ("hv20_proxy", "copied"):
+            cause = (
+                f"prior-day vol is a `{facts.iv_prev_source}` stand-in, not a chain mark, "
+                "so the market-vs-model gap cannot be measured"
+            )
+        elif rec is not None and not rec.marks_reliable_now:
+            cause = f"today's option quote tier is `{rec.quote_tier}`, not reliable"
+        elif rec is not None and not rec.marks_reliable_prev:
+            cause = "the prior-day option quote is not reliable"
+        else:
+            cause = f"reliable option marks were unavailable on {dates}"
         lines.append(
-            f"  Escalation basis: method residual — reliable option marks were "
-            f"unavailable on {dates}, so this run explains a model price "
-            "change, not a market price change."
+            f"  Escalation basis: method residual — {cause}; this run explains a "
+            "model price change, not a market price change."
         )
     return lines
 
@@ -288,10 +298,14 @@ def _diagnostic_summary_section(findings: dict[str, Any] | None) -> str:
         return ""
     tools = findings.get("tools_run") or []
     skipped = findings.get("skipped_tools") or []
+    from ..graph.diagnostic_controller import FREE_TOOLS, MAX_DIAGNOSTIC_TOOL_CALLS
+
+    costly = sum(1 for t in tools if t not in FREE_TOOLS)
     lines = [
         "### Diagnostic tool summary",
         "",
-        f"* **Tools run** ({findings.get('tool_calls_used', 0)}/3): "
+        f"* **Tools run** ({len(tools)} total; costly {costly}/{MAX_DIAGNOSTIC_TOOL_CALLS}, "
+        "free tools do not use the budget): "
         + (", ".join(f"`{t}`" for t in tools) if tools else "none"),
     ]
     if skipped:
@@ -432,7 +446,7 @@ def _watchlist_section(
     *,
     section: int = 7,
 ) -> str:
-    lines = [f"## {section}. Trading Desk Watchlist", ""]
+    lines = [f"## {section}. Risk Watchlist", ""]
     if diagnostic_findings and diagnostic_findings.get("terminal_unexplained_break"):
         lines.append(
             "* **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock."
@@ -441,7 +455,7 @@ def _watchlist_section(
         for bullet in synthesis.takeaways:
             lines.append(f"* {bullet}")
     else:
-        lines.append("* Monitor residual size and IV marks before sizing follow-on trades.")
+        lines.append("* Monitor residual size and IV marks.")
     if facts.american.next_ex_div:
         lines.append(
             f"* **Assignment watch**: ex-div `{facts.american.next_ex_div}` — "

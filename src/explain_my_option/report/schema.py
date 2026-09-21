@@ -36,7 +36,7 @@ class DiagnosticSynthesis(BaseModel):
     takeaways: list[str] = Field(
         default_factory=list,
         max_length=5,
-        description="Actionable risk watchlist bullets for the trading desk.",
+        description="Neutral risk-watch items (what to monitor or verify). No trade, hedge or sizing recommendations.",
     )
     american_commentary: str = Field(
         default="",

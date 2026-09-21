@@ -81,7 +81,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 ### Diagnostic tool summary
 
-* **Tools run** (4/3): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
+* **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
 * **Skipped candidates**:
   * `deep_diagnostics` — mark calibrated and gap small
   * `american_dividend_exercise_check` — budget exhausted or lower priority
@@ -95,7 +95,7 @@ _Observation unreliable — event linkage suppressed; reconcile marks before cat
 
 ---
 
-## 7. Trading Desk Watchlist
+## 7. Risk Watchlist
 
 * No action needed; move is within theta/carry tolerance.
 * **Assignment watch**: ex-div `2023-05-12` — Dividend coverage 0.05 — the dividend does not exceed remaining time value, or the ex-div date does not land before expiry. This is a carry/theta case, not an early-exercise case, even if a premium is reported above.

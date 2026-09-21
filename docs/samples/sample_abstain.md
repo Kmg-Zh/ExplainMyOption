@@ -72,7 +72,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 ### Diagnostic tool summary
 
-* **Tools run** (4/3): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
+* **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
 * **Skipped candidates**:
   * `deep_diagnostics` — mark calibrated and gap small
 
@@ -85,7 +85,7 @@ _No catalyst search — move below materiality / observation lock._
 
 ---
 
-## 7. Trading Desk Watchlist
+## 7. Risk Watchlist
 
 * **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock.
 * Verifier missing evidence: LLM prose must not contain dollar amounts., LLM prose must not embed numeric PnL claims.

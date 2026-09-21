@@ -69,6 +69,6 @@ _Observation unreliable — event linkage suppressed; reconcile marks before cat
 
 ---
 
-## 7. Trading Desk Watchlist
+## 7. Risk Watchlist
 
 * **Elevated residual (>6582029381%)**: Review American early-exercise boundary, discrete dividends, vol skew curvature, and mark quality. Model limitations flagged above.

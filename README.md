@@ -11,7 +11,7 @@ This is a personal project, in progress — not a production desk system. LangGr
 ## Design (what to look at)
 
 1. **Numbers first.** Official 1-day PnL comes from QuantLib American FDM. The LLM cannot introduce a dollar figure.
-2. **Policy before LLM.** A **rules** controller may run ≤3 diagnostic tools and logs skip reasons. This is not free-form ReAct; the agent does not pick engines.
+2. **Policy before LLM.** A **rules** controller may run at most 1 costly diagnostic tool (plus a few free arithmetic ones that do not use the budget) and logs skip reasons. This is not free-form ReAct; the agent does not pick engines.
 3. **Three roles.** Narrator / catalyst critic (headline whitelist) / verifier. FAIL on invented dollars; PARTIAL if a named catalyst is missing. [Case studies](docs/case-studies/README.md)
 4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
 5. **Escalate, don't invent.** Budget exhausted with a large residual or mark gap → unexplained (`terminal_unexplained_break`). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
@@ -22,13 +22,13 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 
 | Capture | File |
 |---------|------|
-| **Abstain** — budget exhausted, terminal break | [sample_abstain.md](docs/samples/sample_abstain.md) |
+| **Abstain** (constructed demo) — budget exhausted, terminal break | [sample_abstain.md](docs/samples/sample_abstain.md) |
 | **Quiet day** — nothing to explain, no search performed | [sample_quiet_day.md](docs/samples/sample_quiet_day.md) |
 | Real ex-div chain, market ΔP + mark reconciliation | [sample_real_chain.md](docs/samples/sample_real_chain.md) |
 | `--no-llm`, zero LLM calls, live quote | [sample_no_llm.md](docs/samples/sample_no_llm.md) |
 | Prompt injection contained | [sample_injection_contained.md](docs/samples/sample_injection_contained.md) |
 
-`sample_abstain.md` is the most important file in the repository: it is what the system does on a day it cannot explain, rather than guess. Truncated (sections 1, 4, 5). Numbers are QuantLib; the LLM's own text is the `verdict`/`Confidence` lines only:
+`sample_abstain.md` is a **constructed demonstration of the abstain mechanism**, not a captured natural failure: the market data, Greeks and routing are real, but the narrator is a scripted role that deliberately claims a dollar figure absent from the blotter (a real narrator on this same case produced a well-explained PARTIAL; see [docs/samples/README.md](docs/samples/README.md)). For how the verifier behaves against real and adversarial narrations, see the red-team study ([docs/studies/redteam_results.md](docs/studies/redteam_results.md)). Truncated (sections 1, 4, 5). Numbers are QuantLib; the LLM's own text is the `verdict`/`Confidence` lines only:
 
 ```markdown
 # Option Price Movement Diagnostic Report
@@ -61,7 +61,7 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 * **Taylor residual**: `-$0.2948` (18.4% of |model|)
 * **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap — escalate to human review before trading on factor stories.
 
-* **Tools run** (4/3): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
+* **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
 ```
 
 Full report, and a disclosure of how this specific file was produced: [docs/samples/README.md](docs/samples/README.md).

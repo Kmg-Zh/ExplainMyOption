@@ -62,7 +62,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 ### Diagnostic tool summary
 
-* **Tools run** (0/3): `taylor_second_order`
+* **Tools run** (1 total; costly 0/1, free tools do not use the budget): `taylor_second_order`
 
 ---
 
@@ -81,7 +81,7 @@ _Peer / sector background (indirect context, not a required catalyst):_
 
 ---
 
-## 7. Trading Desk Watchlist
+## 7. Risk Watchlist
 
 * **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock.
 * Verifier missing evidence: No hard violation evidenced from the provided fields; however, the candidate is not fully supported because the narrative includes trade-advice language ('Recheck the surface-driven reprice and hedge...') under the policy's prohibited wording concern is not explicit enough to force FAIL, but the response also does not provide a clean evidence-backed Layer A/B summary beyond the generic vega move.

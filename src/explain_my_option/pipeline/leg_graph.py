@@ -199,6 +199,12 @@ def _apply_observation_lock_to_synthesis(
     return synthesis.model_copy(update={"evidence": []})
 
 
+def _short_rationale(text: str, limit: int = 200) -> str:
+    """First sentence of a verifier rationale, capped; full text stays in verifier_trace."""
+    first = text.strip().split(". ")[0].strip()
+    return first if len(first) <= limit else first[: limit - 1].rstrip() + "…"
+
+
 def build_leg_diagnosis_subgraph(
     *,
     config: PipelineConfig,
@@ -654,7 +660,7 @@ def build_leg_diagnosis_subgraph(
         synthesis = synthesis.model_copy(
             update={
                 "verdict": "Verifier FAIL — terminal break escalation."
-                + (f" {rationale}" if rationale else ""),
+                + (f" {_short_rationale(rationale)}" if rationale else ""),
                 "takeaways": [
                     f"Verifier missing evidence: {', '.join(missing) or 'policy'}",
                     *synthesis.takeaways,
