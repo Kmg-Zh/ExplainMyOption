@@ -1,17 +1,15 @@
 # Red-team results (Task B2)
 
-Generated 2026-09-17T12:52:44+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-09-21T12:50:41+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
-**Model**: none -- `OPENAI_API_KEY` is not configured in this environment. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.1`, not a real model's. Re-run with a real `LlmRole` wired in for an actual model measurement -- the framework supports it unchanged (`run_case()` takes any `LlmRole` via `verify_synthesis`).
-
-**Runs per case**: 3. **Cost**: $0 (no LLM calls; deterministic + fixed-mock only).
+**Model**: none -- deterministic layer only. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.1`, not a real model's, and is the floor the live run ([redteam_results.md](redteam_results.md)) is compared against. **Runs per case**: 3. **Cost**: $0.
 
 ## Overall
 
 - Detection rate: **66.0%** (31/47 violations caught)
-- Miss rate: **34.0%** -- the number that matters
+- Miss rate: **34.0%** -- share of violation cases the verifier let through
 - False alarm rate: **0.0%** (0/10 clean_control cases not PASSed)
-- Verdict stability: **100.0%** (65/65 cases identical across all 3 runs) -- 100% is expected and not meaningful here: nothing in this run is non-deterministic (see Model note above). A real-model run would be the first time this number carries information.
+- Verdict stability: **100.0%** (65/65 cases identical across all 3 runs) -- 100% is expected and not meaningful here: nothing in this run is non-deterministic.
 
 ## Per-category
 

@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """Run the red-team attack set against the verifier (Task B2.2).
 
-Offline: no OPENAI_API_KEY is configured in this environment, so every
-case runs against deterministic_precheck plus a single fixed "baseline"
-mock LLM role for the fallback path (returns PASS with a fixed rationale
+Default (offline): every case runs against deterministic_precheck plus a
+single fixed "baseline" mock LLM role for the fallback path (returns PASS
 whenever deterministic_precheck does not intercept first) -- this measures
-the deterministic layer's own detection rate, not a real model's. Because
-nothing here is non-deterministic, N=3 verdict_stability is 100% by
-construction in this run; that fact is reported, not hidden. Re-run with
-a real LlmRole wired in to measure an actual model.
+the deterministic layer's own detection rate (the floor), not a real
+model's, and writes ``docs/studies/redteam_results_deterministic_only.md``.
+
+``--live``: the fallback path is a real ``OpenAiRole`` verifier (model from
+``EMO_VERIFIER_MODEL`` / ``EMO_LLM_MODEL``, default gpt-5.4-mini; needs
+OPENAI_API_KEY, loaded from .env) and the run writes
+``docs/studies/redteam_results.md`` including token cost.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -22,6 +26,10 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
 sys.path.insert(0, str(_REPO_ROOT / "tests"))
+
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(_REPO_ROOT / ".env")
 
 from bootstrap import install  # noqa: E402
 
@@ -38,7 +46,10 @@ from explain_my_option.report.schema import DiagnosticSynthesis  # noqa: E402
 from explain_my_option.pipeline.verifier_schema import DiagnosticVerifierResult  # noqa: E402
 
 CASES_PATH = _REPO_ROOT / "tests" / "redteam" / "attack_cases.json"
-OUT_PATH = _REPO_ROOT / "docs" / "studies" / "redteam_results.md"
+OUT_PATH_LIVE = _REPO_ROOT / "docs" / "studies" / "redteam_results.md"
+OUT_PATH_OFFLINE = _REPO_ROOT / "docs" / "studies" / "redteam_results_deterministic_only.md"
+PRICE_PER_1M_INPUT_USD = 0.75  # same rates as scripts/daily_run.py
+PRICE_PER_1M_OUTPUT_USD = 4.50
 N_RUNS = 3
 CFG = engine_config_for_tests()
 
@@ -55,6 +66,31 @@ class _BaselineRole:
             missing_evidence=[],
             policy_flags=[],
             rationale="baseline mock: no LLM configured in this offline run",
+        )
+
+
+class _CountingRole:
+    """Wraps a real LlmRole and accumulates token usage for cost reporting."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.calls = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+    def structured_invoke(self, *, system, human, schema):
+        out = self.inner.structured_invoke(system=system, human=human, schema=schema)
+        self.calls += 1
+        usage = getattr(self.inner, "last_usage", None) or {}
+        self.input_tokens += int(usage.get("input_tokens", 0))
+        self.output_tokens += int(usage.get("output_tokens", 0))
+        return out
+
+    @property
+    def cost_usd(self) -> float:
+        return (
+            self.input_tokens / 1_000_000 * PRICE_PER_1M_INPUT_USD
+            + self.output_tokens / 1_000_000 * PRICE_PER_1M_OUTPUT_USD
         )
 
 
@@ -75,13 +111,13 @@ def _facts_for(source: str):
     return facts
 
 
-def run_case(case: dict) -> DiagnosticVerifierResult:
+def run_case(case: dict, role=None) -> DiagnosticVerifierResult:
     facts = _facts_for(case["blotter_source"])
     synthesis = DiagnosticSynthesis(**case["synthesis"])
     return verify_synthesis(
         synthesis,
         facts,
-        role=_BaselineRole(),
+        role=role or _BaselineRole(),
         suppress_vega=False,
         observation_reliable=True,
         news_titles=case.get("news_titles") or [],
@@ -110,12 +146,24 @@ def _detected(case: dict, result: DiagnosticVerifierResult) -> bool:
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--live", action="store_true", help="use a real OpenAI verifier role")
+    args = ap.parse_args()
+    role = None
+    if args.live:
+        from explain_my_option.pipeline.llm_roles import OpenAiRole
+
+        if not os.getenv("OPENAI_API_KEY"):
+            print("OPENAI_API_KEY not set (checked env and .env)", file=sys.stderr)
+            return 2
+        model = os.getenv("EMO_VERIFIER_MODEL", os.getenv("EMO_LLM_MODEL", "gpt-5.4-mini"))
+        role = _CountingRole(OpenAiRole(model=model))
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
 
     per_case_runs: dict[str, list[DiagnosticVerifierResult]] = defaultdict(list)
     for _ in range(N_RUNS):
         for case in cases:
-            per_case_runs[case["case_id"]].append(run_case(case))
+            per_case_runs[case["case_id"]].append(run_case(case, role))
 
     by_category: dict[str, dict] = defaultdict(lambda: {"total": 0, "violations": 0, "detected": 0})
     clean_total = 0
@@ -162,6 +210,37 @@ def main() -> int:
     false_alarm_rate = 100.0 * clean_false_alarms / clean_total if clean_total else 0.0
     stability = 100.0 * stability_hits / len(cases) if cases else 0.0
 
+    if role is not None:
+        model_lines = [
+            f"**Model**: `{role.inner.model}` (temperature {role.inner.temperature}, "
+            f"seed {role.inner.seed}) as the LLM verifier on every case "
+            "`pipeline.verifier.deterministic_precheck` does not intercept. "
+            f"**Runs per case**: {N_RUNS}. **LLM calls**: {role.calls}. "
+            f"**Cost**: ${role.cost_usd:.4f} "
+            f"({role.input_tokens} in / {role.output_tokens} out tokens). "
+            "The deterministic-only floor for the same cases is in "
+            "[redteam_results_deterministic_only.md](redteam_results_deterministic_only.md).",
+        ]
+        stability_note = (
+            "cases with identical verdict and flags across all runs; with a real "
+            "model this is a genuine (not by-construction) stability measurement"
+        )
+    else:
+        model_lines = [
+            "**Model**: none -- deterministic layer only. Every case ran through "
+            "`pipeline.verifier.deterministic_precheck` first; cases it does not "
+            "intercept fell through to a fixed baseline mock role that always "
+            "returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This "
+            f"measures the **deterministic layer's own detection rate**, `{PROMPT_VERSION}`, "
+            "not a real model's, and is the floor the live run "
+            "([redteam_results.md](redteam_results.md)) is compared against. "
+            f"**Runs per case**: {N_RUNS}. **Cost**: $0.",
+        ]
+        stability_note = (
+            "100% is expected and not meaningful here: nothing in this run is "
+            "non-deterministic"
+        )
+
     lines = [
         "# Red-team results (Task B2)",
         "",
@@ -169,27 +248,15 @@ def main() -> int:
         "`scripts/run_redteam.py` against `tests/redteam/attack_cases.json` "
         f"({len(cases)} cases, `scripts/generate_redteam_cases.py`).",
         "",
-        "**Model**: none -- `OPENAI_API_KEY` is not configured in this environment. "
-        "Every case ran through `pipeline.verifier.deterministic_precheck` first; "
-        "cases it does not intercept fell through to a fixed baseline mock role that "
-        "always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This "
-        f"measures the **deterministic layer's own detection rate**, `{PROMPT_VERSION}`, "
-        "not a real model's. Re-run with a real `LlmRole` wired in for an actual "
-        "model measurement -- the framework supports it unchanged (`run_case()` "
-        "takes any `LlmRole` via `verify_synthesis`).",
-        "",
-        f"**Runs per case**: {N_RUNS}. **Cost**: $0 (no LLM calls; deterministic + "
-        "fixed-mock only).",
+        *model_lines,
         "",
         "## Overall",
         "",
         f"- Detection rate: **{overall_detection:.1f}%** ({total_detected}/{total_violations} violations caught)",
-        f"- Miss rate: **{overall_miss:.1f}%** -- the number that matters",
+        f"- Miss rate: **{overall_miss:.1f}%** -- share of violation cases the verifier let through",
         f"- False alarm rate: **{false_alarm_rate:.1f}%** ({clean_false_alarms}/{clean_total} clean_control cases not PASSed)",
         f"- Verdict stability: **{stability:.1f}%** ({stability_hits}/{len(cases)} cases identical across "
-        f"all {N_RUNS} runs) -- 100% is expected and not meaningful here: nothing in "
-        "this run is non-deterministic (see Model note above). A real-model run "
-        "would be the first time this number carries information.",
+        f"all {N_RUNS} runs) -- {stability_note}.",
         "",
         "## Per-category",
         "",
@@ -241,14 +308,17 @@ def main() -> int:
             "existing stress fixture) -- not an invented snapshot.",
             "- A zero miss rate on this sample is not proof of safety, especially "
             "since the LLM-judgment-only categories (`method_residual_blamed`, most "
-            "of `non_dollar_fabrication`, direction-only `contradictory_number`) were "
-            "run against a baseline mock, not a real model.",
+            "of `non_dollar_fabrication`, direction-only `contradictory_number`) "
+            + ("depend on one model at temperature 0; small n per category." if role is not None else "were run against a baseline mock, not a real model."),
         ]
     )
 
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Wrote {OUT_PATH.relative_to(_REPO_ROOT)}")
+    out_path = OUT_PATH_LIVE if role is not None else OUT_PATH_OFFLINE
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Wrote {out_path.relative_to(_REPO_ROOT)}")
+    if role is not None:
+        print(f"LLM calls: {role.calls} | cost: ${role.cost_usd:.4f}")
     print(f"Detection rate: {overall_detection:.1f}% | Miss rate: {overall_miss:.1f}% | "
           f"False alarm rate: {false_alarm_rate:.1f}%")
     return 0
