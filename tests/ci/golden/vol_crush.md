@@ -57,7 +57,7 @@ _Limitations: local_vol_t1_shifted_failed_
 ### Surface / Heston diagnostics
 - Skew proxy: -0.0120
 - Term slope: 0.0052
-- Heston params: `{'kappa': 6.968934044366986, 'theta': 0.004000241600714772, 'sigma': 0.15887868234212532, 'rho': 0.5933029039961145, 'v0': 0.032588125083043804}`
+- Heston params: `{'kappa': 6.9689, 'theta': 0.004, 'sigma': 0.1589, 'rho': 0.5933, 'v0': 0.0326}`
 - Heston RMSE: 0.0015
 - American FD under surface: 2.7015
 - Surface limitations: american_fd_heston_failed

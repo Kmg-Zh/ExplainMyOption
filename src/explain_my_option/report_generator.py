@@ -211,7 +211,13 @@ def build_quant_section(snap: MarketSnapshot, pricing: PricingResult) -> str:
         if sd.term_slope is not None:
             lines.append(f"- Term slope: {_fmt(sd.term_slope)}")
         if sd.heston_params is not None:
-            lines.append(f"- Heston params: `{sd.heston_params}`")
+            # Optimizer output is only stable to ~4dp across machines; full
+            # float repr would make goldens platform-dependent.
+            hp = {
+                k: (round(v, 4) if isinstance(v, float) else v)
+                for k, v in sd.heston_params.items()
+            }
+            lines.append(f"- Heston params: `{hp}`")
             lines.append(f"- Heston RMSE: {_fmt(sd.heston_rmse or 0.0)}")
         if sd.american_surface_price is not None:
             lines.append(
