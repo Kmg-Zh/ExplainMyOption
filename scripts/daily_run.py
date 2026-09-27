@@ -60,6 +60,7 @@ from live_book.portfolio_book import load_pinned_book  # noqa: E402
 from explain_my_option.agent_graph import run_pipeline  # noqa: E402
 from explain_my_option.data.cache import upsert_snapshot  # noqa: E402
 from explain_my_option.graph.deps import default_deps  # noqa: E402
+from explain_my_option.graph.prompts import PROMPT_VERSION  # noqa: E402
 from explain_my_option.pipeline.llm_roles import default_openai_roles  # noqa: E402
 from explain_my_option.report.facts import PositionBundle  # noqa: E402
 from explain_my_option.report.reconciliation import build_reconciliation_facts, marks_reliable  # noqa: E402
@@ -305,6 +306,12 @@ def main() -> int:
     metrics_line = {
         "date": today,
         "run_id": run_id,
+        # So a discontinuity in later behavior (e.g. a terminal_unexplained_break
+        # rate that drops after a given date) is legible as "the prompt changed
+        # here," not a silent gap -- bump PROMPT_VERSION whenever
+        # VERIFIER_SYSTEM_PROMPT or the diagnose system prompt changes (see its
+        # own comment in graph/prompts.py).
+        "prompt_version": PROMPT_VERSION,
         "n_legs": len(legs),
         "wall_clock_s": round(wall_clock_s, 3),
         "llm_calls": llm_calls_total,

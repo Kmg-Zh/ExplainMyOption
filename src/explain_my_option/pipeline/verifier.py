@@ -50,6 +50,19 @@ inside the model, not a tradeable edge. Any of these words, or "free money", "ri
 a hard FAIL, flagged "prohibited_phrase" -- this product explains a price move, it never
 advises a trade, regardless of how well-evidenced the rest of the synthesis is.
 
+Flag "prohibited_phrase" ONLY when one of those exact listed words/phrases (or an unambiguous
+synonym carrying the identical meaning, e.g. "steal" for "cheap") is literally present in a
+narrative field -- the same narrow rule the code's own deterministic check enforces
+(report/validate.py's find_prohibited_phrases). Generic desk-hygiene language is NOT this
+violation and must never be hard-FAILed under this flag, even though it brushes against "no
+trade advice" in spirit: "continue standard hedging", "monitor the position", "reprice the book
+on the full surface", "keep vol hedges tight/in place", "watch for further moves", "review
+before the next print". These describe ongoing risk management, not a claim that something is
+mispriced or a signal to act on an edge. If you cannot point to the specific listed word (or its
+exact synonym) actually present in the text, it is not a "prohibited_phrase" violation --
+regardless of how "advisory" the tone feels. If a borderline case still concerns you, use
+PARTIAL, never a hard FAIL on resemblance alone.
+
 Verdict policy:
 - PASS: Layer A matches the dominant driver, Layer B is covered when headlines name a
   mechanism, and observation locks are respected.

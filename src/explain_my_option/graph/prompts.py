@@ -17,7 +17,7 @@ from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
 # (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
 # stated prompt version; without one the run log mixes measurements of
 # different systems.
-PROMPT_VERSION = "v3.1-b1.2"
+PROMPT_VERSION = "v3.1-b1.3"
 
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
 PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)

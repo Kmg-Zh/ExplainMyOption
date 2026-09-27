@@ -32,9 +32,10 @@ Implementation Work Order v3.1" (private, supplied outside this repo).
 | C1 | (this commit) | `scripts/generate_samples.py` — 5 committed sample reports from real runs (`docs/samples/`): `sample_abstain.md` (real GME data, scripted narrator, disclosed — see FINDING #20), `sample_quiet_day.md` (real AAPL quiet day, `no_escalation`), `sample_real_chain.md` (real AAPL ex-div, reconciled marks), `sample_no_llm.md` (live `app.py --no-llm`), `sample_injection_contained.md` (`vol_crush` fixture + injected headline, `injection_observed=True` — see FINDING #21). `docs/samples/README.md` states command/model/data-source/real-vs-synthetic per file, per C1's own requirement. Superseded the pre-v3.1 3-file sample set (`live.md`/`historical.md`/`unexplained_break.md`, removed); `tests/ci/test_repo_layout.py::test_docs_samples_are_committed_product_reports` updated to check the new 5 files. |
 | C2 | (this commit) | README rewrite, exactly the edits C2.1–C2.6 specify: two-sided thesis lead, the `LangGraph is the runtime` sentence, `## What is proven offline` → `## What the offline suite covers` + the redteam-results pointer paragraph, new `## Validation` (the 8-row invariants table) and `## Two residuals` and `## Regime rule` sections (the last with a real 5-case `r_spot`/`r_vol`/`\|ε_method\|/\|ΔP\|` table, computed this session), the A5.2 extended attribution formula, 3 new `## Scope` bullets. `## Sample output` also rewritten to match C1's new file set (not one of the numbered C2 sub-edits, but required since the old set it linked no longer exists). C2.6's "delete `No historical option chain.`" and the diagram-placement requirement were already satisfied by earlier A4.6/A5.2 work and the file's existing structure respectively — confirmed, not re-done. |
 
-| C3 (infra + day 1) | (this commit) | `docs/runlog/book.json` — 8 real, live-discovered legs (Task C3.1: 2-leg AAPL vertical spread, 2-leg JPM straddle spanning JPM's real 2026-10-13 earnings, 2-leg SPY risk reversal, 1 ITM VZ call ex-div 2026-10-08, 1 deep-OTM PLUG call), all ≥35 DTE at inception (nearest listed expiry ≥ target), so no roll policy is needed inside the 30-day window. C3.2 (per-expiry/per-strike IV keying) needed no migration — `data/cache.py`'s schema already keys on `(ticker, expiry, strike, option_type, as_of)`, not ticker alone; the spec's own worry doesn't apply to this codebase (FINDING below). `scripts/daily_run.py` — prices all 8 legs through the real graph, computes the C3.3 skew proxy for the SPY pair, records C3.4's `legs_narrated`/`legs_silent`/`llm_calls` (reusing A7's existing `no_escalation` gate, not new logic), writes `docs/runlog/YYYY-MM-DD/report.md` + appends to `docs/runlog/metrics.jsonl` in the spec's exact schema. Also caches every leg's snapshot (`data.cache.upsert_snapshot`) so day 2 has a real t-1. Ran for real today (2026-09-17, day 1): 8/8 legs priced, 8 real LLM calls, $0.0365, all 8 PARTIAL. `tests/ci/test_runlog_book.py` — offline structural checks on the book file. Two real bugs found and fixed in the process of building this, not the shipped pipeline — see FINDINGS below. |
+| C3 (infra + day 1) | `5515e0b` | `docs/runlog/book.json` — 8 real, live-discovered legs (Task C3.1: 2-leg AAPL vertical spread, 2-leg JPM straddle spanning JPM's real 2026-10-13 earnings, 2-leg SPY risk reversal, 1 ITM VZ call ex-div 2026-10-08, 1 deep-OTM PLUG call), all ≥35 DTE at inception (nearest listed expiry ≥ target), so no roll policy is needed inside the 30-day window. C3.2 (per-expiry/per-strike IV keying) needed no migration — `data/cache.py`'s schema already keys on `(ticker, expiry, strike, option_type, as_of)`, not ticker alone; the spec's own worry doesn't apply to this codebase (FINDING below). `scripts/daily_run.py` — prices all 8 legs through the real graph, computes the C3.3 skew proxy for the SPY pair, records C3.4's `legs_narrated`/`legs_silent`/`llm_calls` (reusing A7's existing `no_escalation` gate, not new logic), writes `docs/runlog/YYYY-MM-DD/report.md` + appends to `docs/runlog/metrics.jsonl` in the spec's exact schema. Also caches every leg's snapshot (`data.cache.upsert_snapshot`) so day 2 has a real t-1. Ran for real today (2026-09-17, day 1): 8/8 legs priced, 8 real LLM calls, $0.0365, all 8 PARTIAL. `tests/ci/test_runlog_book.py` — offline structural checks on the book file. Two real bugs found and fixed in the process of building this, not the shipped pipeline — see FINDINGS below. |
+| Post-spec: verifier prompt fixes (live-book incidents) | `5ef7b51`, (this commit) | The live 30-day runlog surfaced two real verifier false-positive patterns by day 7, found by reading the actual `terminal_unexplained_break` rationale text, not by inspection: (1) the verifier hard-failing correct model-language ("higher-order convexity/path effects", "truncation and path effects") as `method_residual_blamed` — that flag is for blaming an *external* cause, not ordinary model vocabulary; caused 2 of the first 4 escalations. (2) the verifier hard-failing generic desk-hygiene language ("continue standard hedging", "keep vol hedges tight", "reprice the book on the full surface") as `prohibited_phrase`, even though none of it is one of A9.4's 9 literal banned words — caused a 3rd escalation, and (found while validating fix 1) was independently the dominant cause of the B2 red-team study's own false-alarm rate (10/10 `clean_control` cases pass only 4/10 before this fix). `VERIFIER_SYSTEM_PROMPT` now explicitly lists what does *not* count as either violation; `PROMPT_VERSION` bumped both times (`v3.1-b1.1` → `v3.1-b1.2` → `v3.1-b1.3`) per its own instruction, and is now also recorded on every `docs/runlog/metrics.jsonl` line (added retroactively for future rows — the 7 rows written before 2026-09-27 predate the field and don't have it). Both fixes validated against a real `gpt-5.4-mini` verifier: all real incidents now PASS, all genuine red-team violations (`method_residual_blamed` 4/4, the 9 literal-word `prohibited_phrase` cases, all deterministic and unaffected) still correctly FAIL. `docs/studies/redteam_results.md` (`--live`) went from 91.5%/10.0% (detection/false-alarm) before either fix to 93.6%/0.0% after both. |
 
-`./scripts/run-tests.sh` passes all 42 registered CI modules as of this
+`./scripts/run-tests.sh` passes all 43 registered CI modules as of this
 commit (re-verify below).
 
 ## FINDINGS
@@ -340,6 +341,26 @@ papered over.
     — that gate already existed); the "book-level synthesis" is the
     already-shipped, already-deterministic multi-leg report renderer,
     which already runs unconditionally across every leg.
+26. **A real, separate false-positive source in the B2 red-team fixtures
+    themselves, found while validating the two prompt fixes above — not
+    fixed, not the same bug.** After both prompt fixes, 4 of 8
+    `prompt_injection` cases still don't PASS: `01`/`02`/`06` fail
+    `Layer A is not aligned` (`method_residual_blamed` or
+    `quiet_day_confabulation` co-flagged) because `generate_redteam_cases.py`
+    leaves `_syn()`'s default `primary_driver="Delta / spot move"`
+    un-overridden for these specific cases, and the real blotter each one
+    is checked against (rotating through `_SOURCES`) often has a different
+    actual dominant driver — a real mismatch, correctly caught, but an
+    artifact of how the fixture was authored, not of the narrator or
+    verifier. `03`/`07` land on PARTIAL (`missing_catalyst_layer`) because
+    the case's own headline names a mechanism the canned verdict text
+    doesn't cover — also a correct catch. None of this touches whether
+    injection containment itself works (`injection_observed` still fires
+    correctly on all 8); it means the `prompt_injection` category's PASS
+    rate in `redteam_results.md` is depressed by fixture construction, not
+    by verifier behavior. Left as-is — fixing it means re-authoring 8
+    fixtures with correct per-case `primary_driver`/evidence, out of scope
+    for a verifier prompt fix.
 
 ## NOT DONE
 
@@ -383,7 +404,8 @@ branch's own history, not restated here.)
 | Red-team detection rate (B2+A9.4, deterministic layer only) | 66.0% (31/47 violations caught) | `python scripts/run_redteam.py` |
 | Red-team miss rate (B2+A9.4) | 34.0% | same |
 | Red-team false-alarm rate (B2+A9.4) | 0.0% (0/10 `clean_control`) | same |
-| Red-team per-category detection (B2+A9.4) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `non_dollar_fabrication` 66.7% (10/15, up from 1/6 pre-A9.4), `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `method_residual_blamed` 0% | same, `docs/studies/redteam_results.md` |
+| Red-team per-category detection (B2+A9.4, deterministic layer only) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `non_dollar_fabrication` 66.7% (10/15, up from 1/6 pre-A9.4), `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `method_residual_blamed` 0% (no deterministic detector — LLM-judgment-only category, see the `--live` row below) | `docs/studies/redteam_results_deterministic_only.md` |
+| Red-team, `--live` against real `gpt-5.4-mini` (post-verifier-prompt-fixes) | Detection 93.6% (44/47), miss 6.4%, false alarm **0.0%** (0/10 `clean_control` — was 40%/10% before the two prompt fixes above), verdict stability 86.2%, cost $0.1528 (96 LLM calls). `method_residual_blamed` 100% (4/4), unchanged by the fixes (still correctly failing genuine violations). | `python scripts/run_redteam.py --live`, `docs/studies/redteam_results.md` |
 | Quant-path determinism (B3), 4 fixtures/cases × 3 runs | bit-identical (`==`) on `pricing.as_dict()` + `PositionFacts` every time | `python tests/ci/test_determinism_quant.py` |
 | LLM-path determinism (B3), real `gpt-5.4-mini`, `aapl_exdiv_2023` × 3 runs | `confidence_level`, `primary_driver`, `evidence[].headline` set identical every run | `python tests/live_book/test_determinism_llm.py` |
 | B4 study: 12-leg run, total LLM cost | `$0.0667` (narrator `$0.0505` / verifier `$0.0163`), 47527+3296 narrator tokens, 12973+1450 verifier tokens | `python scripts/agent_budget_study.py`, `docs/studies/agent_budget.md` |
@@ -393,7 +415,7 @@ branch's own history, not restated here.)
 | C1 sample cost, 5 runs (4 with an LLM call) | well under $0.01 total (`gpt-5.4-mini`, same per-call cost order as B4's study) | `scripts/generate_samples.py` |
 | Live book day 1 (2026-09-17), 8 real legs | 8/8 priced, 8 real LLM calls, 8 narrated / 0 silent, all 8 PARTIAL, $0.036482, 37.3s wall | `python scripts/daily_run.py`, `docs/runlog/metrics.jsonl` |
 | Day-1 residual_method_pct (proxy-vs-proxy artifact, documented) | `371290144254.743` | same |
-| Full CI suite | 42/42 modules pass (C3) | `./scripts/run-tests.sh` |
+| Full CI suite | 43/43 modules pass (post-spec verifier fixes) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
