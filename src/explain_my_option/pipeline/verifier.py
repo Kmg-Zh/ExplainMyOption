@@ -27,6 +27,16 @@ events. A synthesis that attributes the method residual to any external cause (a
 event, "the market reacted to...") is a hard FAIL, flagged "method_residual_blamed" --
 regardless of whether the cited catalyst is otherwise real and well-evidenced.
 
+NOT a violation of this rule: describing the method residual with model/math vocabulary --
+"higher-order effects", "convexity", "path effects", "full reprice", "Taylor truncation",
+"quote noise", "mark noise", "model gap", or similar. That vocabulary describes how the model's
+own decomposition falls short of the model's own price, which is exactly what the method
+residual is -- it is the correct, expected way to talk about it, not a violation. Only flag
+method_residual_blamed when the residual is tied to something happening outside the model: a
+headline, a news event, an earnings print, "the market reacted to...", a named catalyst. If the
+cited cause is the model's own arithmetic, curvature, or numerical behavior, that is not
+method_residual_blamed no matter how the sentence is phrased.
+
 Quiet days (Task A7.5), the symmetric rule: on a run whose terminal state is no_escalation
 ("nothing to explain" -- carry and a small spot move only, no search was performed), a
 synthesis that names a catalyst, an event, or any external cause is a hard FAIL, flagged
