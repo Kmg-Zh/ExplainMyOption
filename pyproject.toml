@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-explain-my-option = "app:run_cli"
+explain-my-option = "explain_my_option.cli:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
