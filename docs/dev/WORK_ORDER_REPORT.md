@@ -367,15 +367,13 @@ papered over.
 
 - **B1.2/B1.3's remaining sub-parts** — see FINDINGS #14/#15 (a deliberate
   choice for B1.2; a real, deferred gap for B1.3's date-window check).
-- **C3's remaining 29 trading days.** Infrastructure (book, skew proxy,
-  budget accounting, `daily_run.py`) is built and day 1 (2026-09-17) is
-  real and committed. Per the spec's own rule (§C3.5: "do not backfill, do
-  not simulate, do not generate a run for a day it did not run"), the
-  other ~29 entries cannot be produced in this session regardless of
-  effort — they require that many real calendar trading days to actually
-  elapse, each with its own `python scripts/daily_run.py` invocation and
-  commit. `docs/studies/runlog_summary.md` (the post-hoc distribution
-  analysis) follows once 20+ real entries exist, not before.
+- **C3's remaining trading days.** 10 real entries exist as of 2026-09-30
+  (09-17/18, 09-21–25, 09-28–30; weekends correctly skipped), all via the
+  unattended 9:15pm job, zero errors. Per the spec's own rule (§C3.5: "do
+  not backfill, do not simulate"), the rest cannot be produced faster than
+  real calendar trading days elapse. `docs/studies/runlog_summary.md`
+  (the post-hoc distribution analysis) follows once 20+ real entries
+  exist — 10 more trading days out, not before.
 - **D2–D4** (dependency upper-bound pinning + `requirements.lock`, pytest +
   GitHub Actions CI, LICENSE) — not started. D1 is done (see DONE table).
 
