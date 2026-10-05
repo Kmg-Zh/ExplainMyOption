@@ -6,7 +6,11 @@ from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..report.catalysts import missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
-from ..report.validate import find_prohibited_phrases, validate_synthesis
+from ..report.validate import (
+    find_hedge_directives,
+    find_prohibited_phrases,
+    validate_synthesis,
+)
 from .llm_roles import LlmRole
 from .verifier_schema import DiagnosticVerifierResult
 
@@ -53,12 +57,11 @@ advises a trade, regardless of how well-evidenced the rest of the synthesis is.
 Flag "prohibited_phrase" ONLY when one of those exact listed words/phrases (or an unambiguous
 synonym carrying the identical meaning, e.g. "steal" for "cheap") is literally present in a
 narrative field -- the same narrow rule the code's own deterministic check enforces
-(report/validate.py's find_prohibited_phrases). Generic desk-hygiene language is NOT this
-violation and must never be hard-FAILed under this flag, even though it brushes against "no
-trade advice" in spirit: "continue standard hedging", "monitor the position", "reprice the book
-on the full surface", "keep vol hedges tight/in place", "watch for further moves", "review
-before the next print". These describe ongoing risk management, not a claim that something is
-mispriced or a signal to act on an edge. If you cannot point to the specific listed word (or its
+(report/validate.py's find_prohibited_phrases). Hedge, rebalance, sizing or
+profit-taking directives ("continue standard hedging", "rebalance delta hedges", "take
+profits") are also out of scope for this product, but they are NOT this flag: report them as
+PARTIAL (code also checks them), never a hard FAIL. Neutral monitoring language ("monitor the
+position", "watch for further moves", "review before the next print") is fine. If you cannot point to the specific listed word (or its
 exact synonym) actually present in the text, it is not a "prohibited_phrase" violation --
 regardless of how "advisory" the tone feels. If a borderline case still concerns you, use
 PARTIAL, never a hard FAIL on resemblance alone.
@@ -125,6 +128,13 @@ def _prohibited_phrase_rationale() -> str:
     )
 
 
+def _hedge_advice_rationale() -> str:
+    return (
+        "Hedge, rebalance or profit-taking directive in the narrative -- this "
+        "product explains a price move and gives no hedge or sizing advice."
+    )
+
+
 # A9.1: the fixed set of rationale strings deterministic_precheck can return
 # -- code-authored sentences, never the LLM's own prose. Lets a caller with
 # only the returned DiagnosticVerifierResult (not a bool from this module)
@@ -135,6 +145,7 @@ DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
     {
         "validate_synthesis failed",
         _prohibited_phrase_rationale(),
+        _hedge_advice_rationale(),
         _quiet_day_rationale(),
         "Vega story not falsifiable from quote",
         _observation_lock_rationale(),
@@ -179,6 +190,14 @@ def deterministic_precheck(
                 policy_flags=["quiet_day_confabulation"],
                 rationale=_quiet_day_rationale(),
             )
+    directives = find_hedge_directives(synthesis)
+    if directives:
+        return DiagnosticVerifierResult(
+            verdict="PARTIAL",
+            missing_evidence=[f"Hedge/sizing directive in narrative: {d}" for d in directives],
+            policy_flags=["hedge_advice"],
+            rationale=_hedge_advice_rationale(),
+        )
     driver_lower = synthesis.primary_driver.lower()
     if suppress_vega and "vega" in driver_lower:
         return DiagnosticVerifierResult(

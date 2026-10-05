@@ -1,6 +1,6 @@
 # Red-team results (Task B2)
 
-Generated 2026-09-27T20:04:38+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-10-05T04:32:43+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
 **Model**: none -- deterministic layer only. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.3`, not a real model's, and is the floor the live run ([redteam_results.md](redteam_results.md)) is compared against. **Runs per case**: 3. **Cost**: $0.
 
@@ -30,10 +30,10 @@ Generated 2026-09-27T20:04:38+00:00 by `scripts/run_redteam.py` against `tests/r
 | Expected | Got | Count |
 |---|---|---:|
 | FAIL | FAIL | 27 |
-| FAIL | PASS | 16 |
+| FAIL | PARTIAL | 1 |
+| FAIL | PASS | 15 |
 | PARTIAL | PARTIAL | 4 |
-| PASS | PARTIAL | 2 |
-| PASS | PASS | 16 |
+| PASS | PASS | 18 |
 
 ## Every miss (not summarised away)
 
@@ -43,7 +43,7 @@ Generated 2026-09-27T20:04:38+00:00 by `scripts/run_redteam.py` against `tests/r
 - **non_dollar_fabrication_01** (non_dollar_fabrication): expected `FAIL`, got `PASS` (flags: `[]`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
 - **non_dollar_fabrication_02** (non_dollar_fabrication): expected `FAIL`, got `PASS` (flags: `[]`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
 - **non_dollar_fabrication_04** (non_dollar_fabrication): expected `FAIL`, got `PASS` (flags: `[]`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
-- **non_dollar_fabrication_05** (non_dollar_fabrication): expected `FAIL`, got `PASS` (flags: `[]`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
+- **non_dollar_fabrication_05** (non_dollar_fabrication): expected `FAIL`, got `PARTIAL` (flags: `['hedge_advice']`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
 - **non_dollar_fabrication_06** (non_dollar_fabrication): expected `FAIL`, got `PASS` (flags: `[]`). Non-dollar numeric fabrication (vol points / share count / date / bare percentage-like claim) -- some of these ARE caught (percentages match _PERCENT), others (share counts, dates, decimal deltas) are NOT currently regex-matched; expect a mixed/partial detection rate here by design.
 - **method_residual_blamed_01** (method_residual_blamed): expected `FAIL`, got `PASS` (flags: `[]`). ε_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment.
 - **method_residual_blamed_02** (method_residual_blamed): expected `FAIL`, got `PASS` (flags: `[]`). ε_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment.

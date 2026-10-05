@@ -111,9 +111,9 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
 - primary_driver: Layer A modeled-factor label only (e.g. "Delta / spot move"). Overlay mechanisms go in verdict, not as a replacement driver.
 - verdict: 2–3 sentences covering Layer A then Layer B.
 - evidence.relevance: one sentence tying THAT headline to Layer A or Layer B (not "possible context").
-- takeaways: 1–2 desk bullets.
-  1. Quant action for Layer A / truncation (full-surface reprice, delta rehedge, ex-div boundary).
-  2. Catalyst action using Layer B vocabulary from the headlines (IV crush, borrow, buy-in,
+- takeaways: 1–2 short bullets stating what to monitor or verify (never a trade, hedge or sizing instruction).
+  1. Layer A: what could still distort the modeled attribution (truncation, full-surface reprice, ex-div boundary).
+  2. Layer B: what to watch, using vocabulary from the headlines (IV crush, borrow, buy-in,
      liquidity, conversion, earnings). If Layer B is empty, omit this bullet.
 - Do not let the truncation example crowd out bullet 2 when Layer B tags are present.
 

@@ -68,7 +68,7 @@ def fallback_synthesis(
     if findings.get("terminal_unexplained_break"):
         takeaways.insert(
             0,
-            "**Terminal break**: diagnostic budget exhausted with large unexplained residual — escalate to human review.",
+            "**Terminal break**: diagnostic budget exhausted with a large unexplained residual; the story is not reliable and needs human review.",
         )
 
     # Vega: post-event crush risk (skip when quote noise suppresses Vega narrative)
@@ -79,27 +79,27 @@ def fallback_synthesis(
         )
     elif facts.primary_driver == "vega":
         takeaways.append(
-            "**Vega risk**: If IV was the main driver, monitor for post-event crush (e.g., earnings release, "
-            "Fed decision). Consider hedging vega or taking profits before catalysts."
+            "**Vega risk**: If IV was the main driver, it is exposed to post-event crush (e.g., an earnings "
+            "release or Fed decision); watch implied volatility around scheduled catalysts."
         )
 
     # High residual: model gap or unmodeled effects
     if facts.residual_pct > 15.0:
         takeaways.append(
-            "**Elevated residual (>{:.0f}%)**: Review American early-exercise boundary, discrete dividends, "
+            "**Elevated residual (>{:.0f}%)**: Likely contributors are the American early-exercise boundary, discrete dividends, "
             "vol skew curvature, and mark quality. Model limitations flagged above.".format(facts.residual_pct)
         )
     elif facts.residual_pct > 10.0:
         takeaways.append(
-            "**Moderate residual ({:.0f}%)**: Consider American option effects (especially near ex-div), "
-            "higher-order Greeks, or data quality gaps.".format(facts.residual_pct)
+            "**Moderate residual ({:.0f}%)**: Possible causes are American early-exercise effects "
+            "(especially near ex-div), higher-order Greeks, or data quality gaps.".format(facts.residual_pct)
         )
 
-    # Gamma: rehedge if spot moved large
+    # Gamma: large spot move
     if facts.primary_driver == "gamma" or abs(facts.spot_pct) > 3.0:
         takeaways.append(
-            "**Gamma dynamics**: Large spot move detected. Rebalance delta hedges and review convexity "
-            "exposure before the next trading session."
+            "**Gamma dynamics**: Large spot move detected; convexity (Gamma) contributes more to the "
+            "move than usual, so the linear Delta term understates it."
         )
 
     # Ex-dividend: early exercise & assignment
@@ -107,33 +107,34 @@ def fallback_synthesis(
         days_hint = " imminently" if "shortly" in facts.american.early_exercise_assessment.lower() else ""
         takeaways.append(
             f"**Ex-dividend window ({facts.american.next_ex_div}){days_hint}**: "
-            f"Monitor ITM positions for early-exercise risk. Verify assignment protocols with operations."
+            f"ITM positions carry early-exercise (assignment) risk around the ex-dividend date."
         )
 
     tags = _prompt_layer_b_tags(news or [], findings)
     if "iv crush" in tags and not any("iv crush" in t.lower() or "implied vol" in t.lower() for t in takeaways):
         takeaways.append(
-            "**IV crush**: Implied volatility collapsed with the event — monitor post-print vol "
-            "and do not treat a Delta-led gap as the whole story."
+            "**IV crush**: Implied volatility collapsed with the event; a Delta-led gap is not the "
+            "whole story."
         )
     if any(tag in tags for tag in ("borrow", "squeeze", "buy-in")):
         takeaways.append(
-            "**Borrow / squeeze**: Stress borrow, buy-in, and quote liquidity; the official FDM "
-            "path does not model hard-to-borrow."
+            "**Borrow / squeeze**: Borrow cost, buy-in pressure, and quote liquidity may matter here; "
+            "the official FDM path does not model hard-to-borrow."
         )
     if "float" in tags:
         takeaways.append(
-            "**Float / liquidity**: Disable continuous-hedging assumptions and haircut marks in a "
-            "cornered or squeeze tape."
+            "**Float / liquidity**: In a cornered or squeeze tape, continuous-hedging assumptions "
+            "break down and marks are less reliable."
         )
     if "conversion" in tags:
         takeaways.append(
-            "**Conversion / parity**: Update borrow-curve assumptions and stress synthetic-dividend mismatch."
+            "**Conversion / parity**: Borrow-curve assumptions and synthetic-dividend mismatch may "
+            "explain part of the gap."
         )
 
     # Fallback: generic reconciliation
     if not takeaways:
-        takeaways.append("Reconcile Greeks vs. book before the next session and confirm mark quality.")
+        takeaways.append("No dominant secondary driver; the Greeks reconcile with the move, subject to mark quality.")
 
     return DiagnosticSynthesis(
         primary_driver=driver,

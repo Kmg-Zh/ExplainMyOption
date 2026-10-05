@@ -16,9 +16,22 @@ def _money(x: float) -> str:
     return f"{sign}${abs(x):,.4f}"
 
 
+# Display-only cap: a percentage over a near-zero denominator (e.g. a residual
+# over a ~$0 model move) prints as an absurd figure like 6582029380.9%. Routing
+# and escalation numerics are untouched; only what is printed is clamped.
+_PCT_DISPLAY_CAP = 1000.0
+
+
+def _pct_mag(x: float, signed: bool = False) -> str:
+    """One-decimal percent text, ``>1000%`` when the denominator is near zero."""
+    if abs(x) > _PCT_DISPLAY_CAP:
+        sign = "-" if x < 0 else ("+" if signed else "")
+        return f"{sign}>{_PCT_DISPLAY_CAP:.0f}%"
+    return f"{x:+.1f}%" if signed else f"{x:.1f}%"
+
+
 def _pct(x: float) -> str:
-    sign = "+" if x >= 0 else ""
-    return f"{sign}{x:.1f}%"
+    return _pct_mag(x, signed=True)
 
 
 def _abs_share(part: float, parts: list[float]) -> float:
@@ -86,7 +99,7 @@ def _reconciliation_section(facts: PositionFacts) -> str:
     lines.append(f"* **Model ΔP (engine)**: `{_money(rec.model_pnl_usd)}`")
     if rec.model_vs_mark_gap_usd is not None:
         gap_note = (
-            f" ({rec.gap_pct_of_model:+.1f}% of model)"
+            f" ({_pct_mag(rec.gap_pct_of_model, signed=True)} of model)"
             if rec.gap_pct_of_model is not None
             else ""
         )
@@ -121,7 +134,7 @@ def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) 
         )
     basis = rec.escalation_basis if rec is not None else "method"
     metric = rec.escalation_metric_pct if rec is not None else None
-    metric_note = f" ({metric:.1f}%)" if metric is not None else ""
+    metric_note = f" ({_pct_mag(metric)})" if metric is not None else ""
     lines.append(f"* **Escalation basis**: `{basis}`{metric_note}")
     if basis == "method":
         dates = f"{facts.eval_date}" if not facts.prev_as_of_note else f"{facts.prev_as_of_note} and/or {facts.eval_date}"
@@ -176,12 +189,12 @@ def _residual_drill_section(
         "## 5. Residual Drill",
         "",
         f"* **Taylor residual**: `{_money(facts.attribution[-1].usd)}` "
-        f"({facts.residual_pct:.1f}% of |model|)",
+        f"({_pct_mag(facts.residual_pct)} of |model|)",
     ]
     if findings.get("terminal_unexplained_break"):
         lines.append(
             "* **Terminal break**: diagnostic budget exhausted with large unexplained "
-            "residual/gap — escalate to human review before trading on factor stories."
+            "residual/gap; the factor story is not reliable and needs human review."
         )
     taylor_regime = findings.get("taylor_regime")
     if taylor_regime == "INVALID":
@@ -507,7 +520,7 @@ def render_position_report(
             )
         elif vstatus == "FAIL":
             sections.append(
-                "* **Verifier**: FAIL — hard policy violation; escalate before trading on story."
+                "* **Verifier**: FAIL — hard policy violation; the factor story is not reliable."
             )
     sections.extend(
         [

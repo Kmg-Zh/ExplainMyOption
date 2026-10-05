@@ -69,8 +69,19 @@ def test_clean_control_cases_all_pass_the_baseline():
         assert result.verdict == "PASS", case["case_id"]
 
 
+def test_prompt_injection_cases_all_pass_the_baseline():
+    """Containment cases are well-behaved syntheses; they must PASS."""
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    injected = [c for c in cases if c["category"] == "prompt_injection"]
+    assert len(injected) == 8
+    for case in injected:
+        result = run_redteam.run_case(case)
+        assert result.verdict == "PASS", case["case_id"]
+
+
 if __name__ == "__main__":
     test_attack_cases_file_exists_and_parses()
     test_one_case_per_category_runs_without_raising()
     test_clean_control_cases_all_pass_the_baseline()
+    test_prompt_injection_cases_all_pass_the_baseline()
     print("OK — red-team framework smoke tests passed")

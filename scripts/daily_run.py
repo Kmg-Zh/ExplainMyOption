@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import statistics
 import sys
 import time
 from collections import Counter
@@ -70,6 +71,10 @@ from explain_my_option.report.template import render_portfolio_report  # noqa: E
 BOOK_PATH = _REPO_ROOT / "docs" / "runlog" / "book.json"
 RUNLOG_DIR = _REPO_ROOT / "docs" / "runlog"
 METRICS_PATH = RUNLOG_DIR / "metrics.jsonl"
+# A leg whose |total PnL| is below this has no meaningful percent denominator
+# (the residual / total ratio explodes); it is excluded from the median and
+# counted in `residual_pct_excluded_legs`.
+MIN_PCT_DENOMINATOR_USD = 0.005
 
 # Same rate used in Task B4's docs/studies/agent_budget.md -- gpt-5.4-mini
 # standard (non-batch), third-party aggregator (OpenAI's own pricing page
@@ -142,6 +147,7 @@ def main() -> int:
     terminal_states_by_leg: dict[str, str] = {}
     taylor_regimes: list[str] = []
     residual_method_pcts: list[float] = []
+    residual_pct_excluded_legs = 0
     residual_model_pcts: list[float] = []
     escalation_bases: list[str] = []
     verifier_verdicts: list[str] = []
@@ -226,8 +232,11 @@ def main() -> int:
         if findings.get("taylor_regime"):
             taylor_regimes.append(findings["taylor_regime"])
         rec_pnl = state["pricing"].pnl
-        total = abs(rec_pnl.total_pnl) or 1e-9
-        residual_method_pcts.append(100.0 * abs(rec_pnl.residual_pnl) / total)
+        total = abs(rec_pnl.total_pnl)
+        if total >= MIN_PCT_DENOMINATOR_USD:
+            residual_method_pcts.append(100.0 * abs(rec_pnl.residual_pnl) / total)
+        else:
+            residual_pct_excluded_legs += 1
         escalation_bases.append("model" if marks_reliable(state["snapshot"].quote_tier_now) else "method")
         if findings.get("verifier_status"):
             verifier_verdicts.append(findings["verifier_status"])
@@ -324,8 +333,9 @@ def main() -> int:
         "skipped_tools": skipped_tools_all,
         "vol_input_quality": vol_input_quality,
         "escalation_basis": escalation_basis,
-        "residual_method_pct": round(sum(residual_method_pcts) / len(residual_method_pcts), 4) if residual_method_pcts else 0.0,
-        "residual_model_pct": round(sum(residual_model_pcts) / len(residual_model_pcts), 4) if residual_model_pcts else 0.0,
+        "residual_method_pct": round(statistics.median(residual_method_pcts), 4) if residual_method_pcts else 0.0,
+        "residual_pct_excluded_legs": residual_pct_excluded_legs,
+        "residual_model_pct": round(statistics.median(residual_model_pcts), 4) if residual_model_pcts else 0.0,
         "taylor_regime": taylor_regime,
         "verifier_verdict": verifier_verdict,
         "terminal_states_by_leg": terminal_states_by_leg,

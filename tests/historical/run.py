@@ -177,7 +177,7 @@ def _run_suite(
         )
 
         assert "Root-Cause Market Intelligence" in report
-        assert "Trading Desk Watchlist" in report
+        assert "Risk Watchlist" in report
 
         model = DiagnosticSynthesis.model_validate(syn)
         scores = score_narrative_for_case(

@@ -73,6 +73,31 @@ _PROHIBITED_PHRASE_RE = re.compile(
 )
 
 
+# Softer than the literal list above: an imperative to hedge, rebalance or
+# take profits is still trade/hedge advice (the schema forbids it), but the
+# wording is open-ended, so a regex hit downgrades to PARTIAL rather than a
+# hard FAIL. Only the literal PROHIBITED_TRADE_ADVICE_PHRASES list is hard.
+HEDGE_DIRECTIVE_PATTERNS: tuple[str, ...] = (
+    r"\bre-?hedg\w*",
+    r"\b(?:consider|continue|keep|maintain)\s+(?:\w+\s+){0,2}hedg\w*",
+    r"\bhedg(?:e|ing)\s+(?:the\s+)?(?:delta|vega|gamma|position|book)\b",
+    r"\brebalanc\w*\s+(?:\w+\s+){0,2}hedg\w*",
+    r"\btak(?:e|ing)\s+profits?\b",
+    r"\b(?:reduce|trim|cut|add to|scale (?:in|out of))\s+(?:the\s+)?(?:position|exposure|size)\b",
+)
+_HEDGE_DIRECTIVE_RE = re.compile("|".join(HEDGE_DIRECTIVE_PATTERNS), re.IGNORECASE)
+
+
+def find_hedge_directives(synthesis: DiagnosticSynthesis) -> list[str]:
+    """Soft check: hedge / rebalance / profit-taking directives in narrative."""
+    hits: list[str] = []
+    for text in _narrative_texts(synthesis):
+        if not text:
+            continue
+        hits.extend(m.group(0).lower() for m in _HEDGE_DIRECTIVE_RE.finditer(text))
+    return list(dict.fromkeys(hits))
+
+
 def find_prohibited_phrases(synthesis: DiagnosticSynthesis) -> list[str]:
     """A9.4: trade-advice-adjacent language, distinct from numeric
     hallucination (validate_synthesis) -- no dollar figure is involved."""

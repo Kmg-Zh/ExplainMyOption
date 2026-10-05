@@ -264,7 +264,7 @@ def test_verifier_pass_from_mock_role():
         confidence_level="high",
         confidence_rationale="Clean.",
         evidence=[],
-        takeaways=["Rehedge."],
+        takeaways=["Watch the ex-dividend boundary."],
     )
     role = _MockRole(
         DiagnosticVerifierResult(verdict="PASS", missing_evidence=[], policy_flags=[], rationale="ok")
@@ -278,6 +278,48 @@ def test_verifier_pass_from_mock_role():
         news_titles=[],
     )
     assert result.verdict == "PASS"
+
+
+def test_hedge_directive_is_partial_not_hard_fail():
+    """Hedge/sizing directives are soft (PARTIAL, flag hedge_advice); only the
+    literal prohibited list is a hard FAIL."""
+    for text in (
+        "Continue standard hedging.",
+        "Consider hedging vega before the print.",
+        "Rebalance delta hedges tomorrow.",
+        "Take profits into strength.",
+    ):
+        syn = DiagnosticSynthesis(
+            primary_driver="Delta rally",
+            verdict="Spot move dominated.",
+            confidence_level="high",
+            confidence_rationale="Clean.",
+            evidence=[],
+            takeaways=[text],
+        )
+        result = deterministic_precheck(
+            syn, _sample_facts(), suppress_vega=False, observation_reliable=True
+        )
+        assert result is not None and result.verdict == "PARTIAL", text
+        assert result.policy_flags == ["hedge_advice"], text
+        assert not is_hard_verifier_fail(result)
+
+
+def test_neutral_monitoring_language_is_not_hedge_advice():
+    syn = DiagnosticSynthesis(
+        primary_driver="Delta rally",
+        verdict="Spot move dominated.",
+        confidence_level="high",
+        confidence_rationale="Clean.",
+        evidence=[],
+        takeaways=["Monitor the position; watch for further moves."],
+    )
+    assert (
+        deterministic_precheck(
+            syn, _sample_facts(), suppress_vega=False, observation_reliable=True
+        )
+        is None
+    )
 
 
 def test_deterministic_precheck_partial_when_headline_catalyst_omitted():
