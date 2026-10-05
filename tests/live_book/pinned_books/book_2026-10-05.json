@@ -1,0 +1,118 @@
+{
+  "baseline_as_of": "2026-10-05",
+  "purpose": "Re-pinned to the 2026-12-18 monthly cycle (about 75 DTE) so the book survives for weeks instead of expiring weekly; same tickers, option types, styles and sizes as the discovery template.",
+  "rolled_from": "tests/live_book/pinned_books/book_2026-09-14.json",
+  "roll_notes": "Discovered 2026-10-04 (Sunday) against the 2026-10-02 close with resolve_live_contract(min_days=60). baseline_as_of is the first trading day on these contracts, so that day's archive becomes the compare baseline. First day has no cached t-1 (HV20 proxy).",
+  "legs": [
+    {
+      "ticker": "AAPL",
+      "option_type": "call",
+      "strike": 315.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM call; spot 333.69 at pin"
+    },
+    {
+      "ticker": "MSFT",
+      "option_type": "put",
+      "strike": 490.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "OTM put; spot 517.53 at pin"
+    },
+    {
+      "ticker": "NVDA",
+      "option_type": "call",
+      "strike": 235.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; spot 233.95 at pin"
+    },
+    {
+      "ticker": "GOOGL",
+      "option_type": "call",
+      "strike": 345.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "european",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; spot 343.50 at pin"
+    },
+    {
+      "ticker": "XOM",
+      "option_type": "put",
+      "strike": 170.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM put; spot 164.01 at pin"
+    },
+    {
+      "ticker": "KO",
+      "option_type": "call",
+      "strike": 82.5,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM call; spot 85.65 at pin"
+    },
+    {
+      "ticker": "JPM",
+      "option_type": "put",
+      "strike": 350.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM put; spot 332.38 at pin"
+    },
+    {
+      "ticker": "META",
+      "option_type": "call",
+      "strike": 730.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 2.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; spot 728.08 at pin"
+    },
+    {
+      "ticker": "TSLA",
+      "option_type": "call",
+      "strike": 370.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "ATM call; spot 370.59 at pin"
+    },
+    {
+      "ticker": "SPY",
+      "option_type": "put",
+      "strike": 731.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "european",
+      "quantity": 1.0,
+      "multiplier": 1.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "OTM put; spot 769.64 at pin"
+    }
+  ]
+}

@@ -142,8 +142,13 @@ def build_offline_bundles(
     return bundles, syntheses
 
 
-def resolve_live_contract(leg: LiveLeg) -> ResolvedLiveContract:
-    """Peek the live chain once to lock strike + expiry for this run."""
+def resolve_live_contract(leg: LiveLeg, min_days: int = 7) -> ResolvedLiveContract:
+    """Peek the live chain once to lock strike + expiry for this run.
+
+    ``min_days`` is the minimum days-to-expiry of the chosen listed expiry
+    (default 7 = nearest weekly). Re-pins use a larger value so the pinned
+    book lives for weeks, not days.
+    """
     import yfinance as yf
 
     from explain_my_option.data_loader import _pick_nearest_expiry
@@ -153,7 +158,7 @@ def resolve_live_contract(leg: LiveLeg) -> ResolvedLiveContract:
     if hist.empty:
         raise ValueError(f"No spot history for {leg.ticker}")
     spot = float(hist["Close"].iloc[-1])
-    expiry = _pick_nearest_expiry(tk)
+    expiry = _pick_nearest_expiry(tk, min_days=min_days)
     chain = tk.option_chain(expiry)
     table = chain.calls if leg.option_type == "call" else chain.puts
     strike = pick_strike(
