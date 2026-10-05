@@ -1,29 +1,25 @@
-# Data sources — real historical option chains (Work Order v3.1, Task A4)
+# Data sources — real historical option chains
 
-**Update (v3.1, Task A4): both cases are now live.** v3.1's A4.5 explicitly
-asks for the GME case with the instruction "Predates the July 2022 4-for-1
-split — A3.5 must pass before this case is trusted" — i.e. apply the known,
-documented split correction (not a guessed one) and let the basis guard
-verify it, rather than stopping forever. `HistoricalChainMarketLoader`
+**Status: both real cases are live.** The GME case predates the July 2022
+4-for-1 split, so the adapter applies the documented split correction rather
+than a guessed one and lets the basis guard verify it.
+`HistoricalChainMarketLoader`
 (`src/explain_my_option/data/historical_chain.py`) does exactly that:
 `_as_traded_close()` multiplies yfinance's post-split close by the product
 of split ratios (from `yf.Ticker(...).splits`, not a hardcoded GME
-constant) for every split ex-dated after `as_of`. Recomputed here with the
-live adapter, 2026-09-16: `19.1975 * 4 = 76.79000091552734` for
+constant) for every split ex-dated after `as_of`. Recomputed with the
+live adapter on 2026-09-16: `19.1975 * 4 = 76.79000091552734` for
 2021-01-25, matching the independently-confirmed as-traded close below to
-7 significant figures, and `check_basis_consistency` (A3.5) now passes for
+7 significant figures, and `check_basis_consistency` now passes for
 both dates. `gme_squeeze_2021_real` and `aapl_exdiv_2023_real` are both
 committed as frozen slices under `tests/ci/fixtures/historical/`
 (`scripts/fetch_chains.py`), exercised offline by
 `tests/ci/test_historical_real_cases.py`.
 
-The A3.0-bis analysis below is kept verbatim as the record of *why* the
-split mismatch exists and how it was diagnosed — that reasoning doesn't
-change, only the stopping point does.
-
-Prior status (superseded): **A3.0-bis gate FAILED for GME. Work stopped
-before A3.3 per the amendment's instruction ("If the bases differ, STOP and
-report — do not attempt a correction factor").**
+The split-basis analysis below is kept as the record of *why* the split
+mismatch exists and how it was diagnosed. It was written when the GME check
+still failed and the case was held back; that stopping point has since been
+resolved as described above.
 
 ## Source inventory
 
@@ -116,14 +112,15 @@ basis conclusion, which turns on a factor of ~4, not ~5%.
 
 ### Verdict
 
-- `aapl_exdiv_2023_real` — **not blocked** by A3.0-bis.
-- `gme_squeeze_2021_real` — **blocked**. Stopped and reported; no correction
-  factor applied.
+- `aapl_exdiv_2023_real` — not affected by the split basis.
+- `gme_squeeze_2021_real` — affected at the time of this analysis (the check
+  failed and no correction was applied). **Since resolved**: the adapter now
+  applies the documented split ratios from `yf.Ticker(...).splits` and the
+  basis guard passes (see the status paragraph at the top).
 
 The mismatch is a property of the *underlying price source*, not of the option
 dataset — the dataset is internally consistent and on the as-traded basis for
-both names. Resolving it means choosing an underlying source that serves
-as-traded prices for 2021, which is a data-source decision, not a code change.
+both names.
 
 ### Reproducing these numbers
 
@@ -140,7 +137,7 @@ python -c "import yfinance as yf; \
   print(yf.Ticker('GME').splits)"
 ```
 
-## Coverage limits already established (not yet the full A3.4-bis writeup)
+## Coverage limits
 
 - Data begins ~2019. Verified **0 rows** for Q1 of 2008, 2012, 2016 and 2018.
 - US listings only.

@@ -60,7 +60,7 @@ python tests/live_book/replay_archives.py
 python tests/live_book/test_determinism_llm.py  # needs OPENAI_API_KEY
 ```
 
-Pin: `tests/live_book/pinned_books/book_2026-09-14.json`. Replay uses archived
+Pin: `tests/live_book/pinned_books/book_2026-10-05.json`. Replay uses archived
 snapshots + news (no live Yahoo). Presentation notebooks live in `notebooks/`
 (committed). Suite `output/` folders are gitignored archives. Hiring/demo captures of the
 product report live in [`docs/samples/`](../docs/samples/README.md) — not in `output/`.

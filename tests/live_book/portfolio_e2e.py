@@ -411,7 +411,7 @@ def run_live_portfolio_e2e(
 ) -> Path:
     """Live multi-leg e2e.
 
-    Default: **pinned** contracts from ``pinned_books/book_2026-09-02.json`` so
+    Default: **pinned** contracts from ``DEFAULT_PINNED_BOOK`` (see ``portfolio_book.py``) so
     tomorrow's marks are comparable to today's (same strike/expiry/style/qty).
 
     Pass ``resolve_moneyness=True`` only to discover a new book (not for DoD).

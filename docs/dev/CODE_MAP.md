@@ -1,9 +1,10 @@
-# Code map — discovery for the v2 work order, Phase 0 (§0.4)
+# Code map — QuantLib conventions and pricing touch points
 
-Produced by reading the actual source in this session; every signature below
-was read from the file at the stated line, not assumed from its name. This
-covers what Phase 1 (Tasks 1–2) touches. It does not attempt to map Phases
-2–9, which are not in scope for this pass (see `WORK_ORDER_REPORT.md`).
+Reference notes written while auditing the pricing layer (Phase 1 of the
+first work order). Signatures were read from the source at the time and may
+have drifted since; the sign and unit conventions recorded here are the
+parts the tests cite. Paths are relative to `src/explain_my_option/`. It is
+not a map of the whole codebase (see the README architecture section).
 
 ## QuantLib
 

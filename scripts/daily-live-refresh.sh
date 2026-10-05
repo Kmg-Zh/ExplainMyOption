@@ -9,7 +9,7 @@
 # Re-pinning a new contract (when the current pin expires) is a judgment call
 # made manually via --resolve-moneyness, NOT done here. If today's pinned
 # contract can't price (e.g. it expired), this run fails and logs it below —
-# check the log and re-pin by hand, same as the 2026-09-14 book was.
+# check the log and re-pin by hand, same as every earlier pinned book was.
 #
 # Only auto-commits/pushes if the run itself changed the specific tracked
 # files a manual re-pin touches, so a normal day is a no-op on git.
