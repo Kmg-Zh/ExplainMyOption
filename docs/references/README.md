@@ -11,7 +11,7 @@ Curated official links for this project. Status = whether a starter page exists 
 | SEC EDGAR 8-K | [sec-edgar.md](sec-edgar.md) | `EMO_SEC_USER_AGENT` | `SecEdgar8KSource` on `search` (residual cue) |
 | MCP | [mcp.md](mcp.md) | No | Optional adapters |
 | yfinance | [yfinance.md](yfinance.md) | Yes | Live chain; no historical IV surface |
-| QuantLib | [quantlib.md](quantlib.md) | Yes | Facade in `src/pricing/`; American FDM + LSM/Merton analysis API |
+| QuantLib | [quantlib.md](quantlib.md) | Yes | Facade in `src/explain_my_option/pricing/`; American FDM + LSM/Merton analysis API |
 
 ## Enough?
 

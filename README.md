@@ -1,3 +1,5 @@
+[![CI](https://github.com/Kmg-Zh/ExplainMyOption/actions/workflows/ci.yml/badge.svg)](https://github.com/Kmg-Zh/ExplainMyOption/actions/workflows/ci.yml)
+
 # Explain My Option
 
 **Explain My Option** explains why an equity option's price moved from yesterday to today. It refuses when it cannot explain the move, and stays silent when there is nothing to explain. QuantLib computes the attribution with no LLM involved. An LLM writes the diagnosis against that blotter, cannot introduce a figure that is not in it, and is cut off when the unexplained portion stays large. The numbers that decide whether to escalate, abstain, or stay quiet are computed without the model that would benefit from a different answer.
@@ -11,10 +13,10 @@ This is a personal project, in progress — not a production desk system. LangGr
 ## Design (what to look at)
 
 1. **Numbers first.** Official 1-day PnL comes from QuantLib American FDM. The LLM cannot introduce a dollar figure.
-2. **Policy before LLM.** A **rules** controller may run at most 1 costly diagnostic tool (plus a few free arithmetic ones that do not use the budget) and logs skip reasons. This is not free-form ReAct; the agent does not pick engines.
-3. **Three roles.** Narrator / catalyst critic (headline whitelist) / verifier. FAIL on invented dollars; PARTIAL if a named catalyst is missing. [Case studies](docs/case-studies/README.md)
+2. **Policy before LLM.** A **rules** controller may run at most 1 *costly* diagnostic tool (a full reprice or similar) plus a few *free* arithmetic ones that do not use that budget, inside a bounded loop, and logs every skip reason. This is not free-form ReAct; the agent does not pick engines.
+3. **Three roles.** Narrator / catalyst critic (headline whitelist) / verifier. FAIL on invented dollars; PARTIAL if a named catalyst is missing or the narrative gives hedge/sizing directives. An LLM hard FAIL only stands if a deterministic code check reproduces the violation; otherwise it is downgraded to PARTIAL and the disagreement is logged. [Case studies](docs/case-studies/README.md)
 4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
-5. **Escalate, don't invent.** Budget exhausted with a large residual or mark gap → unexplained (`terminal_unexplained_break`). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
+5. **Escalate, don't invent.** `terminal_unexplained_break` has two real triggers: (a) the single costly tool slot is spent and the residual / mark gap is still above 15%, or (b) the verifier raises a hard FAIL that code confirms once the verify budget is used up. Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
 
 ## Sample output
 
@@ -41,8 +43,8 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 * **Mark MTM PnL**: `+$1.6000` (+12.1%)
 * **Model ΔP**: `+$1.6000`
 * **Primary drivers**: **Vega PnL** (53%) and **Delta PnL** (31%) and **Theta decay** (9%).
-* **Verifier**: FAIL — hard policy violation; escalate before trading on story.
-* **Verdict**: Verifier FAIL — terminal break escalation. validate_synthesis failed
+* **Verifier**: FAIL — hard policy violation (numeric_hallucination); the factor story is not reliable. The narrative states a number the code did not produce.
+* **Verdict**: Verifier FAIL — terminal break escalation (numeric_hallucination). The narrative states a number the code did not produce.
 * **Confidence**: **Medium** — Vega dominated the Taylor decomposition.
 
 ## 4. Quantitative PnL Attribution
@@ -59,7 +61,7 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 ## 5. Residual Drill
 
 * **Taylor residual**: `-$0.2948` (18.4% of |model|)
-* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap — escalate to human review before trading on factor stories.
+* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap; the factor story is not reliable and needs human review.
 
 * **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
 ```
@@ -105,7 +107,7 @@ r_vol  = |½·Volga_raw·(Δσ)²| / |Vega_raw·Δσ|
 taylor_regime = "INVALID" if max(r_spot, r_vol) > 0.35 else "VALID"
 ```
 
-`VALID` → the Taylor decomposition is the headline attribution; full revaluation is a cross-check. `INVALID` → full revaluation becomes the headline attribution; the Taylor split is printed for reference only. The `0.35` cutoff is provisional — computed on every case available this session:
+`VALID` → the Taylor decomposition is the headline attribution; full revaluation is a cross-check. `INVALID` → full revaluation becomes the headline attribution; the Taylor split is printed for reference only. The `0.35` cutoff is provisional — computed on the cases in this repository:
 
 | Case | `r_spot` | `r_vol` | `|ε_method|/|ΔP|` | Regime |
 |---|---:|---:|---:|---|
@@ -139,14 +141,15 @@ Python 3.11+.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -e ".[dev]"        # exact Python 3.11 versions: requirements.lock
 
-./scripts/run-tests.sh
+pytest tests/ci -q             # offline, no keys or network needed
 ```
 
 Copy `.env.example` → `.env`. Default runtime requires `OPENAI_API_KEY` (entry gate). Optional keys and the chat model are listed there (`EMO_LLM_MODEL`, `TAVILY_API_KEY`, `EMO_SEC_USER_AGENT`, `LANGSMITH_API_KEY`). Never commit `.env`.
 
 ```bash
+explain-my-option --fixture vol_crush --no-llm   # offline, zero LLM calls
 python app.py --ticker AAPL --type call
 python app.py --ticker TSLA --type put --strike 250 --expiry 2026-01-16
 python app.py --fixture vol_crush
@@ -189,6 +192,10 @@ not evidence about any real trading day (`tests/ci/stress_fixtures/README.md`).
 
 Index: [docs/case-studies/README.md](docs/case-studies/README.md).
 
+## Live book run log
+
+[`docs/runlog/`](docs/runlog/README.md) holds a real, unedited daily log: 8 live option legs (a vertical, a straddle, a risk reversal, an ITM call, a deep-OTM call) run through the full graph once per trading day by a scheduled job (see [docs/dev/SCHEDULING.md](docs/dev/SCHEDULING.md)). Each day has a `report.md`, a per-leg `audit.json` (candidate narratives and every verifier verdict) and one row in `metrics.jsonl` (cost, latency, residuals, verdicts, prompt version). No day is backfilled or simulated; gaps are honest.
+
 ## Scope
 
 - Official PnL: American FDM (`FdBlackScholesVanillaEngine`). Local vol when Dupire is safe; otherwise flat IV.
@@ -204,8 +211,7 @@ Index: [docs/case-studies/README.md](docs/case-studies/README.md).
   dividend schedule.
 - Escalation is driven by the market-versus-model residual when reliable
   marks exist, and by the method residual otherwise, always labelled.
-- No end-to-end measurement of LLM violation rates existed before
-  `docs/studies/redteam_results.md`; see its stated sample size.
+- LLM violation rates are measured end to end only by the constructed attack set in `docs/studies/redteam_results.md`; see its stated sample size.
 - `--book` is per-leg fan-out + roll-up, not cross-gamma.
 - Users cannot custom-prompt or pick an alternate path.
 - Not in scope: trading edge, price prediction, book-level cross-gamma.
@@ -218,7 +224,7 @@ Book-first parent graph. `Send` fans out **in parallel** — one compiled leg su
 
 ```mermaid
 flowchart TB
-  RO[require_key]
+  RO[require_openai]
   RO --> FAN{Send fan-out}
   FAN --> L1[leg 1]
   FAN --> L2[leg 2]
@@ -251,16 +257,17 @@ flowchart TB
 
   DP -->|cue| RP
   DP -->|skip| DF
+  DF -->|no_escalation: nothing to explain| FIN[finalize_leg_report]
 
   DF --> PS[plan_search] --> SE[search] --> DG[digest_news]
   DG --> CH[challenge_catalyst] --> SY[synthesize] --> RC[reconcile_debate]
 
   subgraph verify["Bounded verifier"]
     VF{verify}
-    VF -->|PASS| FIN[finalize_leg_report]
-    VF -->|FAIL + budget| REV[revise_synthesis]
+    VF -->|PASS| FIN
+    VF -->|FAIL, budget left| REV[revise_synthesis]
     VF -->|PARTIAL| REF[reflect_verifier]
-    VF -->|hard FAIL / exhausted| TUB[terminal_unexplained_break]
+    VF -->|hard FAIL, budget spent| TUB[terminal_unexplained_break]
   end
 
   RC --> VF

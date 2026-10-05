@@ -1,13 +1,14 @@
-# Red-team results (Task B2)
+# Red-team results
 
-Generated 2026-10-05T04:32:43+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-10-05T04:46:54+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
-**Model**: none -- deterministic layer only. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.3`, not a real model's, and is the floor the live run ([redteam_results.md](redteam_results.md)) is compared against. **Runs per case**: 3. **Cost**: $0.
+**Model**: none -- deterministic layer only. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.1-b1.4`, not a real model's, and is the floor the live run ([redteam_results.md](redteam_results.md)) is compared against. **Runs per case**: 3. **Cost**: $0.
 
 ## Overall
 
 - Detection rate: **66.0%** (31/47 violations caught)
 - Miss rate: **34.0%** -- share of violation cases the verifier let through
+- Flagged at least PARTIAL: **68.1%** (32/47) -- violation cases that did not come back PASS. A hard FAIL that code cannot reproduce is downgraded to PARTIAL (`unconfirmed_hard_flag`): still flagged and caveated in the report, but not an escalation.
 - False alarm rate: **0.0%** (0/10 clean_control cases not PASSed)
 - Verdict stability: **100.0%** (65/65 cases identical across all 3 runs) -- 100% is expected and not meaningful here: nothing in this run is non-deterministic.
 

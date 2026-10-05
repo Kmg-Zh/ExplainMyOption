@@ -147,6 +147,7 @@ _EXTERNAL_CAUSE_TERMS: tuple[str, ...] = (
     "downgrade", "upgrade", "fed ", "lawsuit", "merger", "acquisition", "rumor",
     "rumour", "sentiment", "squeeze", "short interest", "borrow", "buy-in",
     "event", "press release", "analyst", "regulat", "tariff", "macro",
+    "rotation", "buyout", "takeover", "commentary", "speculation", "fund flows",
 )
 
 

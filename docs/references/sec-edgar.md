@@ -1,6 +1,6 @@
 # SEC EDGAR — curated references
 
-App integration: `SecEdgar8KSource` in `src/intel/sec_edgar.py` (`source_id=sec_8k`).
+App integration: `SecEdgar8KSource` in `src/explain_my_option/intel/sec_edgar.py` (`source_id=sec_8k`).
 
 Residual / large unexplained PnL cues may add a bounded 8-K lookup on the **`search`** node — not a dedicated EDGAR graph node.
 

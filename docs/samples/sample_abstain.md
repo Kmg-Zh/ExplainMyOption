@@ -10,8 +10,8 @@
 * **Mark MTM PnL**: `+$1.6000` (+12.1%)
 * **Model ΔP**: `+$1.6000`
 * **Primary drivers**: **Vega PnL** (53%) and **Delta PnL** (31%) and **Theta decay** (9%).
-* **Verifier**: FAIL — hard policy violation; escalate before trading on story.
-* **Verdict**: Verifier FAIL — terminal break escalation. validate_synthesis failed
+* **Verifier**: FAIL — hard policy violation (numeric_hallucination); the factor story is not reliable. The narrative states a number the code did not produce.
+* **Verdict**: Verifier FAIL — terminal break escalation (numeric_hallucination). The narrative states a number the code did not produce.
 * **Confidence**: **Medium** — Vega dominated the Taylor decomposition.
 
 ---
@@ -58,7 +58,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 ## 5. Residual Drill
 
 * **Taylor residual**: `-$0.2948` (18.4% of |model|)
-* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap — escalate to human review before trading on factor stories.
+* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap; the factor story is not reliable and needs human review.
 
 ### Second-order Taylor (Layer 3)
 * Vanna PnL: `+$0.3282` | Volga PnL: `-$0.1404`
@@ -88,5 +88,5 @@ _No catalyst search — move below materiality / observation lock._
 ## 7. Risk Watchlist
 
 * **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock.
-* Verifier missing evidence: LLM prose must not contain dollar amounts., LLM prose must not embed numeric PnL claims.
+* Verifier flags: numeric_hallucination; missing evidence: LLM prose must not contain dollar amounts., LLM prose must not embed numeric PnL claims.
 * Reprice on the full surface.

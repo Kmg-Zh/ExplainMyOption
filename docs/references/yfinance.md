@@ -1,6 +1,6 @@
 # yfinance — curated references
 
-Used in MVP by `src/data_loader.py` for spot history, live option chain, and headlines.
+Used in MVP by `src/explain_my_option/data_loader.py` for spot history, live option chain, and headlines.
 
 ## Official / maintainer
 
@@ -17,6 +17,6 @@ Used in MVP by `src/data_loader.py` for spot history, live option chain, and hea
 | ATM row nearest spot | OTM-only smile calibration |
 | Headlines via `Ticker.news` | Paid options data vendors |
 
-Yahoo chain rows do not include Delta/Vega/Theta — compute in `src/pricing/`.
+Yahoo chain rows do not include Delta/Vega/Theta — compute in `src/explain_my_option/pricing/`.
 
 Project gotchas: [../knowledge/yfinance-iv.md](../knowledge/yfinance-iv.md).

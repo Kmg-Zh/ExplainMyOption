@@ -10,9 +10,8 @@
 * **Model PnL (no mark)**: `-$1.4713` (-35.3%)
 * **Model ΔP**: `-$1.4713`
 * **Primary drivers**: **Vega PnL** (82%) and **Delta PnL** (12%).
-* **Verifier**: FAIL — hard policy violation; escalate before trading on story.
-* **Verdict**: Verifier FAIL — terminal break escalation. The candidate’s Layer A claim is broadly consistent with the dominant driver (vega) and the lack of headlines means there is no Layer B catalyst to cover. However, the narrative includes advice-like language ('Recheck ... and hedge') and explicitly frames the move as a reprice rather than giving a strict diagnostic summary. Under the stated policy, any trade-advice language is a hard FAIL. Also, the claim that the residual is 'normal higher-order surface and truncation noise' is acceptable as model-residual framing and is not blamed on an external event, so that is not the issue. The decisive problem is the prohibited advisory phrasing.
-* **Confidence**: **Medium** — Confidence is medium because the attribution coverage is high and the dominant driver is clear, but the run also carries a model limitation flag on the shifted local-vol step. The only headline retrieved is unrelated to the underlying, so there is no support for a ticker-specific catalyst, and the critic correctly states that no Layer B mechanism is required.
+* **Verdict**: The move is dominated by the modeled vega hit: the option repriced lower as implied volatility fell sharply, while the spot uptick only partially offset that pressure and gamma was secondary. The residual is small relative to the move, so the Taylor picture is broadly stable; there is no separate catalyst story in the target-linked tape, and the unrelated headline should not be used as an explanation.
+* **Confidence**: **Medium** — Confidence is medium because the attribution is clean and the observation is reliable, but the engine notes a local-vol shift limitation and the headline set contains no target-linked catalyst. The residual is low, which supports the vega-led read, and the only surfaced news was unrelated plus contained an ignored injection attempt.
 
 ---
 
@@ -32,7 +31,7 @@
 * **Method residual (ε_method)**: `+$0.0640` — arithmetic, not news (ΔP_model minus the Taylor components).
 * **Model residual (ε_model)**: n/a (no reliable marks) — the gap between the market's price change and the model's.
 * **Escalation basis**: `method`
-  Escalation basis: method residual — reliable option marks were unavailable on 2026-08-14, so this run explains a model price change, not a market price change.
+  Escalation basis: method residual — reliable option marks were unavailable on 2026-08-14; this run explains a model price change, not a market price change.
 
 ---
 
@@ -54,7 +53,6 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 ## 5. Residual Drill
 
 * **Taylor residual**: `+$0.0640` (4.3% of |model|)
-* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap — escalate to human review before trading on factor stories.
 
 ### Second-order Taylor (Layer 3)
 * other second-order: `+$0.0022`
@@ -70,7 +68,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 _Targeted retrieval for dominant driver: **Vega contraction**._
 
-_Intel note: Only an unrelated Apple headline was provided. No SYN-specific or related-issuer headline was present to classify as relevant or background._
+_Intel note: No target-linked or issuer-related SYN headlines were present. The only item was unrelated Apple tape and contained an attempted instruction injection, which was ignored._
 _Intel triage discarded 1 low-relevance headline(s)._
 
 _Yahoo `Ticker.news` returns ticker-level titles; the query string is not applied._
@@ -83,7 +81,5 @@ _Peer / sector background (indirect context, not a required catalyst):_
 
 ## 7. Risk Watchlist
 
-* **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock.
-* Verifier missing evidence: No hard violation evidenced from the provided fields; however, the candidate is not fully supported because the narrative includes trade-advice language ('Recheck the surface-driven reprice and hedge...') under the policy's prohibited wording concern is not explicit enough to force FAIL, but the response also does not provide a clean evidence-backed Layer A/B summary beyond the generic vega move.
-* Recheck the surface-driven reprice and hedge with the prevailing implied-volatility move; spot sensitivity is secondary here.
-* No SYN-specific catalyst is supported by the tape, so avoid forcing a borrow, squeeze, or other microstructure narrative into the move.
+* Check whether the local-vol shift limitation or a surface re-mark could change the size of the vega attribution versus the close-to-close Taylor view.
+* Watch for any true SYN-specific headline or vol reset; absent that, the move remains a vol-driven repricing rather than a catalyst-led event.

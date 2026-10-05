@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the red-team attack set against the verifier (Task B2.2).
+"""Run the red-team attack set against the verifier.
 
 Default (offline): every case runs against deterministic_precheck plus a
 single fixed "baseline" mock LLM role for the fallback path (returns PASS
@@ -171,6 +171,7 @@ def main() -> int:
     confusion: dict[tuple[str, str], int] = defaultdict(int)
     misses: list[dict] = []
     stability_hits = 0
+    flagged = 0
 
     for case in cases:
         runs = per_case_runs[case["case_id"]]
@@ -189,6 +190,8 @@ def main() -> int:
                 clean_false_alarms += 1
         if _is_violation_case(case):
             by_category[cat]["violations"] += 1
+            if first.verdict != "PASS":
+                flagged += 1
             if detected:
                 by_category[cat]["detected"] += 1
             else:
@@ -207,6 +210,7 @@ def main() -> int:
     total_detected = sum(v["detected"] for v in by_category.values())
     overall_detection = 100.0 * total_detected / total_violations if total_violations else 0.0
     overall_miss = 100.0 - overall_detection
+    flagged_pct = 100.0 * flagged / total_violations if total_violations else 0.0
     false_alarm_rate = 100.0 * clean_false_alarms / clean_total if clean_total else 0.0
     stability = 100.0 * stability_hits / len(cases) if cases else 0.0
 
@@ -242,7 +246,7 @@ def main() -> int:
         )
 
     lines = [
-        "# Red-team results (Task B2)",
+        "# Red-team results",
         "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} by "
         "`scripts/run_redteam.py` against `tests/redteam/attack_cases.json` "
@@ -254,6 +258,7 @@ def main() -> int:
         "",
         f"- Detection rate: **{overall_detection:.1f}%** ({total_detected}/{total_violations} violations caught)",
         f"- Miss rate: **{overall_miss:.1f}%** -- share of violation cases the verifier let through",
+        f"- Flagged at least PARTIAL: **{flagged_pct:.1f}%** ({flagged}/{total_violations}) -- violation cases that did not come back PASS. A hard FAIL that code cannot reproduce is downgraded to PARTIAL (`unconfirmed_hard_flag`): still flagged and caveated in the report, but not an escalation.",
         f"- False alarm rate: **{false_alarm_rate:.1f}%** ({clean_false_alarms}/{clean_total} clean_control cases not PASSed)",
         f"- Verdict stability: **{stability:.1f}%** ({stability_hits}/{len(cases)} cases identical across "
         f"all {N_RUNS} runs) -- {stability_note}.",

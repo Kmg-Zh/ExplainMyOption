@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the red-team attack set (Task B2.1).
+"""Build the red-team attack set.
 
 65 cases across 9 categories, each built on a real blotter from Phase A
 (no invented numbers -- the fabricated ones are deliberately wrong,

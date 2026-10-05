@@ -44,7 +44,7 @@ On AAPL, IV crush is a first-class Taylor slice (Vega). The leftover residual is
 
 ---
 
-## Where the residual went (Task A5)
+## Where the residual went
 
 AAPL's 28% → 18% IV move is a 10 vol point move — large enough that
 `taylor_second_order` (Layer 3, vanna/volga via bump-and-revalue on the

@@ -139,5 +139,5 @@ Residual > 5% of |total PnL|?
 
 ## References
 
-- **Internal**: `src/pricing/risk.py` (Greeks calculation); `src/report/facts.py` (attribution row assembly)
+- **Internal**: `src/explain_my_option/pricing/risk.py` (Greeks calculation); `src/explain_my_option/report/facts.py` (attribution row assembly)
 - **Primer**: `pnl-units.md` (Greeks unit conventions); `pricing-engine.md` (FDM vs analysis methods)

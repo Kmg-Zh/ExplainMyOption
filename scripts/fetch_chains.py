@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the two verified real historical cases (Task A4.5) and commit slices.
+"""Fetch the two verified real historical cases and commit slices.
 
 Queries DoltHub + yfinance live (the DoltHub API is slow -- expect a couple
 of minutes per case) and writes the resulting ``MarketSnapshot`` as a small

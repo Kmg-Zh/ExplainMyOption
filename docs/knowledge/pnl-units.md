@@ -1,4 +1,4 @@
-# PnL units (source of truth = `src/pricing/risk.py`)
+# PnL units (source of truth = `src/explain_my_option/pricing/risk.py`)
 
 ## Takeaway
 
@@ -35,7 +35,7 @@ When bid/ask quotes exist:
 iv_noise_band_pts = (½ · spread) / vega     # vega in $ per 1 vol point (0.01)
 ```
 
-If `|Δσ_pts| ≤ iv_noise_band_pts`, IV moved inside the **noise band** — Vega narrative is not falsifiable from that quote. Implementation: `src/report/reconciliation.py`.
+If `|Δσ_pts| ≤ iv_noise_band_pts`, IV moved inside the **noise band** — Vega narrative is not falsifiable from that quote. Implementation: `src/explain_my_option/report/reconciliation.py`.
 
 ## Near-zero total PnL display
 
@@ -45,7 +45,7 @@ Signs: call delta ∈ [0, 1], put delta ∈ [-1, 0]; long-vanilla vega ≥ 0.
 
 ## Display scale (position blotter)
 
-`price_and_attribute` always attributes **1 option**. The product report (`src/report_generator.py`) is a **single-position blotter**: contract identity, quantity, market move, Greeks, factor PnL.
+`price_and_attribute` always attributes **1 option**. The product report (`src/explain_my_option/report_generator.py`) is a **single-position blotter**: contract identity, quantity, market move, Greeks, factor PnL.
 
 ```text
 display_pnl = engine_pnl * quantity * multiplier
@@ -61,5 +61,5 @@ Defaults are `quantity=1`, `multiplier=1` (per option). Set `multiplier=100` for
 
 ## Source
 
-- `src/pricing/risk.py`, `src/pricing/facade.py`, `src/pricing/engines/fdm.py` (Aug 2026)
+- `src/explain_my_option/pricing/risk.py`, `src/explain_my_option/pricing/facade.py`, `src/explain_my_option/pricing/engines/fdm.py` (Aug 2026)
 - Skill `pnl-attribution` · rule `quant-engine.mdc`

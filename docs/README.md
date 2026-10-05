@@ -38,5 +38,5 @@ Paste full official docs only if you truly need offline copies → `references/r
 - [knowledge/pnl-units.md](knowledge/pnl-units.md) — Vega / IV conventions
 - [knowledge/yfinance-iv.md](knowledge/yfinance-iv.md) — live chain + IV fallback
 - [references/yfinance.md](references/yfinance.md) — yfinance links
-- [references/quantlib.md](references/quantlib.md) — QuantLib links (in-tree `src/pricing/`)
+- [references/quantlib.md](references/quantlib.md) — QuantLib links (in-tree `src/explain_my_option/pricing/`)
 - [samples/README.md](samples/README.md) — frozen product reports

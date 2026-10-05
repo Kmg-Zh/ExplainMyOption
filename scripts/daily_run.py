@@ -290,7 +290,7 @@ def main() -> int:
     if skew:
         s = skew["SPY"]
         skew_lines = (
-            f"\n\n## Skew proxy (Task C3.3, SPY risk reversal)\n\n"
+            f"\n\n## Skew proxy (SPY risk reversal)\n\n"
             f"* skew_proxy(t) = {s['skew_proxy']:+.4f} | level_proxy(t) = {s['level_proxy']:.4f}\n"
             f"* Δskew = {s['d_skew']:+.4f} | Δlevel = {s['d_level']:+.4f}\n"
             f"* Put {s['put_strike']:g} delta={s['put_delta']:.4f} | "

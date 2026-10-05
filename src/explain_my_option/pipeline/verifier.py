@@ -5,11 +5,12 @@ from __future__ import annotations
 import re
 
 from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
-from ..report.catalysts import missing_catalyst_tags, tags_from_headlines
+from ..report.catalysts import external_cause_terms, missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
 from ..report.validate import (
     evidence_provenance_errors,
+    find_bare_figures,
     find_hedge_directives,
     find_method_residual_blame,
     find_prohibited_phrases,
@@ -320,12 +321,21 @@ def apply_verifier_reflection(
     )
 
 
+def _names_external_cause(synthesis: DiagnosticSynthesis) -> bool:
+    text = " ".join(
+        [synthesis.verdict, synthesis.confidence_rationale, *synthesis.takeaways]
+    ).lower()
+    return any(term in text for term in external_cause_terms())
+
+
 def _confirmed_hard_flags(
     flags: set[str], synthesis: DiagnosticSynthesis, *, no_escalation: bool
 ) -> set[str]:
     """Hard flags that a deterministic code check can reproduce from the text."""
     confirmed: set[str] = set()
-    if "numeric_hallucination" in flags and validate_synthesis(synthesis):
+    if "numeric_hallucination" in flags and (
+        validate_synthesis(synthesis) or find_bare_figures(synthesis)
+    ):
         confirmed.add("numeric_hallucination")
     if "prohibited_phrase" in flags and (
         find_prohibited_phrases(synthesis) or find_prohibited_synonyms(synthesis)
@@ -334,7 +344,11 @@ def _confirmed_hard_flags(
     if (
         "quiet_day_confabulation" in flags
         and no_escalation
-        and (_quiet_day_catalyst_tags(synthesis) or synthesis.evidence)
+        and (
+            _quiet_day_catalyst_tags(synthesis)
+            or synthesis.evidence
+            or _names_external_cause(synthesis)
+        )
     ):
         confirmed.add("quiet_day_confabulation")
     if "method_residual_blamed" in flags and find_method_residual_blame(synthesis):

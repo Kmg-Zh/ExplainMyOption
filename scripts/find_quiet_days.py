@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic quiet-day selection (Task A7.1).
+"""Deterministic quiet-day selection.
 
 Selects (t-1, t) pairs on a liquid underlying where:
 - |close-to-close return| < 0.3%

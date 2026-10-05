@@ -165,7 +165,7 @@ def test_blotter_scales_quantity_not_engine():
 def test_mark_calibration_aligns_model_to_mid():
     """Live-style marks: invert flat IV so model P&L equals mark P&L.
 
-    Product path (src/pricing/calibrate.py). Synthetic fixtures leave marks at
+    Product path (src/explain_my_option/pricing/calibrate.py). Synthetic fixtures leave marks at
     0 and skip this; this test injects marks so the calibration branch runs.
     """
     from dataclasses import replace

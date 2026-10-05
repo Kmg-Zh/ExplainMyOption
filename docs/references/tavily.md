@@ -1,6 +1,6 @@
 # Tavily — curated references
 
-App news search on the product `search` node: `src/intel/sources.py` (`TavilyNewsSource`). Uses `TAVILY_API_KEY`. No key → skip, keep Yahoo titles.
+App news search on the product `search` node: `src/explain_my_option/intel/sources.py` (`TavilyNewsSource`). Uses `TAVILY_API_KEY`. No key → skip, keep Yahoo titles.
 
 App search uses `tavily-python` (`TavilyClient.search`, `topic="news"`).
 

@@ -142,8 +142,27 @@ def find_prohibited_synonyms(synthesis: DiagnosticSynthesis) -> list[str]:
     return list(dict.fromkeys(hits))
 
 
+_BARE_FIGURE_RE = re.compile(
+    r"(?<![\w.])\d+\.\d+(?![\w.])"
+    r"|\b\d+(?:,\d{3})*\s*(?:vol(?:atility)?\s+points?|points?|bps|basis\s+points?|shares|contracts)\b",
+    re.IGNORECASE,
+)
+
+
+def find_bare_figures(synthesis: DiagnosticSynthesis) -> list[str]:
+    """Decimals / unit-bearing numbers in LLM prose. The narrator contract is
+    "no figures of your own", so any such token is a figure the code did not
+    produce. Used only to *confirm* an LLM numeric flag, never as a stand-alone
+    hard check (dates, years and ordinals are not matched)."""
+    hits: list[str] = []
+    for text in _narrative_texts(synthesis):
+        if text:
+            hits.extend(m.group(0) for m in _BARE_FIGURE_RE.finditer(text))
+    return list(dict.fromkeys(hits))
+
+
 _RESIDUAL_WORD_RE = re.compile(
-    r"\b(residual|unexplained|unmodel+ed|model gap|method gap)\b", re.IGNORECASE
+    r"\b(residual|unexplained|unmodel+ed|model gap|method gap|truncation(?: error)?|taylor error)\b", re.IGNORECASE
 )
 
 

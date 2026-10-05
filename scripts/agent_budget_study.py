@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cost, latency, and terminal-state study (Task B4).
+"""Cost, latency, and terminal-state study.
 
 Runs the real leg graph (``agent_graph.run_pipeline``, not a mock) for the
 10 offline synthetic legs plus the 2 verified real historical cases (real
@@ -260,7 +260,7 @@ def main() -> int:
     terminal_hist: Counter = Counter(r["terminal_state"] for r in ok_runs)
 
     lines = [
-        "# Agent cost, latency, and terminal-state study (Task B4)",
+        "# Agent cost, latency, and terminal-state study",
         "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} by "
         "`scripts/agent_budget_study.py`, run through the real leg graph "
@@ -271,7 +271,7 @@ def main() -> int:
         f"({len(ok_runs)} completed, {len(failed_runs)} failed).",
         "",
         "**Model**: `gpt-5.4-mini`, `temperature=0.0`, fixed `seed=0` "
-        "(`pipeline.llm_roles.OpenAiRole`, Task B3).",
+        "(`pipeline.llm_roles.OpenAiRole`).",
         "",
         "## Wall-clock per stage (seconds)",
         "",
@@ -337,7 +337,7 @@ def main() -> int:
             f"\np50={_pct([float(x) for x in tools_run_counts], 0.5):.1f}, "
             f"p95={_pct([float(x) for x in tools_run_counts], 0.95):.1f}, "
             f"max={max(tools_run_counts)} "
-            f"(budget ceiling is `MAX_DIAGNOSTIC_TOOL_CALLS=1` costly slot per pass, Task A5/A7)."
+            f"(budget ceiling is `MAX_DIAGNOSTIC_TOOL_CALLS=1` costly slot per pass)."
         )
     else:
         lines.append("No successful runs.")
