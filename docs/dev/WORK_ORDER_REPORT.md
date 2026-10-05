@@ -403,6 +403,19 @@ papered over.
     mechanisms), so they were flagged PARTIAL by the baseline layer for
     unrelated reasons. They now follow the `clean_control` pattern and are
     asserted all-PASS in `tests/ci/test_redteam_framework.py`.
+33. **Measured cost of the code-confirmation guard (live red-team, 65 cases,
+    3 runs each, `gpt-5.4-mini`).** Hard-FAIL detection fell from 93.6% (before
+    the guard) to 87.2%; 45/47 violation cases (95.7%) are still flagged at
+    least PARTIAL, and the false-alarm rate stays 0.0% (0/10 clean controls).
+    The gap is violations the LLM called hard but no code check can reproduce
+    (mostly direction-only `contradictory_number` and out-of-vocabulary
+    wording): they now ship as caveated PARTIAL, not as a terminal break. An
+    initial guard (narrower vocabulary) measured 72.3%; widening what code can
+    confirm (bare figures in prose, truncation wording, more external-cause
+    terms) recovered most of it. This is the intended trade: escalation is
+    decided by code, at the price of fewer hard escalations. Two violation
+    cases still come back PASS (see the miss list in
+    `docs/studies/redteam_results.md`).
 
 ## NOT DONE
 
