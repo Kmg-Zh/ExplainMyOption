@@ -8,22 +8,28 @@ version = "0.1.0"
 description = "Diagnose why an equity option price moved (Greeks + news narrative)."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Keming Zhang" }]
 dependencies = [
     "langgraph>=1.2,<2",
-    "langchain-openai>=0.2.0",
-    "langchain-core>=0.3.0",
-    "numpy>=1.26",
-    "scipy>=1.11",
-    "pandas>=2.0",
-    "QuantLib>=1.43",
-    "yfinance>=0.2.40",
-    "tavily-python>=0.5.0",
-    "streamlit>=1.36",
-    "python-dotenv>=1.0",
+    "langchain-openai>=1.0,<2",
+    "langchain-core>=1.0,<2",
+    "pydantic>=2,<3",
+    "numpy>=1.26,<3",
+    "scipy>=1.11,<2",
+    "pandas>=2.0,<4",
+    "QuantLib>=1.43,<2",
+    "yfinance>=0.2.40,<2",
+    "tavily-python>=0.5.0,<1",
+    "streamlit>=1.36,<2",
+    "python-dotenv>=1.0,<2",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
-explain-my-option = "app:run_cli"
+explain-my-option = "explain_my_option.cli:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

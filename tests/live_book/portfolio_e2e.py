@@ -60,7 +60,9 @@ from explain_my_option.graph.deps import (
     YFinanceMarketLoader,
     default_deps,
 )
+from explain_my_option.graph.prompts import PROMPT_VERSION
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource
+from explain_my_option.pipeline.llm_roles import default_openai_roles, llm_run_metadata
 from explain_my_option.paths import LIVE_BOOK_OUTPUT_DIR, TESTS_DIR
 from ci.engine_config import engine_config_for_tests
 from explain_my_option.pricing.config import EngineConfig
@@ -140,8 +142,13 @@ def build_offline_bundles(
     return bundles, syntheses
 
 
-def resolve_live_contract(leg: LiveLeg) -> ResolvedLiveContract:
-    """Peek the live chain once to lock strike + expiry for this run."""
+def resolve_live_contract(leg: LiveLeg, min_days: int = 7) -> ResolvedLiveContract:
+    """Peek the live chain once to lock strike + expiry for this run.
+
+    ``min_days`` is the minimum days-to-expiry of the chosen listed expiry
+    (default 7 = nearest weekly). Re-pins use a larger value so the pinned
+    book lives for weeks, not days.
+    """
     import yfinance as yf
 
     from explain_my_option.data_loader import _pick_nearest_expiry
@@ -151,7 +158,7 @@ def resolve_live_contract(leg: LiveLeg) -> ResolvedLiveContract:
     if hist.empty:
         raise ValueError(f"No spot history for {leg.ticker}")
     spot = float(hist["Close"].iloc[-1])
-    expiry = _pick_nearest_expiry(tk)
+    expiry = _pick_nearest_expiry(tk, min_days=min_days)
     chain = tk.option_chain(expiry)
     table = chain.calls if leg.option_type == "call" else chain.puts
     strike = pick_strike(
@@ -314,6 +321,8 @@ def _persist_run(
         "cache_path": str(DEFAULT_CACHE),
         "cache_as_of_dates": list_as_of_dates(),
         "cache_snapshot_count": count_snapshots(),
+        "prompt_version": PROMPT_VERSION,
+        "llm_run_metadata": extra_manifest.pop("llm_run_metadata", None),
         **extra_manifest,
     }
     (run_dir / "manifest.json").write_text(
@@ -328,6 +337,7 @@ def run_offline_portfolio_e2e(*, through_graph: bool = False) -> Path:
     bundles: list[PositionBundle] = []
     syntheses: list[DiagnosticSynthesis] = []
 
+    roles = default_openai_roles() if through_graph else None
     if through_graph:
         for leg in OFFLINE_LEGS:
             snap0, _ = load_fixture(leg.fixture)
@@ -342,6 +352,7 @@ def run_offline_portfolio_e2e(*, through_graph: bool = False) -> Path:
                     leg.overrides.get("multiplier", snap0.multiplier)
                 ),
                 deps=deps,
+                roles=roles,
             )
             snap = state["snapshot"]
             pricing = state["pricing"]
@@ -388,6 +399,7 @@ def run_offline_portfolio_e2e(*, through_graph: bool = False) -> Path:
                 }
                 for leg in OFFLINE_LEGS
             ],
+            "llm_run_metadata": llm_run_metadata(roles) if roles is not None else None,
         },
     )
 
@@ -399,7 +411,7 @@ def run_live_portfolio_e2e(
 ) -> Path:
     """Live multi-leg e2e.
 
-    Default: **pinned** contracts from ``pinned_books/book_2026-09-02.json`` so
+    Default: **pinned** contracts from ``DEFAULT_PINNED_BOOK`` (see ``portfolio_book.py``) so
     tomorrow's marks are comparable to today's (same strike/expiry/style/qty).
 
     Pass ``resolve_moneyness=True`` only to discover a new book (not for DoD).
@@ -412,6 +424,7 @@ def run_live_portfolio_e2e(
     resolved_rows: list[dict[str, Any]] = []
     baseline_as_of: str | None = None
     mode = "live_resolve" if resolve_moneyness else "live_pinned"
+    roles = default_openai_roles()
 
     if resolve_moneyness:
         deps = _live_deps()
@@ -498,6 +511,7 @@ def run_live_portfolio_e2e(
                 quantity=quantity,
                 multiplier=multiplier,
                 deps=deps,
+                roles=roles,
             )
             snap = state["snapshot"]
             pricing = state["pricing"]
@@ -509,7 +523,7 @@ def run_live_portfolio_e2e(
                 DiagnosticSynthesis.model_validate(syn_raw)
                 if syn_raw
                 else synthesize_diagnosis(
-                    snap, pricing, state.get("news") or [], ports=deps
+                    snap, pricing, state.get("news") or [], ports=deps, role=roles.narrator
                 )
             )
             bundles.append(
@@ -556,6 +570,7 @@ def run_live_portfolio_e2e(
             else None,
             "resolved": resolved_rows,
             "errors": errors,
+            "llm_run_metadata": llm_run_metadata(roles),
         },
     )
 

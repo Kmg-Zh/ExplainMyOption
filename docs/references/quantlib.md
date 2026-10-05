@@ -1,6 +1,6 @@
 # QuantLib — curated references (in use)
 
-Pricing lives in [`src/pricing/`](../../src/pricing/) behind `price_and_attribute`. Synthetic fixtures are the primary eval path; yfinance is optional live.
+Pricing lives in [`src/explain_my_option/pricing/`](../../src/explain_my_option/pricing/) behind `price_and_attribute`. Synthetic fixtures are the primary eval path; yfinance is optional live.
 
 ## Engines we use
 
@@ -27,7 +27,7 @@ Install: `pip install QuantLib` (see `requirements.txt`). Import failure must be
 
 1. Set `ql.Settings.instance().evaluationDate` **before** building curves.
 2. Wrap spot / rate / vol / dividend in Handles.
-3. Keep fetchers outside `src/pricing/` (no yfinance inside the engine).
+3. Keep fetchers outside `src/explain_my_option/pricing/` (no yfinance inside the engine).
 4. Probe Dupire before `localVol=True`; wrap `DividendVanillaOption` NPV.
 5. 1-day PnL via in-repo `attribute_pnl`; Heston stays diagnostic.
 

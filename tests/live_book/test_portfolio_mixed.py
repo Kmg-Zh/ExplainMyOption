@@ -22,6 +22,7 @@ install()
 
 from live_book.portfolio_book import (
     DEFAULT_PINNED_BOOK,
+    LIVE_LEGS,
     OFFLINE_AS_OF,
     OFFLINE_LEGS,
     load_pinned_book,
@@ -113,26 +114,23 @@ def test_portfolio_report_structure():
 
 
 def test_pinned_book_has_ten_fixed_contracts():
+    """Structure only: a re-pin must not require editing this test."""
+    from datetime import date
+
     baseline, legs = load_pinned_book()
-    assert baseline == "2026-09-01"
     assert DEFAULT_PINNED_BOOK.is_file()
+    assert DEFAULT_PINNED_BOOK.name == f"book_{baseline}.json"
     assert len(legs) == 10
-    tickers = [leg.ticker for leg in legs]
-    assert len(tickers) == len(set(tickers))
-    # Same product identity fields tomorrow must keep.
-    for leg in legs:
+    assert [leg.ticker for leg in legs] == [leg.ticker for leg in LIVE_LEGS]
+    baseline_day = date.fromisoformat(baseline)
+    for leg, template in zip(legs, LIVE_LEGS):
         assert leg.strike > 0
-        assert leg.expiry
-        assert leg.option_type in ("call", "put")
-        assert leg.exercise_style in ("american", "european")
-    # Spot-check contracts from the 2026-09-01 live pin.
-    by_ticker = {leg.ticker: leg for leg in legs}
-    assert by_ticker["AAPL"].strike == 300.0
-    assert by_ticker["AAPL"].expiry == "2026-09-02"
-    assert by_ticker["META"].quantity == 2.0 and by_ticker["META"].multiplier == 100.0
-    assert by_ticker["GOOGL"].exercise_style == "european"
-    assert by_ticker["SPY"].expiry == "2026-09-02"
-    assert by_ticker["XOM"].expiry == "2026-09-04"
+        assert leg.option_type == template.option_type
+        assert leg.exercise_style == template.exercise_style
+        assert leg.quantity == template.quantity
+        assert leg.multiplier == template.multiplier
+        # Long-dated enough that the pin lives for weeks.
+        assert (date.fromisoformat(leg.expiry) - baseline_day).days >= 35
 
 
 def test_offline_e2e_archives_run():

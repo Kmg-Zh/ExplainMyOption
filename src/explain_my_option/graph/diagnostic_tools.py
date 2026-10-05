@@ -23,6 +23,12 @@ def reconcile_mark_vs_model(
         "model_vs_mark_gap_usd": rec.model_vs_mark_gap_usd,
         "gap_pct_of_model": rec.gap_pct_of_model,
         "mark_calibrated": rec.mark_calibrated,
+        "residual_method_usd": rec.residual_method_usd,
+        "residual_model_usd": rec.residual_model_usd,
+        "marks_reliable_now": rec.marks_reliable_now,
+        "marks_reliable_prev": rec.marks_reliable_prev,
+        "escalation_basis": rec.escalation_basis,
+        "escalation_metric_pct": rec.escalation_metric_pct,
     }
 
 
@@ -75,6 +81,9 @@ def run_taylor_second_order(
         "combined_pnl": result.combined_pnl,
         "residual_after": result.residual_after,
         "limitations": result.limitations,
+        "residual_first_order": result.residual_first_order,
+        "second_order_explained": result.second_order_explained,
+        "residual_reduction_pct": result.residual_reduction_pct,
     }
 
 
@@ -117,6 +126,9 @@ def american_dividend_exercise_check(
         "early_exercise_assessment": am.early_exercise_assessment,
         "days_to_ex_div": days_to_ex,
         "flag_ex_div_window": flag_window,
+        "dividend_coverage": am.dividend_coverage,
+        "days_to_expiry": am.days_to_expiry,
+        "ee_relevant": am.ee_relevant,
     }
 
 
@@ -162,6 +174,8 @@ def ex_div_attribution_split(
             and ee_f >= _EE_MATERIAL_USD
             and not am.get("ee_premium_anomaly")
         ),
+        "dividend_coverage": am.get("dividend_coverage"),
+        "ee_relevant": am.get("ee_relevant"),
         "vega_pnl": float(pricing.pnl.vega_pnl),
         "residual_pnl": float(pricing.pnl.residual_pnl),
         "note": (

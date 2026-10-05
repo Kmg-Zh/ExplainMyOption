@@ -67,6 +67,12 @@ def run_pipeline(
         "diagnosis": str(synthesis.get("verdict", leg_state.get("diagnosis", ""))).strip(),
         "report": leg_state.get("report", ""),
         "blotter": leg_state.get("blotter", ""),
+        "stage_timings": leg_state.get("stage_timings") or {},
+        "llm_calls": leg_state.get("llm_calls"),
+        "no_escalation": leg_state.get("no_escalation", False),
+        "terminal_no_comparable_observation": leg_state.get(
+            "terminal_no_comparable_observation", False
+        ),
     }
 
 

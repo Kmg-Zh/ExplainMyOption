@@ -120,7 +120,7 @@ class GraphDeps:
     pnl: PnlSource = field(default_factory=OfficialFdmPnlSource)
     planner: QueryPlanner = field(default_factory=default_planner)
     intel: IntelRegistry = field(default_factory=default_registry)
-    # None → STRUCTURED_DIAGNOSE_SYSTEM_PROMPT in src/graph/prompts.py. Extra is author-local eval only.
+    # None → STRUCTURED_DIAGNOSE_SYSTEM_PROMPT in src/explain_my_option/graph/prompts.py. Extra is author-local eval only.
     diagnose_system_prompt: Optional[str] = None
     diagnose_system_extra: str = ""
 

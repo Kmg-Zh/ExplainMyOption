@@ -6,7 +6,7 @@ yfinance exposes a **live** option chain and a current `impliedVolatility` on ea
 
 ## Details
 
-- `Ticker.option_chain(expiry)` → `calls` / `puts` DataFrames. Yahoo does **not** ship Greeks; we compute them in `src/pricing/`.
+- `Ticker.option_chain(expiry)` → `calls` / `puts` DataFrames. Yahoo does **not** ship Greeks; we compute them in `src/explain_my_option/pricing/`.
 - Live chain only — `fetch_vol_surface()` builds today's multi-expiry grid; no historical surface from Yahoo.
 - Quotes: bid/ask mid when both positive; else last. Volume / OI stored on the snapshot.
 - News: `Ticker.news` is ticker-level; query text is not applied. Fetch is fail-soft.
@@ -23,5 +23,5 @@ Do not add edgartools, scraping, or paid vendors unless asked.
 
 ## Source
 
-- `src/data_loader.py`, `src/data/realized.py`, `src/data/cache.py` (Aug 2026)
+- `src/explain_my_option/data_loader.py`, `src/explain_my_option/data/realized.py`, `src/explain_my_option/data/cache.py` (Aug 2026)
 - Links: [../references/yfinance.md](../references/yfinance.md)

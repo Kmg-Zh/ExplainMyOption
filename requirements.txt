@@ -1,20 +1,24 @@
+# Runtime dependencies (mirrors pyproject.toml). Exact, reproducible versions
+# for Python 3.11 are in requirements.lock.
+
 # Core agent framework
 langgraph>=1.2,<2
-langchain-openai>=0.2.0
-langchain-core>=0.3.0
+langchain-openai>=1.0,<2
+langchain-core>=1.0,<2
+pydantic>=2,<3
 
 # Quant & math
-numpy>=1.26
-scipy>=1.11
-pandas>=2.0
-QuantLib>=1.43
+numpy>=1.26,<3
+scipy>=1.11,<2
+pandas>=2.0,<4
+QuantLib>=1.43,<2
 
 # Data source
-yfinance>=0.2.40
-tavily-python>=0.5.0
+yfinance>=0.2.40,<2
+tavily-python>=0.5.0,<1
 
 # UI
-streamlit>=1.36
+streamlit>=1.36,<2
 
 # Config
-python-dotenv>=1.0
+python-dotenv>=1.0,<2

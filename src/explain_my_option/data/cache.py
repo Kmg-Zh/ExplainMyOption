@@ -17,6 +17,12 @@ from ..pricing.types import (
 
 DEFAULT_CACHE = Path(".cache/explain-my-option/market.sqlite")
 
+# Yahoo prints impliedVolatility=1e-05 (and similar) as a stale-quote sentinel,
+# mostly outside market hours. No listed equity option trades at a 1% implied
+# vol, so anything below this is "no usable IV", not a real reading -- at
+# load time (data_loader._clean_iv) and when reading a cached t-1 back.
+MIN_PLAUSIBLE_IV = 0.01
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
     ticker TEXT NOT NULL,
@@ -77,7 +83,11 @@ def upsert_snapshot(
     surface: Optional[VolSurfaceData],
     *,
     path: Optional[Path] = None,
-) -> None:
+) -> bool:
+    """Cache ``snap`` as a future t-1. Returns False (and stores nothing) when
+    its IV is a stale-quote sentinel -- caching it would poison tomorrow."""
+    if not (snap.iv_now >= MIN_PLAUSIBLE_IV):
+        return False
     as_of = snap.as_of or date.today().isoformat()
     surf_json = json.dumps(asdict(surface)) if surface is not None else None
     with _connect(path) as conn:
@@ -98,6 +108,7 @@ def upsert_snapshot(
             ),
         )
         conn.commit()
+    return True
 
 
 def load_t1(
@@ -111,21 +122,24 @@ def load_t1(
 ) -> tuple[Optional[MarketSnapshot], Optional[VolSurfaceData]]:
     """Load the most recent cached row strictly before ``as_of`` for this contract."""
     with _connect(path) as conn:
-        row = conn.execute(
+        rows = conn.execute(
             """
             SELECT snapshot_json, surface_json FROM snapshots
             WHERE ticker = ? AND expiry = ? AND option_type = ?
               AND as_of < ? AND ABS(strike - ?) < 1e-6
             ORDER BY as_of DESC
-            LIMIT 1
             """,
             (ticker.upper(), expiry, option_type, as_of, float(strike)),
-        ).fetchone()
-    if not row:
-        return None, None
-    snap = _snapshot_from_dict(json.loads(row[0]))
-    surf = _surface_from_dict(json.loads(row[1]) if row[1] else None)
-    return snap, surf
+        ).fetchall()
+    # Newest row whose IV is a real reading: a sentinel-IV row cached by an
+    # earlier off-hours run must not become tomorrow's iv_prev.
+    for snap_json, surf_json in rows:
+        snap = _snapshot_from_dict(json.loads(snap_json))
+        if not (snap.iv_now >= MIN_PLAUSIBLE_IV):
+            continue
+        surf = _surface_from_dict(json.loads(surf_json) if surf_json else None)
+        return snap, surf
+    return None, None
 
 
 def list_as_of_dates(*, path: Optional[Path] = None) -> list[str]:

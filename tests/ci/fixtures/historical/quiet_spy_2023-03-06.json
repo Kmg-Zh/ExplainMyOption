@@ -1,0 +1,41 @@
+{
+  "snapshot": {
+    "as_of": "2023-03-06",
+    "ask": 7.72,
+    "bid": 7.69,
+    "data_source": "historical",
+    "discrete_dividends": [
+      {
+        "amount": 1.506,
+        "ex_date": "2023-03-17"
+      }
+    ],
+    "dividend_yield": 0.04144442449602772,
+    "exercise_style": "american",
+    "expiry": "2023-03-31",
+    "hv20_now": null,
+    "hv20_prev": null,
+    "iv_now": 0.17554194431781014,
+    "iv_prev": 0.1671568605171751,
+    "iv_prev_source": "chain_t1",
+    "mid": 7.705,
+    "multiplier": 1.0,
+    "open_interest": null,
+    "option_price_now": 7.705,
+    "option_price_prev": 7.8149999999999995,
+    "option_type": "call",
+    "prev_as_of": "2023-03-03",
+    "quantity": 1.0,
+    "quote_tier_now": "tight",
+    "quote_tier_prev": "tight",
+    "risk_free_rate": 0.04728000164031983,
+    "risk_free_rate_prev": 0.04717999935150147,
+    "risk_free_rate_source": "irx",
+    "spot_now": 404.4700012207031,
+    "spot_prev": 404.19000244140625,
+    "strike": 404.0,
+    "ticker": "SPY",
+    "time_to_expiry_years": 0.0684931506849315,
+    "volume": null
+  }
+}

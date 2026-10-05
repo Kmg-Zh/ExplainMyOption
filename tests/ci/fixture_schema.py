@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from explain_my_option.data.synthetic import _REQUIRED_SNAPSHOT_KEYS
-from explain_my_option.paths import FIXTURES_DIR
+from explain_my_option.paths import FIXTURES_DIR, STRESS_FIXTURES_DIR
 
 
 def validate_fixture_file(path: Path) -> list[str]:
@@ -30,8 +30,11 @@ def validate_fixture_file(path: Path) -> list[str]:
 
 
 def validate_all_fixtures(*, fixtures_root: Path | None = None) -> list[str]:
-    root = fixtures_root or FIXTURES_DIR
+    roots = [fixtures_root] if fixtures_root is not None else [FIXTURES_DIR, STRESS_FIXTURES_DIR]
     all_errors: list[str] = []
-    for path in sorted(root.glob("*.json")):
-        all_errors.extend(validate_fixture_file(path))
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.json")):
+            all_errors.extend(validate_fixture_file(path))
     return all_errors

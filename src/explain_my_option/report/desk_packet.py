@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..data_loader import NewsItem
+from ..data_loader import NewsItem, format_untrusted_news_item
 from ..pricing.types import MarketSnapshot, PricingResult
 from ..report_generator import build_quant_section
 from .facts import build_position_facts
@@ -59,9 +59,8 @@ def format_desk_packet(
     if not news:
         lines.append("- (none)")
     else:
-        for hit in news[:5]:
-            pub = hit.publisher or "?"
-            lines.append(f"- {hit.title} ({pub})")
+        for idx, hit in enumerate(news[:5], 1):
+            lines.append(format_untrusted_news_item(hit, idx=idx))
     if desk_color:
         lines.extend(["", "### Desk color (context only)", desk_color.strip()])
     return "\n".join(lines)

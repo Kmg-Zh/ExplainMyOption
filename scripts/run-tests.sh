@@ -33,6 +33,22 @@ TESTS=(
   ci/test_diagnostic_pass
   ci/test_report_reconciliation
   ci/test_repo_layout
+  ci/test_observation_preconditions
+  ci/test_basis_guard
+  ci/test_implied_borrow
+  ci/test_historical_chain
+  ci/test_historical_real_cases
+  ci/test_regime_rule
+  ci/test_residual_split
+  ci/test_quiet_day_non_escalation
+  ci/test_llm_call_budget
+  ci/test_prompt_schema_sync
+  ci/test_injection_containment
+  ci/test_redteam_framework
+  ci/test_determinism_quant
+  ci/test_no_llm_flag
+  ci/test_runlog_book
+  ci/test_data_robustness
   historical/test_synthesis_prompt
   historical/test_benchmark_scoring
   historical/test_news_lineage

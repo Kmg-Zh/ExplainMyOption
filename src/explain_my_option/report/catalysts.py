@@ -136,3 +136,20 @@ def missing_catalyst_tags(narrative: str, titles: Sequence[str]) -> list[str]:
         if not any(tok in body for tok in tokens):
             missing.append(tag)
     return missing
+
+
+# Words naming a cause *outside* the pricing model. A sentence that ties the
+# Taylor/method residual to one of these is "blaming the residual on the news"
+# (verifier flag method_residual_blamed); model/math vocabulary such as
+# "convexity" or "path effects" is deliberately absent.
+_EXTERNAL_CAUSE_TERMS: tuple[str, ...] = (
+    "earnings", "news", "headline", "catalyst", "announcement", "guidance",
+    "downgrade", "upgrade", "fed ", "lawsuit", "merger", "acquisition", "rumor",
+    "rumour", "sentiment", "squeeze", "short interest", "borrow", "buy-in",
+    "event", "press release", "analyst", "regulat", "tariff", "macro",
+    "rotation", "buyout", "takeover", "commentary", "speculation", "fund flows",
+)
+
+
+def external_cause_terms() -> tuple[str, ...]:
+    return _EXTERNAL_CAUSE_TERMS

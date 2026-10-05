@@ -21,4 +21,4 @@ American Merton is **numpy LSM**, not QuantLib `MCAmericanEngine` (that engine i
 ## Source
 
 - Merton, R. C. (1976), *Option pricing when underlying stock returns are discontinuous*.
-- `src/pricing/config.py` · `src/pricing/engines/lsm.py` · `src/pricing/engines/merton.py`
+- `src/explain_my_option/pricing/config.py` · `src/explain_my_option/pricing/engines/lsm.py` · `src/explain_my_option/pricing/engines/merton.py`

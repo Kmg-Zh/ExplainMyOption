@@ -40,5 +40,5 @@ Dupire probe + `illegalLocalVolOverwrite` protect sparse Yahoo grids. `DividendV
 
 ## Source
 
-- `src/pricing/facade.py`, `src/pricing/registry.py`, `src/pricing/analysis_api.py`
+- `src/explain_my_option/pricing/facade.py`, `src/explain_my_option/pricing/registry.py`, `src/explain_my_option/pricing/analysis_api.py`
 - Tests: `tests/ci/test_pricing_facade.py`, golden Markdown in `tests/ci/golden/`

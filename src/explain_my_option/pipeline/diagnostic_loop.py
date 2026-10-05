@@ -29,12 +29,16 @@ def choose_a2_tool(
     residual_pct: float,
     tools_run: list[str],
 ) -> str | None:
+    """A5.1: taylor_second_order is free and already ran upstream, before
+    this react loop's first turn (graph.diagnostic_controller.run_diagnostic_pass
+    runs it unconditionally) -- it is never a candidate here, so this loop
+    no longer needs a severity band reserved for it ahead of a full reval.
+    """
     if residual_pct <= 5.0:
         return None
-    name = "taylor_second_order" if residual_pct <= 20.0 else "path_reprice"
-    if name in tools_run:
+    if "path_reprice" in tools_run:
         return None
-    return name
+    return "path_reprice"
 
 
 def execute_diagnostic_tool(

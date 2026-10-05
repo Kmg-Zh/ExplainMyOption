@@ -108,6 +108,39 @@ def test_a3_fail_exhausted_escalates_terminal_break():
     old = os.environ.get("OPENAI_API_KEY")
     os.environ["OPENAI_API_KEY"] = "sk-test-not-real"
     try:
+        # The guard only keeps a hard FAIL that code can confirm: the narrator
+        # blames the residual on an outside cause, which code can see.
+        roles = LlmRoleRegistry(
+            narrator=_MockNarrator(verdict="The residual is explained by the earnings announcement."),
+            verifier=_MockVerifier(
+                verdicts=("FAIL",),
+                policy_flags=(("method_residual_blamed",),),
+            ),
+        )
+        app = build_leg_diagnosis_subgraph(config=_base_config(verify_budget=1), roles=roles)
+        out = app.invoke({"leg": _leg()})
+    finally:
+        if old is None:
+            os.environ.pop("OPENAI_API_KEY", None)
+        else:
+            os.environ["OPENAI_API_KEY"] = old
+
+    findings = out["diagnostic_findings"]
+    assert findings.get("terminal_unexplained_break") is True
+    assert findings.get("terminal_cause") == "verifier_hard_fail"
+    assert findings.get("terminal_verifier_flags") == ["method_residual_blamed"]
+    assert "terminal break escalation" in out["diagnostic_synthesis"]["verdict"].lower()
+    assert "method_residual_blamed" in out["diagnostic_synthesis"]["verdict"]
+    # Audit trail: the candidate the verifier saw and its verdicts are kept.
+    audit = findings["verifier_audit"]
+    assert len(audit["candidates"]) == 1 and audit["trace"][-1]["verdict"] == "FAIL"
+
+
+def test_a3_unconfirmed_hard_flag_downgrades_to_partial():
+    """A clean narrator + an LLM numeric flag code cannot reproduce -> PARTIAL."""
+    old = os.environ.get("OPENAI_API_KEY")
+    os.environ["OPENAI_API_KEY"] = "sk-test-not-real"
+    try:
         roles = LlmRoleRegistry(
             narrator=_MockNarrator(),
             verifier=_MockVerifier(
@@ -123,8 +156,11 @@ def test_a3_fail_exhausted_escalates_terminal_break():
         else:
             os.environ["OPENAI_API_KEY"] = old
 
-    assert out["diagnostic_findings"].get("terminal_unexplained_break") is True
-    assert "terminal break escalation" in out["diagnostic_synthesis"]["verdict"].lower()
+    findings = out["diagnostic_findings"]
+    assert findings.get("terminal_unexplained_break") is not True
+    assert findings.get("verifier_status") == "PARTIAL"
+    last = findings["verifier_audit"]["trace"][-1]
+    assert last["llm_verdict"] == "FAIL" and "unconfirmed_hard_flag" in last["policy_flags"]
 
 
 def test_a3_partial_reflects_without_terminal_break():
@@ -298,6 +334,7 @@ def test_leg_graph_short_circuits_challenger_when_digest_empty():
 if __name__ == "__main__":
     test_leg_graph_compiles_with_explicit_loop_nodes()
     test_a3_fail_exhausted_escalates_terminal_break()
+    test_a3_unconfirmed_hard_flag_downgrades_to_partial()
     test_a3_partial_reflects_without_terminal_break()
     test_a3_soft_fail_reflects_without_terminal_break()
     test_reconcile_with_challenge_injects_missing_mechanism()

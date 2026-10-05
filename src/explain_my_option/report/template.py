@@ -7,6 +7,7 @@ from typing import Any
 from ..data_loader import NewsItem
 from ..intel.types import SearchPlan
 from .facts import PositionBundle, PositionFacts, build_portfolio_facts, build_position_facts
+from .reconciliation import ReconciliationFacts
 from .schema import DiagnosticSynthesis
 
 
@@ -15,9 +16,22 @@ def _money(x: float) -> str:
     return f"{sign}${abs(x):,.4f}"
 
 
+# Display-only cap: a percentage over a near-zero denominator (e.g. a residual
+# over a ~$0 model move) prints as an absurd figure like 6582029380.9%. Routing
+# and escalation numerics are untouched; only what is printed is clamped.
+_PCT_DISPLAY_CAP = 1000.0
+
+
+def _pct_mag(x: float, signed: bool = False) -> str:
+    """One-decimal percent text, ``>1000%`` when the denominator is near zero."""
+    if abs(x) > _PCT_DISPLAY_CAP:
+        sign = "-" if x < 0 else ("+" if signed else "")
+        return f"{sign}>{_PCT_DISPLAY_CAP:.0f}%"
+    return f"{x:+.1f}%" if signed else f"{x:.1f}%"
+
+
 def _pct(x: float) -> str:
-    sign = "+" if x >= 0 else ""
-    return f"{sign}{x:.1f}%"
+    return _pct_mag(x, signed=True)
 
 
 def _abs_share(part: float, parts: list[float]) -> float:
@@ -78,13 +92,14 @@ def _reconciliation_section(facts: PositionFacts) -> str:
         lines.append("* **Mark ΔP**: unavailable — no valid marks on both dates.")
         explained = facts.model_pnl_usd - facts.attribution[-1].usd
         lines.append(f"* **Explained ΔP (Taylor ex-residual)**: `{_money(explained)}`")
+        lines.extend(_two_residuals_lines(facts, rec))
         return "\n".join(lines)
 
     lines.append(f"* **Mark ΔP (MTM)**: `{_money(rec.mark_pnl_usd)}`")
     lines.append(f"* **Model ΔP (engine)**: `{_money(rec.model_pnl_usd)}`")
     if rec.model_vs_mark_gap_usd is not None:
         gap_note = (
-            f" ({rec.gap_pct_of_model:+.1f}% of model)"
+            f" ({_pct_mag(rec.gap_pct_of_model, signed=True)} of model)"
             if rec.gap_pct_of_model is not None
             else ""
         )
@@ -95,7 +110,50 @@ def _reconciliation_section(facts: PositionFacts) -> str:
     lines.append(f"* **Explained ΔP (Taylor ex-residual)**: `{_money(explained)}`")
     if rec.mark_calibrated:
         lines.append("* **Mark calibration**: active (`diagnostics.mark_calibrated`)")
+    lines.extend(_two_residuals_lines(facts, rec))
     return "\n".join(lines)
+
+
+def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) -> list[str]:
+    """A6.1/A6.3: print ε_method and ε_model as separate lines, always."""
+    method = rec.residual_method_usd if rec is not None else facts.attribution[-1].usd
+    lines = [
+        "",
+        f"* **Method residual (ε_method)**: `{_money(method)}` — arithmetic, "
+        "not news (ΔP_model minus the Taylor components).",
+    ]
+    if rec is None or rec.residual_model_usd is None:
+        lines.append(
+            "* **Model residual (ε_model)**: n/a (no reliable marks) — "
+            "the gap between the market's price change and the model's."
+        )
+    else:
+        lines.append(
+            f"* **Model residual (ε_model)**: `{_money(rec.residual_model_usd)}` — "
+            "ΔP_market − ΔP_model; the only residual a catalyst may explain."
+        )
+    basis = rec.escalation_basis if rec is not None else "method"
+    metric = rec.escalation_metric_pct if rec is not None else None
+    metric_note = f" ({_pct_mag(metric)})" if metric is not None else ""
+    lines.append(f"* **Escalation basis**: `{basis}`{metric_note}")
+    if basis == "method":
+        dates = f"{facts.eval_date}" if not facts.prev_as_of_note else f"{facts.prev_as_of_note} and/or {facts.eval_date}"
+        if facts.iv_prev_source in ("hv20_proxy", "copied"):
+            cause = (
+                f"prior-day vol is a `{facts.iv_prev_source}` stand-in, not a chain mark, "
+                "so the market-vs-model gap cannot be measured"
+            )
+        elif rec is not None and not rec.marks_reliable_now:
+            cause = f"today's option quote tier is `{rec.quote_tier}`, not reliable"
+        elif rec is not None and not rec.marks_reliable_prev:
+            cause = "the prior-day option quote is not reliable"
+        else:
+            cause = f"reliable option marks were unavailable on {dates}"
+        lines.append(
+            f"  Escalation basis: method residual — {cause}; this run explains a "
+            "model price change, not a market price change."
+        )
+    return lines
 
 
 def _attribution_table(facts: PositionFacts) -> str:
@@ -131,21 +189,51 @@ def _residual_drill_section(
         "## 5. Residual Drill",
         "",
         f"* **Taylor residual**: `{_money(facts.attribution[-1].usd)}` "
-        f"({facts.residual_pct:.1f}% of |model|)",
+        f"({_pct_mag(facts.residual_pct)} of |model|)",
     ]
     if findings.get("terminal_unexplained_break"):
         lines.append(
             "* **Terminal break**: diagnostic budget exhausted with large unexplained "
-            "residual/gap — escalate to human review before trading on factor stories."
+            "residual/gap; the factor story is not reliable and needs human review."
+        )
+    taylor_regime = findings.get("taylor_regime")
+    if taylor_regime == "INVALID":
+        r_spot = findings.get("r_spot")
+        lines.append(
+            "* **Regime**: the move this day is outside the range where a Taylor "
+            f"expansion is valid (r_spot = {r_spot:.2f})." if r_spot is not None
+            else "* **Regime**: the move this day is outside the range where a "
+            "Taylor expansion is valid."
+        )
+        lines.append(
+            "  The Greek decomposition below is shown for reference; the headline "
+            "attribution comes from full revaluation."
         )
     second = results.get("taylor_second_order")
     if second:
+        # A5.4: materiality folding -- a term earns its own line only if
+        # |term| >= max(0.01*|ΔP|, 0.01); smaller terms fold into one line.
+        materiality_floor = max(0.01 * abs(facts.total_pnl), 0.01)
+        vanna_pnl = float(second.get("vanna_pnl", 0.0))
+        volga_pnl = float(second.get("volga_pnl", 0.0))
+        term_lines: list[str] = []
+        folded = 0.0
+        if abs(vanna_pnl) >= materiality_floor:
+            term_lines.append(f"Vanna PnL: `{_money(vanna_pnl)}`")
+        else:
+            folded += vanna_pnl
+        if abs(volga_pnl) >= materiality_floor:
+            term_lines.append(f"Volga PnL: `{_money(volga_pnl)}`")
+        else:
+            folded += volga_pnl
+        if abs(folded) > 1e-12:
+            term_lines.append(f"other second-order: `{_money(folded)}`")
         lines.extend(
             [
                 "",
-                "### Second-order Taylor (Layer 3)",
-                f"* Vanna PnL: `{_money(second.get('vanna_pnl', 0.0))}` | "
-                f"Volga PnL: `{_money(second.get('volga_pnl', 0.0))}`",
+                "### Second-order Taylor (Layer 3)"
+                + (" — reference only, see Regime above" if taylor_regime == "INVALID" else ""),
+                "* " + " | ".join(term_lines),
                 f"* Combined: `{_money(second.get('combined_pnl', 0.0))}` | "
                 f"Residual after: `{_money(second.get('residual_after', 0.0))}`",
             ]
@@ -189,6 +277,18 @@ def _residual_drill_section(
                 ),
                 f"* **Dividend PV effect** (European, same divs − no divs): "
                 f"`{_money(float(split.get('dividend_pv_effect') or 0.0))}`",
+                (
+                    f"* **Dividend coverage** (dividend / time value): "
+                    f"`{float(split.get('dividend_coverage')):.2f}` — "
+                    + (
+                        "early exercise is economically relevant"
+                        if split.get("ee_relevant")
+                        else "carry/theta case, not an early-exercise case"
+                    )
+                    if split.get("dividend_coverage") is not None
+                    and split.get("ee_relevant") is not None
+                    else "* **Dividend coverage**: n/a (no upcoming dividend or expiry data)"
+                ),
                 f"* **Vol (Taylor Vega PnL)**: `{_money(float(split.get('vega_pnl') or 0.0))}`",
                 f"* **Residual (Taylor ε)**: `{_money(float(split.get('residual_pnl') or 0.0))}`",
                 "* _Overlay only — not a trading edge. LSM/Heston stay diagnostic-only._",
@@ -211,10 +311,14 @@ def _diagnostic_summary_section(findings: dict[str, Any] | None) -> str:
         return ""
     tools = findings.get("tools_run") or []
     skipped = findings.get("skipped_tools") or []
+    from ..graph.diagnostic_controller import FREE_TOOLS, MAX_DIAGNOSTIC_TOOL_CALLS
+
+    costly = sum(1 for t in tools if t not in FREE_TOOLS)
     lines = [
         "### Diagnostic tool summary",
         "",
-        f"* **Tools run** ({findings.get('tool_calls_used', 0)}/3): "
+        f"* **Tools run** ({len(tools)} total; costly {costly}/{MAX_DIAGNOSTIC_TOOL_CALLS}, "
+        "free tools do not use the budget): "
         + (", ".join(f"`{t}`" for t in tools) if tools else "none"),
     ]
     if skipped:
@@ -355,7 +459,7 @@ def _watchlist_section(
     *,
     section: int = 7,
 ) -> str:
-    lines = [f"## {section}. Trading Desk Watchlist", ""]
+    lines = [f"## {section}. Risk Watchlist", ""]
     if diagnostic_findings and diagnostic_findings.get("terminal_unexplained_break"):
         lines.append(
             "* **Escalate**: terminal unexplained break — pause model tuning; verify marks and data clock."
@@ -364,7 +468,7 @@ def _watchlist_section(
         for bullet in synthesis.takeaways:
             lines.append(f"* {bullet}")
     else:
-        lines.append("* Monitor residual size and IV marks before sizing follow-on trades.")
+        lines.append("* Monitor residual size and IV marks.")
     if facts.american.next_ex_div:
         lines.append(
             f"* **Assignment watch**: ex-div `{facts.american.next_ex_div}` — "
@@ -415,8 +519,13 @@ def render_position_report(
                 "* **Verifier**: PARTIAL — narrative shipped with caveats (reflect applied)."
             )
         elif vstatus == "FAIL":
+            flags = ", ".join(diagnostic_findings.get("terminal_verifier_flags") or [])
+            violation = str(diagnostic_findings.get("terminal_violation") or "").strip()
             sections.append(
-                "* **Verifier**: FAIL — hard policy violation; escalate before trading on story."
+                "* **Verifier**: FAIL — hard policy violation"
+                + (f" ({flags})" if flags else "")
+                + "; the factor story is not reliable."
+                + (f" {violation}" if violation else "")
             )
     sections.extend(
         [

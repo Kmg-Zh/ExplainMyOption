@@ -8,7 +8,7 @@ from typing import Literal, Optional, Sequence
 
 OptionType = Literal["call", "put"]
 ExerciseStyle = Literal["american", "european"]
-DataSource = Literal["synthetic", "yfinance"]
+DataSource = Literal["synthetic", "yfinance", "historical"]
 IvPrevSource = Literal["fixture", "chain_t1", "hv20_proxy", "copied"]
 RateSource = Literal["fixture", "irx", "default"]
 EngineId = Literal[
@@ -106,6 +106,13 @@ class MarketSnapshot:
     volume: Optional[float] = None
     open_interest: Optional[float] = None
     risk_free_rate_source: RateSource = "fixture"
+    # A6.2: per-date quote tier, "tight"|"normal"|"wide" (data.historical_chain's
+    # vocabulary) when known -- only HistoricalChainMarketLoader populates
+    # these today, since it is the only source that quotes t-1 directly
+    # rather than deriving iv_prev from a cache/HV20 proxy. None means
+    # unknown, which marks_reliable() treats as not reliable.
+    quote_tier_now: Optional[str] = None
+    quote_tier_prev: Optional[str] = None
 
     # Display / blotter scale. Engine PnL stays per 1 option.
     quantity: float = 1.0
@@ -227,6 +234,14 @@ class SecondOrderTaylorResult:
     combined_pnl: float
     residual_after: float
     limitations: list[str] = field(default_factory=list)
+    # A5.2: named per the spec, alongside (not replacing) the fields above.
+    # second_order_explained is combined_pnl under the spec's own name;
+    # residual_first_order is the *first-order Taylor* residual (pnl.residual_pnl)
+    # this correction is applied against, distinct from residual_after's
+    # existing (total_pnl - combined_pnl) definition.
+    residual_first_order: float = 0.0
+    second_order_explained: float = 0.0
+    residual_reduction_pct: float = 0.0
 
     def as_dict(self) -> dict:
         return asdict(self)

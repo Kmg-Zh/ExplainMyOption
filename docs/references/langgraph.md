@@ -13,7 +13,7 @@ Pin versions to what this repo actually uses (`requirements.txt`). Update links 
 - LangGraph overview: https://langchain-ai.github.io/langgraph/  
   Why: top-level concepts for this repo’s graph.
 - Graph API / `StateGraph`: https://langchain-ai.github.io/langgraph/concepts/low_level/  
-  Why: nodes, edges, state — matches `src/agent_graph.py`.
+  Why: nodes, edges, state — matches `src/explain_my_option/agent_graph.py`.
 - LangChain Core messages / runnables: https://python.langchain.com/docs/concepts/  
   Why: `SystemMessage` / `HumanMessage` in `diagnose_node`.
 - `ChatOpenAI` (langchain-openai): https://python.langchain.com/docs/integrations/chat/openai/  

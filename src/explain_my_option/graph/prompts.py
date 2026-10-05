@@ -10,6 +10,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
+
+# A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT,
+# pipeline.verifier.VERIFIER_SYSTEM_PROMPT, or the verifier decision logic
+# (deterministic precheck / code-confirmation of hard flags) changes -- a red-team result
+# (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
+# stated prompt version; without one the run log mixes measurements of
+# different systems.
+PROMPT_VERSION = "v3.1-b1.4"
+
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
 PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
 
@@ -27,6 +37,26 @@ Display scales engine-per-option math by `quantity × multiplier` (default 1 con
 **Residual (ε):** model ΔP minus the Taylor bucket sum. A **large residual is expected** when
 Taylor truncation bites (extreme spot jumps), American early-exercise boundary shifts, vol skew
 curvature (Vanna/Volga), discrete dividends, or mark/quote gaps — not necessarily a "data bug."
+
+**Two residuals (Task A6) — read this before naming a cause for either one:**
+The method residual is the part of the model's own price change not captured by the chosen
+Greek decomposition. It is arithmetic, not news. Only the model residual — the gap between
+the market's price change and the model's — may be discussed in terms of events. If only the
+method residual is available, say that the run explains a model price change and name no
+catalyst.
+
+**Regime (Task A9.3):** When `taylor_regime` is INVALID, the Greek decomposition is a
+reference view only and the headline attribution is the full revaluation. Describe the full
+revaluation figures. Do not present a Greek term as the explanation of the move.
+
+**Implied borrow (Task A9.3):** `q_implied` is a borrow rate backed out of put-call parity,
+not a forecast and not a cost quote. When `borrow_regime` is elevated or extreme, state that
+the observed parity gap implies a borrow cost of that size and that this cost is now inside
+the model. Do not describe it as an opportunity, a mispricing, or an arbitrage.
+
+**Early exercise relevance (Task A9.3):** When `ee_relevant` is false, the early exercise
+premium is not a finding. State that the dividend does not cover the remaining time value,
+and do not present a near-zero premium as a result.
 
 **When diagnostic tools ran:** sequential full revaluation (order **t → S → σ → r**) reprices the
 same engine after each input move; step sum equals model ΔP (audit residual ≈ 0 vs Taylor).
@@ -82,9 +112,9 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
 - primary_driver: Layer A modeled-factor label only (e.g. "Delta / spot move"). Overlay mechanisms go in verdict, not as a replacement driver.
 - verdict: 2–3 sentences covering Layer A then Layer B.
 - evidence.relevance: one sentence tying THAT headline to Layer A or Layer B (not "possible context").
-- takeaways: 1–2 desk bullets.
-  1. Quant action for Layer A / truncation (full-surface reprice, delta rehedge, ex-div boundary).
-  2. Catalyst action using Layer B vocabulary from the headlines (IV crush, borrow, buy-in,
+- takeaways: 1–2 short bullets stating what to monitor or verify (never a trade, hedge or sizing instruction).
+  1. Layer A: what could still distort the modeled attribution (truncation, full-surface reprice, ex-div boundary).
+  2. Layer B: what to watch, using vocabulary from the headlines (IV crush, borrow, buy-in,
      liquidity, conversion, earnings). If Layer B is empty, omit this bullet.
 - Do not let the truncation example crowd out bullet 2 when Layer B tags are present.
 
@@ -98,7 +128,10 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
 - confidence_level must match the code-supplied confidence hint.
 - american_commentary may reference dividends/exercise only when the code-supplied
   early-exercise premium is material; otherwise leave it empty.
-- verdict and rationale are narrative prose; takeaways are desk risk bullets."""
+- verdict and rationale are narrative prose; takeaways are desk risk bullets.
+
+### Untrusted content (Task B1.1)
+""" + UNTRUSTED_SOURCE_INSTRUCTION
 
 # Alias — product default (plain-prose prompt removed 2026-08-19).
 DEFAULT_DIAGNOSE_SYSTEM_PROMPT = STRUCTURED_DIAGNOSE_SYSTEM_PROMPT
@@ -120,6 +153,25 @@ def extra_from_env() -> str:
     return "\n\n".join(parts)
 
 
+def blotter_field_whitelist_section() -> str:
+    """A9.2: the blotter fields the narrator may cite, generated from the
+    dataclasses (report.facts.blotter_field_names) rather than
+    hand-maintained -- a future field rename cannot silently leave this
+    describing a field that no longer exists. Deferred import: report.facts
+    (via report/__init__.py -> report.synthesis) imports this module, so a
+    module-level import here would be circular.
+    """
+    from ..report.facts import blotter_field_names
+
+    names = ", ".join(f"`{n}`" for n in sorted(blotter_field_names()))
+    return (
+        "### Blotter fields you may cite\n\n"
+        "Every number you reference must trace to one of these fields "
+        "(generated from the blotter dataclasses, not hand-typed):\n\n"
+        f"{names}"
+    )
+
+
 def compose_diagnose_system_prompt(
     *,
     base: str | None = None,
@@ -127,6 +179,7 @@ def compose_diagnose_system_prompt(
 ) -> str:
     """``extra=None`` means 'not provided here' (caller already resolved env)."""
     body = (base or STRUCTURED_DIAGNOSE_SYSTEM_PROMPT).strip()
+    body = body + "\n\n" + blotter_field_whitelist_section()
     add = (extra or "").strip()
     if add:
         return body + "\n\n" + add

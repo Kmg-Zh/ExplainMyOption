@@ -1,0 +1,103 @@
+{
+  "baseline_as_of": "2026-09-17",
+  "purpose": "Task C3.1: the 30-day live-book run log. All legs opened at >=35 DTE so none expires inside the 30-day window -- no roll policy needed. Real, live-quoted contracts discovered this session (yfinance), not invented.",
+  "sizing_rule": "1 contract (multiplier 100) per leg, uniformly, across all 8 legs. Underlyings range from $2 (PLUG) to $754 (SPY), so this is not equal notional exposure -- it is the simplest defensible rule (no leg is deliberately over- or under-sized relative to the others by contract count) and matches how a small paper book is naturally sized. Per-leg PnL, not book-level notional-weighted PnL, is the reported unit throughout.",
+  "legs": [
+    {
+      "leg_id": "aapl_vertical_long",
+      "ticker": "AAPL",
+      "option_type": "call",
+      "strike": 325.0,
+      "expiry": "2026-11-20",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "Vertical spread leg 1/2 (long). 64 DTE at inception (nearest listed expiry >=45 DTE). Spot ~332.41 on 2026-09-17."
+    },
+    {
+      "leg_id": "aapl_vertical_short",
+      "ticker": "AAPL",
+      "option_type": "call",
+      "strike": 350.0,
+      "expiry": "2026-11-20",
+      "exercise_style": "american",
+      "quantity": -1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "Vertical spread leg 2/2 (short). Same expiry as aapl_vertical_long -- offsetting Greeks across strikes."
+    },
+    {
+      "leg_id": "jpm_straddle_call",
+      "ticker": "JPM",
+      "option_type": "call",
+      "strike": 350.0,
+      "expiry": "2026-10-23",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "Straddle leg 1/2. 36 DTE at inception. JPM reports earnings 2026-10-13 (real date, yf.Ticker('JPM').get_earnings_dates()) -- inside this leg's own expiry window, so a vol crush is expected before this contract's own expiry, and the leg becomes short-dated gamma by day 30."
+    },
+    {
+      "leg_id": "jpm_straddle_put",
+      "ticker": "JPM",
+      "option_type": "put",
+      "strike": 350.0,
+      "expiry": "2026-10-23",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ATM",
+      "notes": "Straddle leg 2/2. Same strike/expiry as jpm_straddle_call."
+    },
+    {
+      "leg_id": "spy_reversal_put",
+      "ticker": "SPY",
+      "option_type": "put",
+      "strike": 715.0,
+      "expiry": "2026-11-20",
+      "exercise_style": "european",
+      "quantity": -1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "Risk reversal leg 1/2 (short put, ~5.2% OTM at inception -- nearest listed strike to a 25-delta approximation; actual delta recorded per-run, see skew_proxy in the daily report). 64 DTE at inception. Spot ~754.05 on 2026-09-17."
+    },
+    {
+      "leg_id": "spy_reversal_call",
+      "ticker": "SPY",
+      "option_type": "call",
+      "strike": 795.0,
+      "expiry": "2026-11-20",
+      "exercise_style": "european",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "Risk reversal leg 2/2 (long call, ~5.4% OTM at inception, same approximation note as spy_reversal_put). Bullish risk reversal; the two legs' IVs are the thing being tracked, not a directional bet."
+    },
+    {
+      "leg_id": "vz_div_call",
+      "ticker": "VZ",
+      "option_type": "call",
+      "strike": 45.0,
+      "expiry": "2026-11-20",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "ITM",
+      "notes": "ITM call on a dividend payer. VZ real dividend yield ~5.69%, ex-div 2026-10-08 (real, yf.Ticker('VZ').info) -- inside this leg's 45+ day window. Spot ~49.76 on 2026-09-17, so this strike is real ITM. Chosen for a real shot at ee_relevant=True (A2.3's dividend_coverage>1 gate) given the high yield, not guaranteed."
+    },
+    {
+      "leg_id": "plug_deep_otm",
+      "ticker": "PLUG",
+      "option_type": "call",
+      "strike": 4.0,
+      "expiry": "2026-12-18",
+      "exercise_style": "american",
+      "quantity": 1.0,
+      "multiplier": 100.0,
+      "moneyness_at_pin": "OTM",
+      "notes": "Deep-OTM leg on a less liquid name (PLUG, spot ~$2.02 on 2026-09-17 -- strike is ~2x spot). 92 DTE at inception. Deliberately picked for wide/unreliable quotes so the escalation_basis='method' path fires in production, not just in a constructed fixture."
+    }
+  ]
+}

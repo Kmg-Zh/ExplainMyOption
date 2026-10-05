@@ -1,162 +1,493 @@
-# Work order report — Phase 0 + Phase 1 (v2 spec)
+# Work order report — v3.1 spec, Phase A (A1–A9) + B1–B4 + C1–C3 + D1–D4
 
-Covers §0.4 (discovery) and Phase 1 (Tasks 1–2) of the "ExplainMyOption
-Improvement Work Order v2" only — a 15-task, 9-phase spec supplied outside
-this repo. Phases 2–9 were not attempted in this pass — see `NOT DONE` below
-for why. Branch: `phase1/quant-correctness`.
+Supersedes the prior version of this file, which covered only Phase 0/1 of
+an earlier v2-numbered spec (`branch phase1/quant-correctness`, merged to
+`main` in `65c0bfd`). That work is still valid — v2's Task 1/Task 2 are
+v3.1's A1/A2 — and is folded into `DONE` below under its v3.1 numbers.
+Everything from A2.3 onward was done on branch
+`fix/pinned-book-test-2026-09-14`, against the "ExplainMyOption
+Implementation Work Order v3.1" (private, supplied outside this repo).
 
 ## DONE
 
 | Task | Commit | What |
 |---|---|---|
-| §0.4 Discovery | `b7d937e` | `docs/dev/CODE_MAP.md` — verified signatures, QuantLib 1.43 dividend/engine wiring, the actual early-exercise-premium defect, the market-data port (already extraction-ready), unit conventions. |
-| Task 1 | `6b3f6d8` | `tests/ci/test_pricing_invariants.py` — 8 invariant checks (put-call parity w/ discrete dividends, American call = European when q=0, early-exercise non-negativity, FDM grid convergence, bumped Greeks vs closed-form BS, Taylor decomposition identity, published American put benchmarks, unit conventions). Registered in `scripts/run-tests.sh`. |
-| Task 2 | `8401b39` | Fixed `early_exercise_premium` in `pricing/facade.py` to compare American vs European on the same FDM grid and dividend schedule; added `dividend_pv_effect` and `ee_premium_anomaly`; threaded through diagnostics/report layers; regenerated 7 golden reports; updated `docs/case-studies/aapl_exdiv_attribution.md`. |
+| Pre-existing test fix | `10ebd14` | `tests/live_book/test_portfolio_mixed.py::test_pinned_book_has_ten_fixed_contracts` asserted the 2026-09-01 pinned book's values after `main` had already rolled to `book_2026-09-14.json` (`ddf9193`, predates this branch). Updated assertions to match. |
+| A1 (pre-session) | `6b3f6d8` (main) | `tests/ci/test_pricing_invariants.py` — 8 invariant checks. |
+| A2 (pre-session) | `8401b39` (main) | Signed, non-floored `early_exercise_premium` on the same FDM grid/dividend schedule; `dividend_pv_effect` added. |
+| A3 | `c900091` | `data/observation.py` — `ObservationStatus`, the continuity gate (`NoComparableObservationError`), `check_basis_consistency`. Wired into `data_loader.py` (live path's two real failure modes) and `leg_graph.py`'s `fetch_market_node`. |
+| A2.3 | `6fe4b7b` | `dividend_coverage` / `ee_relevant` economic screen on `AmericanFacts`. |
+| A4 | `6b27be9` | `data/historical_chain.py` — DoltHub adapter, quote hygiene, implied borrow, IV inversion (reused `pricing.calibrate.implied_vol_flat`), the two verified real cases, A4.6 fixture relabeling. |
+| A5 | `dee2c64` | Tool-budget reclassification (A5.1), `taylor_regime` (A5.3), materiality folding (A5.4), `aapl_exdiv_2023` "Where the residual went" (A5.5). |
+| A6 | `30ce560` | ε_method / ε_model split, `escalation_basis`, verifier rule `method_residual_blamed`. |
+| A7 | `3ed21ff` | `no_escalation` terminal state, `scripts/find_quiet_days.py`, verifier rule `quiet_day_confabulation`. |
+| A8 | `d5922a3` | `docs/case-studies/vow_float_squeeze_2008.md` — EUR currency, the two required paragraph replacements, `$` → `€`. |
+| A9 (user-added) | `c6609f8` | `llm_calls` counter (A9.1) + test; generated blotter-field whitelist in the narrator prompt (A9.2) + sync test; regime/implied-borrow/ee_relevant verbatim prompt text (A9.3); `prohibited_phrase` verifier rule for trade-advice language (A9.4); `PROMPT_VERSION` in the live-book run manifest (A9.5). |
+| B1 (B1.1, B1.4) | `459c745` | `data_loader.format_untrusted_source`/`format_untrusted_news_item` — every news headline/digest brief entering any of the four LLM prompts (digester, narrator, challenger, verifier) now goes in a delimited `<untrusted_source>` block with escaped breakout attempts. The required instruction text added to all four system prompts. `injection_observed: bool` added to `IntelDigest`/`DiagnosticSynthesis`/`CatalystChallenge`. `tests/ci/test_injection_containment.py`. |
+| B2 | `b715140` | `scripts/generate_redteam_cases.py` — 56 attack cases across 9 categories, built from 4 real `PositionFacts` blotters (two real DoltHub chains, one real quiet day, one stress fixture), written to `tests/redteam/attack_cases.json`. `scripts/run_redteam.py` — runs every case N=3 through `verifier.deterministic_precheck` + a fixed baseline-PASS mock, writes `docs/studies/redteam_results.md` with detection/miss/false-alarm/stability rates, per-category table, full confusion matrix, and every individual miss named. `tests/ci/test_redteam_framework.py` — CI smoke test (schema/import drift only, not a full 56-case re-run). |
+| B3 | `9dfde71` | `pipeline/llm_roles.py` — `OpenAiRole.seed` (fixed, default `0`), passed through to `ChatOpenAI`; `llm_run_metadata()` records model/temperature/seed for every configured role in one place, wired into the live/offline-through-graph run manifest (`tests/live_book/portfolio_e2e.py`). `tests/ci/test_determinism_quant.py` — 4 fixtures/real cases, each run 3× through `price_and_attribute` + `build_position_facts`, asserted bit-identical (`==`, not a tolerance) on both `pricing.as_dict()` and the `PositionFacts` dataclass. `tests/live_book/test_determinism_llm.py` — the real narrator+verifier path (not a mock), same fixture 3×, requires `OPENAI_API_KEY` (not in `run-tests.sh`, same convention as `historical/run.py`); actually run this work against `gpt-5.4-mini`, passed. |
+| B4 | `a1c277d` | `app.py --no-llm` — the quant path only (data fetch, pricing, PnL attribution, `fallback_synthesis`), zero LLM calls, no `OPENAI_API_KEY` needed; `tests/ci/test_no_llm_flag.py`. `scripts/agent_budget_study.py` — runs the real leg graph for the 10 offline legs + 2 real historical cases through a real `gpt-5.4-mini`, writes `docs/studies/agent_budget.md` (wall-clock per stage, tokens/cost by role, `tools_run`/skip-reason/terminal-state distributions). Found and fixed a real bug in the process: `report/synthesis.py::synthesize_diagnosis` built its own bare `ChatOpenAI` from `EMO_LLM_MODEL` instead of using the `role` the graph passed in, silently ignoring B3's seed pin and making narrator cost/tokens unobservable — see FINDING below. `pipeline/leg_graph.py` gained observability-only `stage_timings` (per-node wall clock) and `OpenAiRole.last_usage` (per-call token usage), both hardening, no topology/decision change. |
+| A9.4 (remainder) | `354cf76` | The 9 red-team cases deferred at B2 time (framework didn't exist yet) — one per `PROHIBITED_TRADE_ADVICE_PHRASES` entry (`arbitrage`, `mispricing`, `mispriced`, `free money`, `riskless`, `opportunity`, `should have`, `cheap`, `rich`), added to `non_dollar_fabrication` in `scripts/generate_redteam_cases.py` with `expected_flag="prohibited_phrase"`. `attack_cases.json` grew from 56 to 65 cases; `docs/studies/redteam_results.md` regenerated — detection rate rose from 57.9% to 66.0% (all 9 new cases detected deterministically; `non_dollar_fabrication`'s own rate rose from 1/6 to 10/15 since the phrase check, unlike the vol-points/share-count/date checks, already existed and just lacked test coverage). |
+
+| C1 | `d422d92` | `scripts/generate_samples.py` — 5 committed sample reports from real runs (`docs/samples/`): `sample_abstain.md` (real GME data, scripted narrator, disclosed — see FINDING #20), `sample_quiet_day.md` (real AAPL quiet day, `no_escalation`), `sample_real_chain.md` (real AAPL ex-div, reconciled marks), `sample_no_llm.md` (live `app.py --no-llm`), `sample_injection_contained.md` (`vol_crush` fixture + injected headline, `injection_observed=True` — see FINDING #21). `docs/samples/README.md` states command/model/data-source/real-vs-synthetic per file, per C1's own requirement. Superseded the pre-v3.1 3-file sample set (`live.md`/`historical.md`/`unexplained_break.md`, removed); `tests/ci/test_repo_layout.py::test_docs_samples_are_committed_product_reports` updated to check the new 5 files. |
+| C2 | `8b7b392` | README rewrite, exactly the edits C2.1–C2.6 specify: two-sided thesis lead, the `LangGraph is the runtime` sentence, `## What is proven offline` → `## What the offline suite covers` + the redteam-results pointer paragraph, new `## Validation` (the 8-row invariants table) and `## Two residuals` and `## Regime rule` sections (the last with a real 5-case `r_spot`/`r_vol`/`\|ε_method\|/\|ΔP\|` table, computed this work), the A5.2 extended attribution formula, 3 new `## Scope` bullets. `## Sample output` also rewritten to match C1's new file set (not one of the numbered C2 sub-edits, but required since the old set it linked no longer exists). C2.6's "delete `No historical option chain.`" and the diagram-placement requirement were already satisfied by earlier A4.6/A5.2 work and the file's existing structure respectively — confirmed, not re-done. |
+
+| C3 (infra + day 1) | `5515e0b` | `docs/runlog/book.json` — 8 real, live-discovered legs (Task C3.1: 2-leg AAPL vertical spread, 2-leg JPM straddle spanning JPM's real 2026-10-13 earnings, 2-leg SPY risk reversal, 1 ITM VZ call ex-div 2026-10-08, 1 deep-OTM PLUG call), all ≥35 DTE at inception (nearest listed expiry ≥ target), so no roll policy is needed inside the 30-day window. C3.2 (per-expiry/per-strike IV keying) needed no migration — `data/cache.py`'s schema already keys on `(ticker, expiry, strike, option_type, as_of)`, not ticker alone; the spec's own worry doesn't apply to this codebase (FINDING below). `scripts/daily_run.py` — prices all 8 legs through the real graph, computes the C3.3 skew proxy for the SPY pair, records C3.4's `legs_narrated`/`legs_silent`/`llm_calls` (reusing A7's existing `no_escalation` gate, not new logic), writes `docs/runlog/YYYY-MM-DD/report.md` + appends to `docs/runlog/metrics.jsonl` in the spec's exact schema. Also caches every leg's snapshot (`data.cache.upsert_snapshot`) so day 2 has a real t-1. Ran for real today (2026-09-17, day 1): 8/8 legs priced, 8 real LLM calls, $0.0365, all 8 PARTIAL. `tests/ci/test_runlog_book.py` — offline structural checks on the book file. Two real bugs found and fixed in the process of building this, not the shipped pipeline — see FINDINGS below. |
+| Post-spec: verifier prompt fixes (live-book incidents) | `5ef7b51`, `be66feb` | The live 30-day runlog surfaced two real verifier false-positive patterns by day 7, found by reading the actual `terminal_unexplained_break` rationale text, not by inspection: (1) the verifier hard-failing correct model-language ("higher-order convexity/path effects", "truncation and path effects") as `method_residual_blamed` — that flag is for blaming an *external* cause, not ordinary model vocabulary; caused 2 of the first 4 escalations. (2) the verifier hard-failing generic desk-hygiene language ("continue standard hedging", "keep vol hedges tight", "reprice the book on the full surface") as `prohibited_phrase`, even though none of it is one of A9.4's 9 literal banned words — caused a 3rd escalation, and (found while validating fix 1) was independently the dominant cause of the B2 red-team study's own false-alarm rate (10/10 `clean_control` cases pass only 4/10 before this fix). `VERIFIER_SYSTEM_PROMPT` now explicitly lists what does *not* count as either violation; `PROMPT_VERSION` bumped both times (`v3.1-b1.1` → `v3.1-b1.2` → `v3.1-b1.3`) per its own instruction, and is now also recorded on every `docs/runlog/metrics.jsonl` line (added retroactively for future rows — the 7 rows written before 2026-09-27 predate the field and don't have it). Both fixes validated against a real `gpt-5.4-mini` verifier: all real incidents now PASS, all genuine red-team violations (`method_residual_blamed` 4/4, the 9 literal-word `prohibited_phrase` cases, all deterministic and unaffected) still correctly FAIL. `docs/studies/redteam_results.md` (`--live`) went from 91.5%/10.0% (detection/false-alarm) before either fix to 93.6%/0.0% after both. |
+| D1 (packaging) | `2a2c07a` | Confirmed the exact bug the spec names, not just its theoretical possibility: `pyproject.toml` declared `explain-my-option = "app:run_cli"` while `[tool.setuptools.packages.find]` only packages `src/` — `app.py` lives at the repo root, so it is never installed, and the console script raised `ModuleNotFoundError: No module named 'app'` after a real `pip install .`. Moved the full CLI/Streamlit implementation to `src/explain_my_option/cli.py` (root `app.py` is now a ~30-line delegator, kept only so `python app.py`/`streamlit run app.py` still work from a checkout); entry point now `explain_my_option.cli:run_cli`. Verified for real, not just read — `pip install -e . --no-deps`, then ran the actual installed `explain-my-option --fixture vol_crush` from `/tmp` (outside the repo, no `PYTHONPATH`): works. `python app.py`/`--no-llm`/`streamlit run app.py` behavior unchanged; `tests/ci/test_no_llm_flag.py` (imports `app` directly) still passes. |
+
+`./scripts/run-tests.sh` passes all 43 registered CI modules and `pytest tests/ci`
+collects the same suite (re-verify below).
+| Pre-merge hardening: scheduling | `ec15e92`, `3e31ebc` | The two launchd wrappers are now tracked, resolve `ROOT` from their own location, auto-commit only `tests/live_book/pinned_books/` (the old `git add docs/samples` had silently re-committed three stale sample files, `445efa1`), exit non-zero on failure (the refresh job had been failing every day since 2026-09-28 with launchd showing exit 0), and log `PINNED BOOK EXPIRED`. `docs/dev/SCHEDULING.md` + example plists. |
+| Pre-merge hardening: live-book re-pin | `5a292eb` | The 10-leg `live_book` pinned book now uses 2026-12-18 monthlies (`book_2026-10-05.json`, found with `resolve_live_contract(min_days=60)`) instead of weeklies that expired within days; the pin test checks structure, not literal strikes/expiries, so a re-pin no longer needs a test edit. |
+| Pre-merge hardening: philosophy | `c00ccf9` | Removed trade/hedge advice from product output (deterministic fallback takeaways, template escalation lines, narrator prompt now asks what to *monitor or verify*); added a soft `hedge_advice` check (PARTIAL, never a hard FAIL — only the 9-word literal list is hard); clamped absurd display percentages (`>1000%`) and made the run-log residual a median over legs with a valid denominator; red-team default takeaway and `prompt_injection` fixtures made neutral and code-consistent. |
+| B1.3 + escalation audit + guard (`v3.1-b1.4`) | `9409f17` | `verify_synthesis` now keeps an LLM hard FAIL only if a deterministic check reproduces it (else PARTIAL, `unconfirmed_hard_flag`, LLM verdict kept in `llm_verdict`); terminal breaks record the flags and the violation sentence; `docs/runlog/YYYY-MM-DD/audit.json` stores every candidate and verifier verdict; `evidence_provenance_errors` enforces `published <= as_of` within 7 days (the B1.3 date window, FINDING #15). |
+| D2–D4 | `6cd82de`, `9802b92` | Upper-bound pins in `pyproject.toml`/`requirements.txt`, `requirements.lock` compiled for Python 3.11, `dev` extra, GitHub Actions CI (3.11 + 3.12, offline), MIT `LICENSE`, DoltHub CC BY-SA 4.0 attribution (`ACKNOWLEDGMENTS.md`, fixtures README), yfinance terms note. |
 
 ## FINDINGS
 
-Recorded here per §0.2.1 (never weaken a failing check, never silently
-widen a tolerance) — every item below is a real defect or a real, checked
-numerical limit, not something papered over.
+Recorded per §0.2.1 — every item below is a real defect, real numerical
+limit, or a real design tension found while building the above; none
+papered over.
 
-1. **`price_european_flat`'s `discrete_dividends` argument is inert.**
-   `pricing/ql_engine.py:118-142` computes a `DividendSchedule` via
-   `build_bsm_process(...)` but never attaches it to `AnalyticEuropeanEngine`,
-   which only ever consumes the continuous-yield curve. Any caller passing
-   discrete dividends to this function gets silently ignored dividends. This
-   is a second, independent defect from the one Task 2 fixed (which used the
-   FDM engine, not this function, to route around it). Not fixed in this
-   pass — out of Phase 1 scope, and the callers that mattered for Task 2 no
-   longer rely on it for anything beyond a cross-check. Anyone touching this
-   function later should know it does not do what its signature implies.
-
-2. **Test 1.1 (put-call parity) could not validate discrete-dividend parity
-   through the analytic European engine**, for the same reason as (1). The
-   test instead validates the no-dividend case through the analytic engine
-   (tight, 1e-4·S) and the one/two-dividend cases through the FDM European
-   engine on the shipped grid (1e-3·S, per spec's own stated fallback
-   tolerance for the FDM case) — both pass.
-
-3. **Widely-cited American-option "reference value" tables are themselves
-   approximation formulas, not exact ground truth**, and disagree with this
-   repo's essentially-exact FDM engine by far more than a naive 5e-3
-   tolerance in most parameter regimes. Verified this session by fetching
-   `test-suite/americanoption.cpp` from QuantLib's own GitHub repo (raw
-   `curl`, not an AI-summarized fetch, specifically to avoid a transcription
-   error in a hard-coded numeric citation) and pricing every row against the
-   shipped engine:
-   - The `testBaroneAdesiWhaleyValues` table (Haug 1998, the parameters the
-     spec's own example most closely resembles): of the American-put rows
-     checked, none landed within 5e-3 once the underlying calendar-date
-     rounding (below) was controlled for; several differ by 1–3 cents on
-     options worth $2–$10.
-   - The `juValues` long-dated call table (Ju 1999, T=3.0 exactly, so no
-     date-rounding ambiguity at all — the cleanest possible comparison): of
-     20 rows checked, only 1 landed within 5e-3; the rest differ by
-     0.6 cents to 7.3 cents. This reflects the Ju/BAW approximation's own
-     known accuracy limits (larger dividend/rate spreads and longer
-     maturities), not a bug in the shipped FDM engine — Test 1.4's grid
-     convergence check and Test 1.6's exact Taylor identity both pass,
-     which they would not if the engine itself were unreliable.
-   - Task 1.7 instead uses Ju (1999)'s short-dated American **put** exhibit
-     (Exhibit 3, q=0, low vol), where the approximation is known to be
-     highly accurate; all 4 selected values land within 5e-3 (one matches
-     to 7e-15).
-
-4. **Whole-calendar-day expiries (`ql.Date`, Act/365Fixed) cannot exactly
-   reproduce a literature "T=0.10y" or "T=0.5y" target.** 0.10·365=36.5 and
-   0.50·365=182.5 are not integers, so any date built from a nominal T
-   carries a residual T-error of up to ±0.5/365 (≈0.14%). For short-dated,
-   near-the-money contracts this alone produced price errors above 5e-3
-   (observed: 0.012–0.013 on a $1.88 put). This is why Task 1.5's Greeks
-   cross-check advances `eval_date` by exactly one calendar day for the
-   theta/charm forward difference (exact under Act/365Fixed) instead of
-   re-deriving a new expiry from a shifted nominal T (which can round to
-   the same day, or a different day than intended, non-obviously) — and why
-   Task 1.7's benchmark selection above was constrained to cases where this
-   effect is small enough to still land inside 5e-3.
-
-5. **`test_fdm_grid_convergence` (Task 1.4):** shipped grid (t=200, x=400)
-   error vs the (800,800) grid = **0.000962** (0.00096% of S), which is
-   *below* the spec's 5e-4·S concern threshold (5e-4·100 = 0.05) — command:
-   `python tests/ci/test_pricing_invariants.py` (printed as "Task 1.4").
-   Observed convergence order printed no assertion failure — successive
-   differences shrink monotonically and land inside spec's `[0.8, 2.5]`
-   band (exact number is not separately logged; the test only fails outside
-   the band).
-
-6. **Vanna/Volga/Charm cross-check (Task 1.5):** all landed inside the
-   spec's 5e-2 soft tolerance for both call and put in this session's run —
-   no entries were appended to the in-file `FINDINGS` list for this check.
-   (The mechanism exists and is exercised by finding #7 below.)
-
-7. **Rho is not a field on the shipped `Greeks` dataclass**
-   (`pricing/types.py`). The §0.5 "raw ÷ 10000 → per bp" convention has no
-   corresponding shipped code path — `test_unit_conventions` records this
-   as an observation rather than skipping it silently.
-
-8. **Pre-existing, unrelated test failure**, not touched by this work:
-   `tests/live_book/test_portfolio_mixed.py::test_pinned_book_has_ten_fixed_contracts`
-   asserts `baseline == "2026-09-01"`, but `main` already pinned a newer
-   book (`tests/live_book/pinned_books/book_2026-09-14.json`, per commit
-   `ddf9193` predating this branch). Confirmed by stashing this branch's
-   changes and re-running against the Task-0.4-only commit — same failure.
-   Not caused by, or fixed by, Phase 1.
+1. **`fetch_irx_rate`/`fetch_irx_rate_as_of` (`data/rates.py`) divided
+   `^IRX` by 100 only when the raw value was `> 1.0`.** Wrong during
+   near-zero-rate regimes where `^IRX` itself prints below 1 — GME's
+   2021-01-25 rate read back as 7% instead of 0.07%. Fixed: always divide
+   by 100 (`^IRX` is always a percent quote). Confirmed against
+   `docs/dev/DATA_SOURCES.md`'s independently-verified `r=0.0008`.
+2. **yfinance's historical `Close` is always split-adjusted**, even with
+   `auto_adjust=False` (that flag only toggles dividend adjustment) —
+   confirmed empirically for GME's 2022-07-22 4-for-1 split. This is why
+   an earlier pass (pre-v3.1, recorded in `docs/dev/DATA_SOURCES.md`)
+   stopped rather than risk a guessed correction. v3.1's A4.5 explicitly
+   asks for the documented correction instead:
+   `_as_traded_close()` multiplies by the cumulative split ratio from
+   `yf.Ticker(...).splits` (not a hardcoded constant). Verified:
+   `19.1975 * 4 = 76.79000091552734`, matching the independently-confirmed
+   as-traded close to 7 significant figures; `check_basis_consistency`
+   (A3.5) now passes for both GME dates.
+3. **DoltHub's `option_chain` table has no volume/open_interest columns**
+   — its `vol` column is implied volatility, not trading volume. A4.2's
+   `volume > 0 OR open_interest > 0` hygiene check cannot be evaluated
+   against this source; `HygieneResult.volume_oi_check_applicable` is
+   hardcoded `False` and recorded, not silently dropped.
+4. **The scarce deep-tool-slot bug (A5.1's stated motivation) existed in
+   two independent places**, not one. `graph/diagnostic_controller.py`'s
+   `_pick_deep_tool` was the one the spec named; `pipeline/
+   diagnostic_loop.py`'s `choose_a2_tool` (the react loop `leg_graph.py`
+   runs *after* the initial pass) had the identical
+   `taylor_second_order`-vs-`path_reprice` severity-band exclusivity,
+   independently. Fixed both; `choose_a2_tool` no longer offers
+   `taylor_second_order` at all (it already ran, free, upstream).
+5. **A7.2's "zero costly tools" requirement is unsatisfiable as originally
+   scoped.** `reconcile_mark_vs_model` and `quote_quality_and_noise_band`
+   were classified `costly` after A5.1, but they are the tools that
+   *compute* the severity metric a quiet day is recognized by — a pass
+   cannot know it's quiet without running them. Reclassified both `free`
+   (they meet A5.1's own definition: pure arithmetic on already-computed
+   facts, no repricing/network/LLM). Consequence: only one costly slot
+   (the deep tool) remains per pass, so `MAX_DIAGNOSTIC_TOOL_CALLS`
+   dropped from 3 to 1 to match — a stale 3 would have made
+   `terminal_unexplained_break` permanently unreachable (`tool_calls_used`
+   could never reach 3 again). Verified against
+   `test_governance_scorecard.py`'s budget-exhaustion case, still passes.
+6. **A low `escalation_metric_pct` alone does not mean "nothing
+   happened."** Found via the pre-existing `vol_crush` fixture:
+   `escalation_metric_pct=4.35%` (would pass A7.2's ratio gate) but
+   `total_pnl=-$1.47` — an order of magnitude larger than the three real
+   quiet days' `$0.03`–`$0.11`. A dramatic move the Taylor decomposition
+   explains well is not the same as a quiet day. Added a second,
+   absolute-magnitude gate (`NO_ESCALATION_MATERIALITY_PCT_OF_MID` = 5%
+   of mid, or a `$0.50` floor without reliable marks) — provisional, like
+   `TAYLOR_REGIME_THRESHOLD`, and would benefit from a larger case table.
+   Four other existing synthetic fixtures (`american_call_div`,
+   `american_put_div`, `flat_only`, `deep_itm_exdiv`) had the same
+   low-ratio/large-PnL shape and are excluded by the same guard.
+7. **`scripts/find_quiet_days.py` never found an MSFT survivor** within
+   its checked-candidate budget (60 candidates, round-robin across AAPL/
+   MSFT/SPY) — every MSFT candidate that passed the cheap local checks
+   failed DoltHub's quote-tier check. Not investigated further (each
+   DoltHub query costs 45–55s); recorded in
+   `tests/ci/fixtures/quiet_days/README.md`. The 5 quiet days found span
+   only AAPL and SPY.
+8. **A3's continuity gate caught a real coverage gap while building A7's
+   cases**: `AAPL 172.5C exp 2023-11-17` was `CONTRACT_MISSING` on
+   2023-10-20 (present the next trading day) — not a bug, evidence the
+   gate works. Substituted with a validated alternative
+   (`quiet_spy_2023-04-24`) rather than forcing the original.
+9. **(Resolved — template heading is now "Risk Watchlist" (`5fa5c05`) and the
+   advice wording was removed in `c00ccf9`; text below is the original record.)**
+   **`report/schema.py`'s `DiagnosticSynthesis.watchlist` field is
+   described to the LLM as "Actionable risk watchlist bullets for the
+   trading desk,"** and `report/template.py::_watchlist_section` renders
+   a `"## N. Trading Desk Watchlist"` heading in every product report —
+   both matched the A8 grep for prohibited language ("watchlist") and sit
+   in real tension with §0.3's "no trade advice" red line, since
+   "actionable" is instructing the LLM toward exactly that. **Not fixed
+   in this pass** — A8's stated scope is the single VW walkthrough file;
+   changing the schema/template touches every report this product
+   generates and deserves its own task and commit, not scope creep inside
+   A8. Grep results in full (`grep -rniI "action item|watchlist|
+   recommend|should" src tests docs README.md AGENTS.md`, filtered to
+   drop `tests/ci/golden`, `output/`, `private/`): "action item" — zero
+   hits anywhere. "watchlist" — `report/schema.py:39`,
+   `report/synthesis.py:515`, `report/template.py:428,435,541`,
+   `tests/ci/test_report_template.py:52`, `tests/historical/run.py:180`,
+   `docs/samples/{unexplained_break,historical,live}.md`,
+   `docs/knowledge/pnl-attribution-framework.md:81,134`,
+   `docs/samples/README.md:13`, `README.md:67`. "recommend" —
+   `docs/references/third-party-rules.md:14` (about a LangChain API
+   choice, unrelated) and this file's own A8 replacement text
+   (`vow_float_squeeze_2008.md:88`, "observations, not recommendations" —
+   the fix, not a violation). "should" — no user-facing hits; all in code
+   comments, docstrings, or test assertion messages (`tests/`, dev docs).
+10. **A4.3's "static arbitrage filter" (chain-wide monotonicity/convexity
+    re-check after the borrow correction) was not built.** The two
+    verified real cases only ever need the target contract's own quote
+    plus the borrow-implying strike pairs, not a full filtered chain;
+    building a general chain-wide filter with no second consumer to
+    validate it against felt like scaffolding ahead of need.
+    `EMO_MARKET_SOURCE` is documented (A4's module docstring) but not read
+    by any code path — constructing `HistoricalChainMarketLoader` always
+    needs explicit `as_of`/`prev_as_of` dates no env toggle alone can
+    supply.
+11. **The live narrator prompt is built by `graph/prompts.py`, reached via
+    `report/synthesis.py::synthesize_diagnosis` →
+    `compose_diagnose_system_prompt`** — not the inline `system = "Return
+    DiagnosticSynthesis JSON only..."` string in `pipeline/leg_graph.py`'s
+    `_synthesize_with_role`, which only runs for the non-`OpenAiRole`
+    (mock) branch used in tests. A9.3's verbatim prompt additions went
+    into `graph/prompts.py`'s `PRICING_ATTRIBUTION_CONTEXT`, confirmed by
+    tracing the real call path rather than assuming the more obviously-named
+    inline string was the live one.
+12. **`llm_calls` (A9.1) counts per-node execution, not per confirmed LLM
+    invocation, for `digest_news_node`/`challenge_catalyst_node`/
+    `verify_node`** — those three have internal short-circuits
+    (`run_intel_digest`, `run_catalyst_challenge`, and
+    `deterministic_precheck` inside `verify_synthesis`) that can return
+    without ever calling `role.structured_invoke`. Handled precisely for
+    all three (checking `digest.reason`, `challenge.suppress_reason`, and
+    `verdict.rationale` against `verifier.DETERMINISTIC_PRECHECK_RATIONALES`)
+    rather than left as a blind +1, since A9.1's own test needs the zero
+    case to be exactly right — but a future caller reading `llm_calls` for
+    cost accounting (Task B4/C3.4) should know the counting mechanism, not
+    just trust the number.
+13. **`pipeline/digest.py::_post_process_digest` silently dropped
+    `injection_observed`** — it rebuilds a fresh `IntelDigest` from the raw
+    LLM output's `relevant`/`background`/`discarded`/`brief`/`reason`
+    fields but never copied `injection_observed` through, so a digester
+    that correctly noticed and reported an injection attempt would still
+    report `False` after post-processing. Found by
+    `tests/ci/test_injection_containment.py::test_digest_reports_injection_observed_without_complying`,
+    which failed before the one-line fix. A real defect the B1.4 test
+    exists to catch, not a hypothetical.
+14. **B1.2 (constrained `figures[]` output with a `blotter_field`
+    reference) was not built as its own new mechanism.** The shipped
+    system already achieves the same intent more strongly:
+    `report/validate.py::validate_synthesis` bans dollar amounts,
+    percentages, and numeric PnL claims from LLM prose *entirely* (except
+    inside `evidence.headline`/`evidence.source`, where the system prompt
+    requires quoting a real headline near-verbatim) — a number can never
+    appear without a fixed rendering constraint in the first place, which
+    is a stronger guarantee than "a number is allowed but must reference a
+    real field." Building a parallel `figures[]` array would either
+    duplicate this guarantee or, if it relaxed the existing prose ban to
+    allow LLM-authored numbers again, weaken a currently-passing check —
+    prohibited by §0.3. Recorded as a deliberate implementation choice,
+    not a gap.
+15. **B1.3 (catalyst_name from a candidate list; dates fall in the search
+    window) is partially satisfied by an existing, differently-named
+    mechanism, not fully built.** `report/catalysts.py`'s
+    `CATALYST_TAGS`/`missing_catalyst_tags` already constrain which
+    catalyst *tags* a synthesis may cite to a code-supplied allow-list
+    (functionally the "candidate list produced by digest_news" B1.3
+    describes), but there is no literal `catalyst_name` field, and no
+    schema field carries a per-headline date at all — `EvidenceItem` has
+    `headline`/`source`/`relevance` only — so "dates must parse and fall
+    in the search window" cannot be checked today. Adding a date field to
+    `EvidenceItem` and a window-validation rule is a real, still-open gap,
+    deferred rather than built as a rushed schema extension this work.
+16. **B2's measured detection rate (66.0% as of A9.4's additions; 57.9% at
+    B2's original 56-case set) is honest but not a model measurement** —
+    no `OPENAI_API_KEY` is configured in this environment,
+    so every case that `deterministic_precheck` does not intercept falls
+    through to a fixed baseline mock that always returns `PASS`
+    (`_BaselineRole` in `scripts/run_redteam.py`). This measures the
+    deterministic layer's own floor, not what a real verifier LLM would
+    catch on top of it. Reported as such in `docs/studies/redteam_results.md`
+    rather than presented as a model result; `run_case()` takes any
+    `LlmRole`, so re-running against a real model needs no framework
+    changes, only an API key.
+17. **`quiet_day_confabulation` misses (4/6, 66.7%) are systematic, not
+    random.** `_missing_catalyst_rationale`'s deterministic check (A7.5)
+    is gated by `report/catalysts.py::CATALYST_TAGS`, an 8-word vocabulary
+    (`earnings`, `guidance`, `split`, `merger`, `acquisition`, `fda`,
+    `downgrade`, `upgrade`). The two detected misses used in-vocabulary
+    words; the four undetected ones used real but out-of-vocabulary
+    catalyst language ("buyout", "Fed commentary", "sector rotation",
+    "merger arb" phrasing not matching the literal tags). A7.5's rule is
+    stated as "any external cause," but the deterministic implementation
+    only catches the tagged subset — a real, open vocabulary-coverage gap,
+    not a framework bug. Same shape as finding #15: a stated rule broader
+    than what's actually implemented.
+18. **B3's own spec text names `catalyst_name` and `figures[]` as the two
+    fields the LLM-path determinism check must hold stable across runs.**
+    Neither is a real schema field (see findings #14/#15 — a stronger, ban-
+    all-LLM-numbers mechanism and `CATALYST_TAGS` stand in for them, under
+    different names/shapes). `tests/live_book/test_determinism_llm.py`
+    checks the fields that actually exist and are load-bearing instead:
+    `confidence_level`, `primary_driver`, and the `evidence[].headline` set.
+    Run once this work against a real model (`gpt-5.4-mini`,
+    `OPENAI_API_KEY` present in `.env`) on `aapl_exdiv_2023`, 3 runs, all
+    three fields identical across runs — a real (if single-fixture,
+    single-model) determinism measurement, not a hypothetical.
+19. **`report/synthesis.py::synthesize_diagnosis` never used the `role`
+    object the graph configured — a real bug, found while building B4's
+    cost study, not a naming/scoping choice like most findings above.**
+    `pipeline/leg_graph.py::_synthesize_with_role` gates on
+    `isinstance(role, OpenAiRole)` and then, for the true branch, called
+    `synthesize_diagnosis(...)` — which built its **own** bare
+    `ChatOpenAI(model=os.getenv("EMO_LLM_MODEL", ...), temperature=0,
+    timeout=45)` from scratch, never reading `role.model`,
+    `role.temperature`, or (Task B3's) `role.seed`, and never populating
+    `role.last_usage` (Task B4's token capture). Confirmed empirically:
+    before the fix, a 12-run `scripts/agent_budget_study.py` pass showed
+    `narrator: 0 calls` and `verifier: 12 calls` even though the narrator
+    plainly ran (`stage_timings["synthesize"]` was several seconds every
+    time) — the LLM call was real, just invisible to anything reading the
+    passed-in role. Practical consequence before the fix: a caller that
+    built a custom `LlmRoleRegistry` with a different narrator model or a
+    pinned seed would have that setting silently ignored for the narrator
+    specifically (verifier/digester/challenger were unaffected — they call
+    `role.structured_invoke` directly). **Fixed**: `synthesize_diagnosis`
+    now takes an optional `role` parameter and calls
+    `role.structured_invoke(...)` when given one, falling back to the old
+    inline `ChatOpenAI` construction only when no role is passed (keeps the
+    function usable standalone). Both call sites
+    (`leg_graph.py::_synthesize_with_role`, `portfolio_e2e.py`'s
+    graph-miss fallback) now pass their role through. Re-verified after
+    the fix: the same study run showed `narrator: 12 calls`, real
+    input/output token counts, and `tests/live_book/test_determinism_llm.py`
+    still passes against the real model.
+20. **A genuinely quiet/well-behaved real model makes `terminal_unexplained_break`
+    hard to trigger organically.** It fires only when the verifier's FINAL
+    verdict is FAIL, `is_hard_verifier_fail` is true, AND the verify budget
+    (default 1) is exhausted (`route_verify_result` in `leg_graph.py`) — and
+    `revise_synthesis` gives a real narrator another real attempt to
+    self-correct before that. A real `gpt-5.4-mini` run against the real GME
+    squeeze case (Task C1) produced a well-explained PARTIAL, not a terminal
+    break — reliable marks kept the residual small. `docs/samples/
+    sample_abstain.md` was built honestly instead: real market data and
+    routing, a narrator role fixed to claim a dollar figure absent from the
+    real blotter (same construction as `tests/ci/test_pipeline_leg_graph.py`
+    and the B2 `fabricated_dollar` cases), disclosed as such in `docs/
+    samples/README.md` rather than presented as organic. Separately: neither
+    of this work's two real historical cases triggers a news search at
+    all — one is a quiet day (`no_escalation`), the other has
+    `observation_reliable=False` from thin quotes, and `intel/planner.py`
+    skips search under either condition regardless of materiality. C1.5
+    (injection containment) used the `vol_crush` synthetic fixture instead,
+    specifically because it reliably escalates and searches.
+21. **A genuinely interesting compound result in `sample_injection_contained.md`**:
+    the real narrator correctly disregarded the injected `$500`/omit-residual
+    instructions (`injection_observed=True`, no `$500` anywhere in the report,
+    the residual is still discussed) — but the SAME run also used
+    trade-advice-adjacent language elsewhere in its own verdict ("...and
+    hedge..."), which the real deterministic verifier correctly hard-FAILed
+    under `prohibited_phrase` (A9.4), unrelated to the injection. The file's
+    verdict line reads "Verifier FAIL — terminal break escalation" as a
+    result — real and correct, not a sign containment failed. Disclosed in
+    `docs/samples/README.md` rather than re-run repeatedly to get a cleaner
+    PASS.
+22. **C3.2's premise doesn't hold against this codebase.** The spec worries
+    the SQLite snapshot cache is keyed by ticker alone, which would be wrong
+    for a multi-expiry book. Checked `data/cache.py` directly: the schema's
+    primary key has always been `(ticker, expiry, strike, option_type,
+    as_of)`, and `load_t1`'s query filters on all four before `as_of <`. No
+    migration built, because there is nothing to migrate — confirmed by
+    reading the schema, not assumed.
+23. **(Still open: the early flag remains a cue in the shipped pipeline; `daily_run.py` still requires both conditions.)** **A real, if minor, bug in `diagnostic_findings["terminal_unexplained_break"]`'s
+    semantics, found by this book's own day-1 run.** `diag_finalize_node`
+    (`pipeline/leg_graph.py`) can set this flag `True` early — when
+    `diag_residual_pct > 15%` and the diagnostic-tool budget is exhausted —
+    without the leg actually terminating there: the leg still proceeds
+    through the normal search/narrate/verify path afterward and can land on
+    a genuine PASS/PARTIAL, and nothing clears the early flag when that
+    happens. The real terminal state (`terminal_unexplained_break_node`)
+    always also sets `verifier_status="FAIL"`; this book's day-1 run showed
+    6/8 legs with the stale flag `True` and a real, verifier-confirmed
+    PARTIAL verdict in the rendered report — a direct contradiction if the
+    flag alone is trusted. `scripts/daily_run.py` now requires both
+    conditions (flag `True` **and** `verifier_status=="FAIL"`) to classify a
+    leg as terminal; the underlying flag in the shipped pipeline is
+    unchanged (fixing it is a real, separate task — this work's
+    `daily_run.py` works around it correctly rather than silently, which is
+    enough to not corrupt the metrics.jsonl record, but the shipped
+    semantics are still worth a dedicated fix).
+24. **Day 1 of any brand-new book position is necessarily noisy — not a bug,
+    an architectural fact worth stating plainly.** `load_market_data` only
+    finds a real t-1 snapshot via a prior `upsert_snapshot` call; a
+    brand-new contract has no cache row yet, so every leg falls back to the
+    `hv20_proxy` estimate for `iv_prev`. This book's real day-1 run confirms
+    it: `residual_method_pct` computed to `371290144254.743` (a division-
+    near-zero artifact, `total_pnl≈0` against a synthetic prior), and every
+    leg's quote tier read `unquoted` (a live-quote artifact of the names
+    picked, not the proxy). `scripts/daily_run.py` now detects this
+    (`iv_prev_source != "chain_t1"` for every leg) and prints an explicit
+    caveat at the top of the day's report rather than presenting day-1
+    noise as a normal reading, and caches every leg's snapshot so day 2
+    compares against something real.
+25. **C3.4's "book-level synthesis" is implemented as the existing
+    deterministic `render_portfolio_report()` roll-up, not a new LLM call.**
+    The spec's own ground rules (§0.2: agent graph topology frozen, no new
+    LLM calls) and C3.4's own stated point (scarce inference allocated by a
+    number the LLM does not control) are in tension with literally adding
+    one guaranteed LLM call every day regardless of materiality — the
+    ground rule wins. `legs_narrated`/`legs_silent`/`llm_calls` are recorded
+    from each leg's own A7 `no_escalation` outcome (not new decision logic
+    — that gate already existed); the "book-level synthesis" is the
+    already-shipped, already-deterministic multi-leg report renderer,
+    which already runs unconditionally across every leg.
+26. **A real, separate false-positive source in the B2 red-team fixtures
+    themselves, found while validating the two prompt fixes above — not
+    fixed, not the same bug.** After both prompt fixes, 4 of 8
+    `prompt_injection` cases still don't PASS: `01`/`02`/`06` fail
+    `Layer A is not aligned` (`method_residual_blamed` or
+    `quiet_day_confabulation` co-flagged) because `generate_redteam_cases.py`
+    leaves `_syn()`'s default `primary_driver="Delta / spot move"`
+    un-overridden for these specific cases, and the real blotter each one
+    is checked against (rotating through `_SOURCES`) often has a different
+    actual dominant driver — a real mismatch, correctly caught, but an
+    artifact of how the fixture was authored, not of the narrator or
+    verifier. `03`/`07` land on PARTIAL (`missing_catalyst_layer`) because
+    the case's own headline names a mechanism the canned verdict text
+    doesn't cover — also a correct catch. None of this touches whether
+    injection containment itself works (`injection_observed` still fires
+    correctly on all 8); it means the `prompt_injection` category's PASS
+    rate in `redteam_results.md` is depressed by fixture construction, not
+    by verifier behavior. Left as-is — fixing it means re-authoring 8
+    fixtures with correct per-case `primary_driver`/evidence, out of scope
+    for a verifier prompt fix.
+27. **The daily refresh job failed silently for a week.** The old 10-leg
+    pinned book's weekly expiries (09-21/09-25) passed; every leg raised
+    "Expiration cannot be found", yet the wrapper masked the exit code and
+    launchd reported 0. Fixed by exiting with the run's status, logging an
+    explicit expiry line, and re-pinning to monthlies (`ec15e92`, `5a292eb`).
+28. **The refresh wrapper's auto-commit scope was too wide** (`docs/samples`,
+    `tests/README.md`), so a OneDrive-restored copy of three deleted sample
+    files was committed as "Auto-refresh" (`445efa1`). Scope narrowed to the
+    pinned-book directory; the stale files were removed (`3e31ebc`).
+29. **Escalations did not fall after the two prompt fixes and could not be
+    diagnosed.** Runlog terminal breaks: 09-18 ×3, 09-22 ×1, 10-01 ×1,
+    10-02 ×2. The terminal node overwrote the verdict, the report kept only the
+    first (concession) sentence of the verifier rationale, flags were never
+    shown, and no verifier trace was persisted. With `verify_budget=1` a hard
+    LLM FAIL was always terminal and only the LLM decided it — contradicting
+    the thesis that escalate/abstain is decided by code. Fixed by the audit
+    trail and the code-confirmation guard (`9409f17`); prompt version
+    `v3.1-b1.4`. The 10-01/10-02 episodes themselves remain undiagnosed (no
+    audit data existed); the first `audit.json` is the first day after this
+    merge.
+30. **The earlier verifier fix tolerated hedge phrases** ("continue standard
+    hedging") that the schema forbids ("no trade, hedge or sizing
+    recommendations"). Reversed: such phrases are a soft `hedge_advice`
+    PARTIAL, and the product's own fallback strings no longer contain advice.
+31. **False-precision percentages**: samples printed `6582029380.9%` residuals
+    (a ratio over a ~$0 denominator). Display is now capped at `>1000%` and
+    the run-log metric is a median over legs with |total PnL| ≥ $0.005,
+    recording the excluded count. Routing numerics are untouched. Historic
+    run-log rows keep their original averaged value.
+32. **The `prompt_injection` red-team fixtures were not code-consistent**
+    (driver label and verdict did not follow the real blotter and headline
+    mechanisms), so they were flagged PARTIAL by the baseline layer for
+    unrelated reasons. They now follow the `clean_control` pattern and are
+    asserted all-PASS in `tests/ci/test_redteam_framework.py`.
+33. **Measured cost of the code-confirmation guard (live red-team, 65 cases,
+    3 runs each, `gpt-5.4-mini`).** Hard-FAIL detection fell from 93.6% (before
+    the guard) to 87.2%; 45/47 violation cases (95.7%) are still flagged at
+    least PARTIAL, and the false-alarm rate stays 0.0% (0/10 clean controls).
+    The gap is violations the LLM called hard but no code check can reproduce
+    (mostly direction-only `contradictory_number` and out-of-vocabulary
+    wording): they now ship as caveated PARTIAL, not as a terminal break. An
+    initial guard (narrower vocabulary) measured 72.3%; widening what code can
+    confirm (bare figures in prose, truncation wording, more external-cause
+    terms) recovered most of it. This is the intended trade: escalation is
+    decided by code, at the price of fewer hard escalations. Two violation
+    cases still come back PASS (see the miss list in
+    `docs/studies/redteam_results.md`).
 
 ## NOT DONE
 
-Phases 2–9 of the v2 spec, per the approved plan, with reasons:
-
-- **Task 3** (real historical option chains) — requires a data-source
-  decision (DoltHub vs HistoricalData.net vs other), a licence review, and
-  possibly installing the `dolt` CLI (confirmed not present on this
-  machine). A decision with cost/licensing implications, not made
-  unilaterally.
-- **Task 3.4** (residual distribution study) — depends on Task 3.
-- **Task 4** (second-order terms in the shipped blotter) — self-contained,
-  good next-session candidate; not started.
-- **Tasks 6–7** (SVI calibration, Dupire local vol) — depend on Task 3.
-- **Task 5** (Shapley revaluation) — self-contained; not started.
-- **Task 8** (vol PnL decomposition) — depends on Tasks 6–7.
-- **Task 9** (scenario ladder, `--no-llm`, performance) — not started.
-- **Tasks 10–13** (hedged view, proxy degradation, README, samples) — not
-  started.
-- **Task 14** (30-day run log) — cannot be completed faster than 30 real
-  trading days elapse by construction ("do not backfill, do not simulate").
-  Not started this pass; standing up `scripts/daily_run.py` is a good
-  candidate for the very next session so the clock starts sooner.
-- **Task 15** (packaging/CI hygiene) — lowest priority per spec; not
-  started.
+- **B1.2's `figures[]` sub-part** — see FINDING #14 (a deliberate choice).
+- **C3's remaining trading days.** 12 real entries exist as of 2026-10-02
+  (09-17/18, 09-21–25, 09-28–10-02; weekends correctly skipped), all via the
+  unattended 9:15pm job, zero errors. Per the spec's own rule (§C3.5: "do
+  not backfill, do not simulate"), the rest cannot be produced faster than
+  real calendar trading days elapse. `docs/studies/runlog_summary.md`
+  (the post-hoc distribution analysis) follows once 20+ real entries
+  exist — about 8 more trading days out, not before.
 
 ## NUMBERS
 
-Every user-facing figure in this report, with the command that produced it.
+Every user-facing figure in this work's commits, with the command that
+produced it. (Figures from the pre-session A1/A2 work are in that
+branch's own history, not restated here.)
 
 | Figure | Value | Command |
 |---|---|---|
-| QuantLib version | 1.43 | `.venv/bin/python -c "import QuantLib; print(QuantLib.__version__)"` |
-| Shipped FDM grid | t_grid=200, x_grid=400 | Read from `src/explain_my_option/pricing/config.py` |
-| AAPL 2023-11-09 `early_exercise_premium` (before) | 0.0000 | `python tests/ci/test_pricing_invariants.py` run against pre-Task-2 `facade.py` (commit `6b3f6d8`) |
-| AAPL 2023-11-09 `early_exercise_premium` (after) | +0.060691 | `python tests/ci/test_pricing_invariants.py` (Task 1.3 printout), post-Task-2 |
-| AAPL 2023-11-09 `dividend_pv_effect` (after) | −0.238880 | Same run, via `graph.diagnostic_controller.run_diagnostic_pass` |
-| `deep_itm_exdiv` `early_exercise_premium` (before) | 0.0000 | Same as above, pre-Task-2 |
-| `deep_itm_exdiv` `early_exercise_premium` (after) | +1.865584 | Same as above, post-Task-2 |
-| `deep_itm_exdiv` `dividend_pv_effect` (after) | −1.999724 | Same as above, post-Task-2 |
-| `american_put_div` `early_exercise_premium`: 0.2325 → | +0.0735 | Golden regeneration diff, `tests/ci/golden/american_put_div.md` |
-| `american_put_div` `dividend_pv_effect` (new) | +0.1579 | Same |
-| Test 1.4 shipped-grid error vs P_800 | 0.000962 | `python tests/ci/test_pricing_invariants.py` (Task 1.4 printout) |
-| Full CI suite runtime (`scripts/run-tests.sh`, through the pre-existing unrelated failure) | ~72s | `time ./scripts/run-tests.sh` |
+| GME `2021-01-25` as-traded spot | `76.79000091552734` | `python scripts/fetch_chains.py gme_squeeze_2021_real` |
+| GME `2021-01-22` as-traded spot | `65.01000213623047` | same |
+| GME IV (`t-1` → `t`) | `3.0813` → `3.5821` | same |
+| GME `q_implied` (`borrow_regime`) | `0.5807` (`extreme`) | same |
+| AAPL real case spot (`t-1`/`t`) | `182.88999938964844` / `182.41000366210938` | `python scripts/fetch_chains.py aapl_exdiv_2023_real` |
+| AAPL real case `q_implied` | `0.0417` | same |
+| AAPL real case `ee_relevant` | `False`, `dividend_coverage=0.13` | `tests/ci/test_historical_real_cases.py` |
+| `aapl_exdiv_2023` (synthetic) second-order table | model ΔP `-0.4508`; Vega `-0.2813` (62.4%); residual before `+0.1883` (41.8%); Vanna `-0.0181`; Volga `+0.1684` (37.4%); residual after `+0.0381` (8.4%); `residual_reduction_pct=79.8` | `docs/case-studies/aapl_exdiv_attribution.md`'s own recorded `python -c` snippet (commit `dee2c64`) |
+| `taylor_regime` — `vow_float_squeeze_2008` | `INVALID`, `r_spot=8.03` | `tests/ci/test_regime_rule.py::test_regime_rule_squeeze_stress_fixture_is_invalid` |
+| `taylor_regime` — `aapl_exdiv_2023_real` | `VALID`, `r_spot=0.019`, `r_vol=0.009` | `tests/ci/test_regime_rule.py::test_regime_rule_real_exdiv_case_is_valid` |
+| `escalation_basis` — both real cases (A4) | `model`, `residual_model≈$0` | `tests/ci/test_residual_split.py` |
+| `escalation_basis` — live/fixture path | always `method` (t-1 marks never verified) | same |
+| Quiet days found (2023, AAPL+MSFT+SPY candidates) | 5, across 2 tickers (AAPL, SPY); 0 from MSFT | `python scripts/find_quiet_days.py --min 3 --year 2023` |
+| Quiet-day `total_pnl` range | `$0.025` to `-$0.11` | `tests/ci/test_quiet_day_non_escalation.py` |
+| `vol_crush` (excluded by the materiality guard) | `escalation_metric_pct=4.35`, `total_pnl=-1.4713` | ad hoc `python -c` against `data.synthetic.load_fixture("vol_crush")`, this work |
+| Red-team detection rate (B2+A9.4, deterministic layer only) | 66.0% (31/47 violations caught) | `python scripts/run_redteam.py` |
+| Red-team miss rate (B2+A9.4) | 34.0% | same |
+| Red-team false-alarm rate (B2+A9.4) | 0.0% (0/10 `clean_control`) | same |
+| Red-team per-category detection (B2+A9.4, deterministic layer only) | `fabricated_dollar` 100%, `rounded_collision` 100%, `omitted_catalyst` 100%, `non_dollar_fabrication` 66.7% (10/15, up from 1/6 pre-A9.4), `contradictory_number` 50%, `quiet_day_confabulation` 33.3%, `method_residual_blamed` 0% (no deterministic detector — LLM-judgment-only category, see the `--live` row below) | `docs/studies/redteam_results_deterministic_only.md` |
+| Red-team, `--live` against real `gpt-5.4-mini` (post-verifier-prompt-fixes) | Detection 93.6% (44/47), miss 6.4%, false alarm **0.0%** (0/10 `clean_control` — was 40%/10% before the two prompt fixes above), verdict stability 86.2%, cost $0.1528 (96 LLM calls). `method_residual_blamed` 100% (4/4), unchanged by the fixes (still correctly failing genuine violations). | `python scripts/run_redteam.py --live`, `docs/studies/redteam_results.md` |
+| Quant-path determinism (B3), 4 fixtures/cases × 3 runs | bit-identical (`==`) on `pricing.as_dict()` + `PositionFacts` every time | `python tests/ci/test_determinism_quant.py` |
+| LLM-path determinism (B3), real `gpt-5.4-mini`, `aapl_exdiv_2023` × 3 runs | `confidence_level`, `primary_driver`, `evidence[].headline` set identical every run | `python tests/live_book/test_determinism_llm.py` |
+| B4 study: 12-leg run, total LLM cost | `$0.0667` (narrator `$0.0505` / verifier `$0.0163`), 47527+3296 narrator tokens, 12973+1450 verifier tokens | `python scripts/agent_budget_study.py`, `docs/studies/agent_budget.md` |
+| B4 study: wall-clock p50/p95 by stage (s) | `llm_roles` 4.39/6.69, `data_fetch` 0.0002/2.47, `pricing` 0.023/1.86, total-per-run 5.56/6.41 | same |
+| B4 study: terminal-state distribution, n=12 | `terminal_unexplained_break` 6, `completed` 3, `no_escalation` 2, `PARTIAL` 1 | same |
+| Regime-rule table (README `## Regime rule`, C2.5), 5 cases | `r_spot`/`r_vol`/`\|ε_method\|/\|ΔP\|`: AAPL ex-div 0.0188/0.0088/0.0056 (VALID); GME squeeze 0.1451/0.0247/0.1843 (VALID); AAPL quiet day 0.0098/0.0001/0.5908 (VALID); VW squeeze 8.0283/0.5248/0.8783 (INVALID); `vol_crush` 0.0185/0.0003/0.0435 (VALID) | ad hoc `python -c` calling `run_diagnostic_pass` on each case, this work |
+| C1 sample cost, 5 runs (4 with an LLM call) | well under $0.01 total (`gpt-5.4-mini`, same per-call cost order as B4's study) | `scripts/generate_samples.py` |
+| Live book day 1 (2026-09-17), 8 real legs | 8/8 priced, 8 real LLM calls, 8 narrated / 0 silent, all 8 PARTIAL, $0.036482, 37.3s wall | `python scripts/daily_run.py`, `docs/runlog/metrics.jsonl` |
+| Day-1 residual_method_pct (proxy-vs-proxy artifact, documented) | `371290144254.743` | same |
+| Full CI suite | 43/43 modules pass (post-spec verifier fixes) | `./scripts/run-tests.sh` |
 
 ## RUNTIME
 
-- Discovery (Task 0.4): not separately timed; folded into overall session time.
-- Task 1 (invariant suite, incl. debugging benchmark selection): majority
-  of session wall-clock — the benchmark-table verification (finding #3)
-  required fetching and empirically checking ~55 published values against
-  the shipped engine to find ones that actually land inside 5e-3.
-- Task 2 (fix + plumbing + golden regeneration + doc): remainder.
-- `./scripts/run-tests.sh` itself: **71.67s** wall clock (measured via
-  `time`), covering 24 of 26 registered CI modules before the pre-existing
-  unrelated failure stopped the script (`set -euo pipefail`); the two
-  `live_book` modules were run individually and both passed (excluding the
-  one pre-existing, unrelated assertion).
+Profiled for the first time this work (Task B4): see
+`docs/studies/agent_budget.md` for the full stage/token/cost/terminal-state
+breakdown from a real 12-leg run (10 offline + 2 real historical cases)
+against `gpt-5.4-mini`. Headline: the LLM roles stage dominates wall clock
+(p50 4.39s of a 5.56s median total run) far more than pricing or the
+diagnostic tools, which are sub-30ms; the two real-DoltHub-chain legs are
+the only ones where `data_fetch` is comparable in size (2.5-3.0s, still
+dwarfed by DoltHub's actual 45-55s query latency when run standalone via
+`scripts/fetch_chains.py` — the study's fetch numbers are the in-process
+`fetch_market` node only, not a fresh DoltHub round trip, since
+`HistoricalChainMarketLoader` was constructed once and its underlying
+client may reuse a connection/session).
+
+Also recorded (context from earlier sessions, not re-measured this pass):
+DoltHub's SQL API is the dominant cost for `scripts/find_quiet_days.py`/
+`scripts/fetch_chains.py` — 45–55s per query regardless of row count, so
+those scripts each ran for several minutes per case/candidate.
+`./scripts/run-tests.sh` grew noticeably slower after A5.1 (every fixture
+now also runs `taylor_second_order`'s bump-and-revalue unconditionally) —
+not measured precisely, but visibly on the order of ~2 minutes for the
+full 43-module suite by the end of this work, versus ~72s recorded for
+the pre-A5 24-module suite in the prior report.

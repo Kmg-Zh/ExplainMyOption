@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from explain_my_option.paths import FIXTURES_DIR as _FIXTURES_DIR
+from explain_my_option.paths import STRESS_FIXTURES_DIR as _STRESS_FIXTURES_DIR
 from explain_my_option.pricing.types import (
     DiscreteDividend,
     MarketSnapshot,
@@ -99,9 +100,18 @@ def load_fixture(
     *,
     fixtures_root: Optional[Path] = None,
 ) -> tuple[MarketSnapshot, Optional[VolSurfaceData]]:
-    """Load ``{name}.json`` → ``(MarketSnapshot, VolSurfaceData | None)``."""
+    """Load ``{name}.json`` → ``(MarketSnapshot, VolSurfaceData | None)``.
+
+    Checks ``fixtures_root`` (default ``FIXTURES_DIR``) first, then
+    ``STRESS_FIXTURES_DIR`` -- the five relabeled "case" fixtures (A4.6)
+    live there, but every existing caller still just names them by stem.
+    """
     root = fixtures_root or _FIXTURES_DIR
     path = root / f"{name}.json"
+    if not path.exists() and fixtures_root is None:
+        stress_path = _STRESS_FIXTURES_DIR / f"{name}.json"
+        if stress_path.exists():
+            path = stress_path
     if not path.exists():
         raise FileNotFoundError(f"Synthetic fixture not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -114,12 +124,13 @@ def load_fixture(
 
 def list_fixtures(*, fixtures_root: Optional[Path] = None) -> list[str]:
     """Return market snapshot fixture stems (excludes manifests like historical_test_cases)."""
-    root = fixtures_root or _FIXTURES_DIR
-    if not root.exists():
-        return []
+    roots = [fixtures_root] if fixtures_root is not None else [_FIXTURES_DIR, _STRESS_FIXTURES_DIR]
     names: list[str] = []
-    for path in sorted(root.glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict) and "snapshot" in payload:
-            names.append(path.stem)
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.json")):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and "snapshot" in payload:
+                names.append(path.stem)
     return names

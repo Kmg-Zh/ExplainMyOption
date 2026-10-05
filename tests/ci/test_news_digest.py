@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 import sys
 
@@ -18,6 +19,18 @@ from explain_my_option.intel.relevance import coarse_keep
 from explain_my_option.pipeline.digest import IntelDigest, run_intel_digest
 from explain_my_option.report.catalysts import with_inferred_microstructure
 from explain_my_option.report.synthesis import _catalyst_tags, _layer_b_news
+
+# B1.1: headlines now enter the digest prompt as <untrusted_source> blocks
+# (data_loader.format_untrusted_news_item), not bare "N. title (pub)"
+# lines -- these test-only mocks parse the human message back out, so they
+# need to read the new format too.
+_UNTRUSTED_SOURCE_RE = re.compile(
+    r'<untrusted_source[^>]*>\n(.*?)\n</untrusted_source>', re.DOTALL
+)
+
+
+def _titles_from_human(human: str) -> list[str]:
+    return _UNTRUSTED_SOURCE_RE.findall(human)
 
 
 class _MockDigester:
@@ -106,10 +119,7 @@ class _PeerBackgroundDigester:
         del system, schema
         relevant = []
         background = []
-        for line in human.splitlines():
-            if not line[:1].isdigit():
-                continue
-            title = line.split(". ", 1)[-1].rsplit(" (", 1)[0]
+        for title in _titles_from_human(human):
             if "Alphabet" in title:
                 relevant.append(
                     {
@@ -160,10 +170,7 @@ def test_run_intel_digest_keeps_sept2_peers_as_background():
 class _RelatedIssuerDigester:
     def structured_invoke(self, *, system, human, schema):
         del system, schema
-        titles = []
-        for line in human.splitlines():
-            if line[:1].isdigit():
-                titles.append(line.split(". ", 1)[-1].rsplit(" (", 1)[0])
+        titles = _titles_from_human(human)
         return IntelDigest(
             relevant=[
                 {

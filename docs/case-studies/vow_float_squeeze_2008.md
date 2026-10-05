@@ -12,9 +12,13 @@ This is a **synthetic benchmark case** in the historical anomaly suite (`tests/h
 
 | Field | T−1 | T |
 |-------|-----|---|
-| Spot | $200 | $1,005 (+402%) |
+| Spot | €200 | €1,005 (+402%) |
 | IV | 95% | 180% (+85 vol pts) |
 | Option marks | unavailable | unavailable |
+
+**Currency:** EUR (stress fixture; the engine is currency agnostic).
+**Note:** this fixture compresses a multi-day move into one as-of day. It is a stress
+fixture for residual behaviour, not a reproduction of the tape.
 
 - **Moneyness:** Deep ITM after the spot gap (strike 300 vs spot 1,005).
 - **Dominant sensitivities:** Large **Gamma** and **Delta** from the spot jump; modest **Vega** from the parallel IV spike.
@@ -36,24 +40,28 @@ $$\Delta P \approx \Delta \cdot \Delta S + \tfrac{1}{2}\Gamma(\Delta S)^2 + \mat
 
 For this day:
 
-| Component | Approx. $ | Share of \|explained\| |
+| Component | Approx. € | Share of \|explained\| |
 |-----------|----------:|----------------------:|
-| Delta PnL | +$145 | 20% |
-| Gamma PnL | +$1,164 | 165% |
-| Vega PnL | +$17 | 2% |
-| Theta | −$0.2 | ~0% |
-| **Taylor sum (ex-residual)** | **+$1,326** | — |
-| **Official model ΔP** (engine) | **+$706** | 100% |
+| Delta PnL | +€145 | 20% |
+| Gamma PnL | +€1,164 | 165% |
+| Vega PnL | +€17 | 2% |
+| Theta | −€0.2 | ~0% |
+| **Taylor sum (ex-residual)** | **+€1,326** | — |
+| **Official model ΔP** (engine) | **+€706** | 100% |
 
-Taylor’s **explained** move (+$1,326) is **larger** than the official model repricing (+$706). That mismatch is the signal: a second-order expansion around yesterday’s sensitivities is overstating today’s convexity on a discontinuous, cornered move.
+Taylor’s **explained** move (+€1,326) is **larger** than the official model repricing (+€706). That mismatch is the signal: a second-order expansion around yesterday’s sensitivities is overstating today’s convexity on a discontinuous, cornered move.
 
-Sequential full revaluation (same official engine, order **t → S → σ → r**) telescopes cleanly to the model ΔP: time −$0.18, spot +$701, vol +$6 → **+$706** with zero audit residual. The gap is **attribution method**, not engine inconsistency.
+Sequential full revaluation telescopes to the model ΔP by construction, so a zero
+residual there is an identity, not a validation. It confirms the engine is
+self-consistent; it says nothing about whether the attribution is meaningful. On
+this fixture the Taylor expansion is flagged `INVALID` (r_spot = 8.03) and the full
+revaluation is the headline attribution.
 
 ---
 
 ## What the residual means
 
-**Residual (ε): −$620 (~88% of |model ΔP|)** — the Taylor blotter cannot reconcile to the official repricing without a large offset.
+**Residual (ε): −€620 (~88% of |model ΔP|)** — the Taylor blotter cannot reconcile to the official repricing without a large offset.
 
 In this case, residual is expected and **informative**, not a bug to hide:
 
@@ -75,8 +83,11 @@ Search does **not** reprice the option. After the blotter flags a large residual
 - *“VOW float squeeze intensifies as free float collapses in a cornered market setup”*
 - *“Buy-in pressure and liquidity breakdown overwhelm continuous hedging assumptions”*
 
-The LLM synthesis ties these headlines to the **cornered market** cue — qualitative context for *why* a second-order expansion around yesterday’s Greeks is the wrong story for a discontinuous move — while all dollar amounts remain engine-derived.
+The LLM synthesis ties these headlines to the **cornered market** cue — qualitative context for *why* a second-order expansion around yesterday’s Greeks is the wrong story for a discontinuous move — while all figures remain engine-derived.
 
-**Watchlist output (action items):** disable continuous-hedging assumptions; apply liquidity haircuts to marks; escalate squeeze risk to the limit framework.
+**What the run flags (observations, not recommendations):** continuous-hedging
+assumptions are inconsistent with the observed gap; marks were unavailable on both
+dates; the residual is large enough that the run is reported as unexplained rather
+than narrated.
 
 It demonstrates the product goal: **explain, not predict** — honest factor attribution, explicit residual, then targeted narrative.
