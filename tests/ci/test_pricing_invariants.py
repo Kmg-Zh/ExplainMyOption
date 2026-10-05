@@ -237,7 +237,7 @@ def test_american_call_equals_european_when_no_dividends():
             assert rel < 1e-3, (k_over_s, T, am.price, eu.price, rel)
 
 
-def test_early_exercise_premium_is_non_negative():
+def _early_exercise_premium_checks():
     """The most important test in this file.
 
         ee_premium = American(same sigma, r, dividend schedule)
@@ -307,7 +307,15 @@ def test_early_exercise_premium_is_non_negative():
     return oracle_values, shipped_values
 
 
+def test_early_exercise_premium_is_non_negative():
+    _early_exercise_premium_checks()
+
+
 def test_fdm_grid_convergence():
+    _fdm_grid_convergence_checks()
+
+
+def _fdm_grid_convergence_checks():
     """FDM price should converge as the grid is refined.
 
     Prices the base American put S=100,K=100,r=0.04,q=0,sigma=0.25,T=0.5y at
@@ -633,11 +641,11 @@ def test_unit_conventions():
 if __name__ == "__main__":
     test_put_call_parity_european_with_discrete_dividends()
     test_american_call_equals_european_when_no_dividends()
-    oracle_vals, shipped_vals = test_early_exercise_premium_is_non_negative()
+    oracle_vals, shipped_vals = _early_exercise_premium_checks()
     print("Task 1.3 -- ee_premium oracle vs shipped:")
     for name in oracle_vals:
         print(f"  {name}: oracle={oracle_vals[name]:.6f}  shipped={shipped_vals[name]}")
-    shipped_grid_err = test_fdm_grid_convergence()
+    shipped_grid_err = _fdm_grid_convergence_checks()
     print(f"Task 1.4 -- shipped grid (200,400) error vs P_800 = {shipped_grid_err:.6f}")
     test_bump_greeks_match_analytic_in_european_limit()
     test_taylor_decomposition_is_an_exact_identity()
