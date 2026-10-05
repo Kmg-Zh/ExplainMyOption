@@ -34,7 +34,21 @@ alone: `v3.1-b1.2` stopped the verifier hard-failing correct model-language
 ("higher-order effects", "path effects") as `method_residual_blamed`
 (which caused 2 of the first 4 escalations in this log); `v3.1-b1.3`
 narrowed `prohibited_phrase` to the literal A9.4 word list instead of any
-hedge-adjacent phrasing (which caused a 3rd). Days before the relevant
+hedge-adjacent phrasing (which caused a 3rd). `v3.1-b1.4` (2026-10-05) changed the verifier's *decision logic*, not only
+its wording: a hard LLM FAIL (numeric / prohibited phrase / quiet-day /
+method-residual) now stays a FAIL only if a deterministic code check
+reproduces the violation; otherwise it is downgraded to PARTIAL
+(`unconfirmed_hard_flag`), so escalate-or-not is decided by code. Hedge or
+sizing directives are a soft `hedge_advice` PARTIAL, and cited evidence must
+be a supplied headline published on or before `as_of` (`evidence_provenance`).
+From this version each row also records `verifier_downgraded` (legs where the
+LLM said FAIL and code overruled it) and `residual_pct_excluded_legs`
+(legs whose |total PnL| was too small to give a meaningful percent;
+`residual_method_pct` is now the median over the rest), and each day writes
+`audit.json` (per leg: candidate synthesis, every verifier verdict, terminal
+cause) so any escalation can be explained afterwards.
+
+Days before the relevant
 fix landed keep their real outcome, including any escalation that fix
 would have prevented — see `docs/dev/WORK_ORDER_REPORT.md` FINDINGS for
 the full incident writeups. Nothing is backfilled or rewritten.

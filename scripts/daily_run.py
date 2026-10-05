@@ -151,6 +151,8 @@ def main() -> int:
     residual_model_pcts: list[float] = []
     escalation_bases: list[str] = []
     verifier_verdicts: list[str] = []
+    verifier_downgraded = 0
+    audit_by_leg: dict[str, dict] = {}
     injection_observed_any = False
     usage_by_role: dict[str, Counter] = {}
 
@@ -240,6 +242,18 @@ def main() -> int:
         escalation_bases.append("model" if marks_reliable(state["snapshot"].quote_tier_now) else "method")
         if findings.get("verifier_status"):
             verifier_verdicts.append(findings["verifier_status"])
+        # A hard LLM FAIL that code could not confirm is downgraded to PARTIAL;
+        # count it so a downgrade is never silently an "ordinary" PARTIAL.
+        trace = state.get("verifier_trace") or []
+        if any(row.get("llm_verdict") == "FAIL" for row in trace):
+            verifier_downgraded += 1
+        audit_by_leg[leg_id] = {
+            "terminal_state": terminal_states_by_leg[leg_id],
+            "terminal_cause": findings.get("terminal_cause"),
+            "final_synthesis": synthesis.model_dump(),
+            "verifier_audit": findings.get("verifier_audit") or {},
+            "verifier_trace": trace,
+        }
         if synthesis.injection_observed:
             injection_observed_any = True
 
@@ -338,6 +352,7 @@ def main() -> int:
         "residual_model_pct": round(statistics.median(residual_model_pcts), 4) if residual_model_pcts else 0.0,
         "taylor_regime": taylor_regime,
         "verifier_verdict": verifier_verdict,
+        "verifier_downgraded": verifier_downgraded,
         "terminal_states_by_leg": terminal_states_by_leg,
         "injection_observed": injection_observed_any,
         "quote_tier_counts": dict(quote_tier_counts),
@@ -366,6 +381,9 @@ def main() -> int:
     day_dir = RUNLOG_DIR / today
     day_dir.mkdir(parents=True, exist_ok=True)
     (day_dir / "report.md").write_text(report_full.rstrip() + "\n", encoding="utf-8")
+    (day_dir / "audit.json").write_text(
+        json.dumps(audit_by_leg, indent=2, default=str) + "\n", encoding="utf-8"
+    )
     with METRICS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(metrics_line) + "\n")
     print(f"\nWrote docs/runlog/{today}/report.md and appended to docs/runlog/metrics.jsonl", file=sys.stderr)

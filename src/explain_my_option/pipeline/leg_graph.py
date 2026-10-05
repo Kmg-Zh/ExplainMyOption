@@ -37,10 +37,13 @@ from .llm_roles import LlmRole, LlmRoleRegistry, OpenAiRole, default_openai_role
 from .types import LegResult
 from .verifier import (
     DETERMINISTIC_PRECHECK_RATIONALES,
+    HARD_FAIL_POLICY_FLAGS,
     apply_verifier_reflection,
     is_hard_verifier_fail,
     verify_synthesis,
+    violation_sentence,
 )
+from .verifier_schema import DiagnosticVerifierResult
 
 
 def _timed_node(name: str, fn: Callable[["LegState"], dict]) -> Callable[["LegState"], dict]:
@@ -197,12 +200,6 @@ def _apply_observation_lock_to_synthesis(
     if not synthesis.evidence:
         return synthesis
     return synthesis.model_copy(update={"evidence": []})
-
-
-def _short_rationale(text: str, limit: int = 200) -> str:
-    """First sentence of a verifier rationale, capped; full text stays in verifier_trace."""
-    first = text.strip().split(". ")[0].strip()
-    return first if len(first) <= limit else first[: limit - 1].rstrip() + "…"
 
 
 def build_leg_diagnosis_subgraph(
@@ -564,6 +561,8 @@ def build_leg_diagnosis_subgraph(
             news_titles=relevant_titles,
             catalyst_challenge=state.get("catalyst_challenge") or findings.get("catalyst_challenge"),
             no_escalation=bool(findings.get("no_escalation")),
+            news=list(state.get("news") or []),
+            as_of=getattr(state["snapshot"], "as_of", None),
         )
         trace: list[dict[str, Any]] = list(state.get("verifier_trace") or [])
         trace.append(verdict.model_dump())
@@ -577,7 +576,19 @@ def build_leg_diagnosis_subgraph(
         calls = int(state.get("llm_calls", 0))
         if verdict.rationale not in DETERMINISTIC_PRECHECK_RATIONALES:
             calls += 1
-        return {"verifier_trace": trace, "verify_budget_remaining": remaining, "llm_calls": calls}
+        # Audit trail: the candidate the verifier saw plus every verdict, so a
+        # terminal break (or a downgrade) can be explained after the fact.
+        audit_findings = dict(findings)
+        audit = dict(audit_findings.get("verifier_audit") or {})
+        audit.setdefault("candidates", []).append(synthesis.model_dump())
+        audit["trace"] = trace
+        audit_findings["verifier_audit"] = audit
+        return {
+            "verifier_trace": trace,
+            "verify_budget_remaining": remaining,
+            "llm_calls": calls,
+            "diagnostic_findings": audit_findings,
+        }
 
     def route_verify_result(
         state: LegState,
@@ -600,8 +611,6 @@ def build_leg_diagnosis_subgraph(
         if verdict == "FAIL":
             if remaining > 0:
                 return "revise_synthesis"
-            from .verifier_schema import DiagnosticVerifierResult
-
             result = DiagnosticVerifierResult.model_validate(last)
             if is_hard_verifier_fail(result):
                 return "terminal_unexplained_break"
@@ -613,8 +622,6 @@ def build_leg_diagnosis_subgraph(
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
         trace = list(state.get("verifier_trace") or [])
         last = trace[-1] if trace else {}
-        from .verifier_schema import DiagnosticVerifierResult
-
         verdict = DiagnosticVerifierResult.model_validate(
             last
             or {
@@ -655,14 +662,23 @@ def build_leg_diagnosis_subgraph(
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
         trace = list(state.get("verifier_trace") or [])
         last = trace[-1] if trace else {}
-        rationale = str(last.get("rationale", "")).strip()
         missing = list(last.get("missing_evidence") or [])
+        result = DiagnosticVerifierResult.model_validate(
+            last or {"verdict": "FAIL", "rationale": ""}
+        )
+        flags = [f for f in result.policy_flags if f in HARD_FAIL_POLICY_FLAGS]
+        sentence = violation_sentence(result)
+        findings["terminal_cause"] = "verifier_hard_fail"
+        findings["terminal_verifier_flags"] = flags
+        findings["terminal_violation"] = sentence
+        flag_text = ", ".join(flags) or "policy"
         synthesis = synthesis.model_copy(
             update={
-                "verdict": "Verifier FAIL — terminal break escalation."
-                + (f" {_short_rationale(rationale)}" if rationale else ""),
+                "verdict": f"Verifier FAIL — terminal break escalation ({flag_text})."
+                + (f" {sentence}" if sentence else ""),
                 "takeaways": [
-                    f"Verifier missing evidence: {', '.join(missing) or 'policy'}",
+                    f"Verifier flags: {flag_text}"
+                    + (f"; missing evidence: {', '.join(missing)}" if missing else ""),
                     *synthesis.takeaways,
                 ],
             }

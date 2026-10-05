@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import re
+
 from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..report.catalysts import missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
 from ..report.validate import (
+    evidence_provenance_errors,
     find_hedge_directives,
+    find_method_residual_blame,
     find_prohibited_phrases,
+    find_prohibited_synonyms,
     validate_synthesis,
 )
 from .llm_roles import LlmRole
-from .verifier_schema import DiagnosticVerifierResult
+from .verifier_schema import DiagnosticVerifierResult, GuardedVerifierResult
 
 VERIFIER_SYSTEM_PROMPT = """You are an independent diagnostic verifier for an options PnL explain report.
 Judge whether the synthesis candidate is supported by quant facts and evidence metadata.
@@ -128,6 +133,13 @@ def _prohibited_phrase_rationale() -> str:
     )
 
 
+def _evidence_provenance_rationale() -> str:
+    return (
+        "Cited evidence is not a supplied headline published on or before as_of "
+        "within the look-back window."
+    )
+
+
 def _hedge_advice_rationale() -> str:
     return (
         "Hedge, rebalance or profit-taking directive in the narrative -- this "
@@ -146,6 +158,7 @@ DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
         "validate_synthesis failed",
         _prohibited_phrase_rationale(),
         _hedge_advice_rationale(),
+        _evidence_provenance_rationale(),
         _quiet_day_rationale(),
         "Vega story not falsifiable from quote",
         _observation_lock_rationale(),
@@ -162,6 +175,8 @@ def deterministic_precheck(
     observation_reliable: bool,
     news_titles: list[str] | None = None,
     no_escalation: bool = False,
+    news: list | None = None,
+    as_of: str | None = None,
 ) -> DiagnosticVerifierResult | None:
     errors = validate_synthesis(synthesis)
     if errors:
@@ -189,6 +204,15 @@ def deterministic_precheck(
                 ],
                 policy_flags=["quiet_day_confabulation"],
                 rationale=_quiet_day_rationale(),
+            )
+    if news is not None:
+        provenance = evidence_provenance_errors(synthesis, news, as_of)
+        if provenance:
+            return DiagnosticVerifierResult(
+                verdict="PARTIAL",
+                missing_evidence=provenance,
+                policy_flags=["evidence_provenance"],
+                rationale=_evidence_provenance_rationale(),
             )
     directives = find_hedge_directives(synthesis)
     if directives:
@@ -296,6 +320,95 @@ def apply_verifier_reflection(
     )
 
 
+def _confirmed_hard_flags(
+    flags: set[str], synthesis: DiagnosticSynthesis, *, no_escalation: bool
+) -> set[str]:
+    """Hard flags that a deterministic code check can reproduce from the text."""
+    confirmed: set[str] = set()
+    if "numeric_hallucination" in flags and validate_synthesis(synthesis):
+        confirmed.add("numeric_hallucination")
+    if "prohibited_phrase" in flags and (
+        find_prohibited_phrases(synthesis) or find_prohibited_synonyms(synthesis)
+    ):
+        confirmed.add("prohibited_phrase")
+    if (
+        "quiet_day_confabulation" in flags
+        and no_escalation
+        and (_quiet_day_catalyst_tags(synthesis) or synthesis.evidence)
+    ):
+        confirmed.add("quiet_day_confabulation")
+    if "method_residual_blamed" in flags and find_method_residual_blame(synthesis):
+        confirmed.add("method_residual_blamed")
+    return confirmed
+
+
+def _confirm_hard_flags(
+    result: GuardedVerifierResult,
+    synthesis: DiagnosticSynthesis,
+    *,
+    no_escalation: bool,
+) -> GuardedVerifierResult:
+    """An LLM hard FAIL stays hard only if code can confirm the violation.
+
+    escalate/abstain is decided by code, not by the model: a hard flag the code
+    cannot reproduce downgrades FAIL to PARTIAL (flag ``unconfirmed_hard_flag``),
+    keeping the LLM's verdict and flags in ``llm_verdict`` / ``llm_policy_flags``.
+    """
+    flags = set(result.policy_flags or [])
+    hard = flags & HARD_FAIL_POLICY_FLAGS
+    if result.verdict != "FAIL" or not hard:
+        return result
+    confirmed = _confirmed_hard_flags(hard, synthesis, no_escalation=no_escalation)
+    if confirmed:
+        kept = [f for f in result.policy_flags if f not in hard or f in confirmed]
+        return result.model_copy(update={"policy_flags": kept})
+    soft = [f for f in result.policy_flags if f not in hard]
+    note = (
+        "LLM raised hard flag(s) "
+        f"{sorted(hard)} that code could not confirm; downgraded to PARTIAL"
+    )
+    return result.model_copy(
+        update={
+            "verdict": "PARTIAL",
+            "policy_flags": [*soft, "unconfirmed_hard_flag"],
+            "missing_evidence": [*result.missing_evidence, note],
+            "llm_verdict": "FAIL",
+            "llm_policy_flags": list(result.policy_flags),
+        }
+    )
+
+
+_FLAG_DESCRIPTIONS = {
+    "numeric_hallucination": "the narrative states a number the code did not produce",
+    "method_residual_blamed": "the narrative blames the model residual on an outside cause",
+    "quiet_day_confabulation": "the narrative names a catalyst on a day with nothing to explain",
+    "prohibited_phrase": "the narrative uses prohibited trade-advice language",
+}
+_FLAG_KEYWORDS = {
+    "numeric_hallucination": ("number", "figure", "dollar", "percent", "numeric"),
+    "method_residual_blamed": ("residual", "method", "gap"),
+    "quiet_day_confabulation": ("quiet", "catalyst", "fabricat", "no news"),
+    "prohibited_phrase": ("phrase", "advice", "arbitrage", "mispric", "opportunity"),
+}
+
+
+def violation_sentence(result: DiagnosticVerifierResult) -> str:
+    """The sentence of the verifier rationale that names the violation.
+
+    Replaces "first sentence of the rationale", which was usually a concession
+    ("The narrative is mostly right, but ...") and hid the actual reason.
+    """
+    flags = [f for f in (result.policy_flags or []) if f in _FLAG_DESCRIPTIONS]
+    keywords = tuple(k for f in flags for k in _FLAG_KEYWORDS[f])
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", result.rationale or "") if s.strip()]
+    for sentence in sentences:
+        if keywords and any(k in sentence.lower() for k in keywords):
+            return sentence if len(sentence) <= 240 else sentence[:239].rstrip() + "…"
+    if flags:
+        return "; ".join(_FLAG_DESCRIPTIONS[f] for f in flags).capitalize() + "."
+    return sentences[0] if sentences else ""
+
+
 def verify_synthesis(
     synthesis: DiagnosticSynthesis,
     facts: PositionFacts,
@@ -306,6 +419,8 @@ def verify_synthesis(
     news_titles: list[str],
     catalyst_challenge: dict | None = None,
     no_escalation: bool = False,
+    news: list | None = None,
+    as_of: str | None = None,
 ) -> DiagnosticVerifierResult:
     pre = deterministic_precheck(
         synthesis,
@@ -314,6 +429,8 @@ def verify_synthesis(
         observation_reliable=observation_reliable,
         news_titles=news_titles,
         no_escalation=no_escalation,
+        news=news,
+        as_of=as_of,
     )
     if pre is not None:
         return pre
@@ -334,8 +451,10 @@ def verify_synthesis(
         f"Independent critic Layer B required: {(catalyst_challenge or {}).get('layer_b_required')}\n"
         f"Independent critic mechanisms: {(catalyst_challenge or {}).get('mechanisms') or 'none'}\n"
     )
-    return role.structured_invoke(
+    raw = role.structured_invoke(
         system=VERIFIER_SYSTEM_PROMPT,
         human=human,
         schema=DiagnosticVerifierResult,
     )
+    result = GuardedVerifierResult.model_validate(raw.model_dump())
+    return _confirm_hard_flags(result, synthesis, no_escalation=no_escalation)

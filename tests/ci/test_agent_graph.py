@@ -220,14 +220,24 @@ def test_pipeline_fixture_no_network_with_mock_roles():
     assert "query string is not applied" in result["report"]
 
 
+class _BlamingNarrator(_MockNarrator):
+    """Blames the residual on an outside cause -- code can confirm that."""
+
+    def structured_invoke(self, *, system, human, schema):
+        out = super().structured_invoke(system=system, human=human, schema=schema)
+        return out.model_copy(
+            update={"verdict": "The residual is explained by the earnings announcement."}
+        )
+
+
 def test_a3_fail_exhausted_sets_terminal_break():
     old_key = os.environ.get("OPENAI_API_KEY")
     os.environ["OPENAI_API_KEY"] = "sk-test-not-real"
     roles = LlmRoleRegistry(
-        narrator=_MockNarrator(),
+        narrator=_BlamingNarrator(),
         verifier=_MockVerifier(
             ["FAIL"],
-            policy_flags=[["numeric_hallucination"]],
+            policy_flags=[["method_residual_blamed"]],
         ),
     )
     cfg = PipelineConfig(

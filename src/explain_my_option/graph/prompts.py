@@ -12,12 +12,13 @@ from pathlib import Path
 
 from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
 
-# A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT or
-# pipeline.verifier.VERIFIER_SYSTEM_PROMPT changes -- a red-team result
+# A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT,
+# pipeline.verifier.VERIFIER_SYSTEM_PROMPT, or the verifier decision logic
+# (deterministic precheck / code-confirmation of hard flags) changes -- a red-team result
 # (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
 # stated prompt version; without one the run log mixes measurements of
 # different systems.
-PROMPT_VERSION = "v3.1-b1.3"
+PROMPT_VERSION = "v3.1-b1.4"
 
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
 PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)

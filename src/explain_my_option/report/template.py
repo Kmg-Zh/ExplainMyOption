@@ -519,8 +519,13 @@ def render_position_report(
                 "* **Verifier**: PARTIAL — narrative shipped with caveats (reflect applied)."
             )
         elif vstatus == "FAIL":
+            flags = ", ".join(diagnostic_findings.get("terminal_verifier_flags") or [])
+            violation = str(diagnostic_findings.get("terminal_violation") or "").strip()
             sections.append(
-                "* **Verifier**: FAIL — hard policy violation; the factor story is not reliable."
+                "* **Verifier**: FAIL — hard policy violation"
+                + (f" ({flags})" if flags else "")
+                + "; the factor story is not reliable."
+                + (f" {violation}" if violation else "")
             )
     sections.extend(
         [
