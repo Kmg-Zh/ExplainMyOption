@@ -86,13 +86,14 @@ def fallback_synthesis(
     # High residual: model gap or unmodeled effects
     if facts.residual_pct > 15.0:
         takeaways.append(
-            "**Elevated residual (>{:.0f}%)**: Likely contributors are the American early-exercise boundary, discrete dividends, "
-            "vol skew curvature, and mark quality. Model limitations flagged above.".format(facts.residual_pct)
+            "**Elevated residual**: Likely contributors are the American early-exercise boundary, discrete dividends, "
+            "vol skew curvature, and mark quality. Model limitations flagged above (the residual size is in the "
+            "quantitative sections; prose carries no figures)."
         )
     elif facts.residual_pct > 10.0:
         takeaways.append(
-            "**Moderate residual ({:.0f}%)**: Possible causes are American early-exercise effects "
-            "(especially near ex-div), higher-order Greeks, or data quality gaps.".format(facts.residual_pct)
+            "**Moderate residual**: Possible causes are American early-exercise effects "
+            "(especially near ex-div), higher-order Greeks, or data quality gaps."
         )
 
     # Gamma: large spot move

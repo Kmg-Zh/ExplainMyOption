@@ -416,6 +416,18 @@ papered over.
     decided by code, at the price of fewer hard escalations. Two violation
     cases still come back PASS (see the miss list in
     `docs/studies/redteam_results.md`).
+34. **A false terminal break caused by the product's own fallback text
+    (found from the first `audit.json`, 2026-10-05 PLUG leg).** When the
+    narrator call failed, `fallback_synthesis` printed the residual percentage
+    in its takeaway ("Elevated residual (>105636668%)"; a deep-OTM option with
+    ~$0 total PnL makes the ratio explode). The deterministic precheck then
+    rejected that percentage literal as an invented number and escalated the
+    leg (`numeric_hallucination`, `terminal_unexplained_break`). Fixed: fallback
+    prose carries no figures; regression test
+    `test_fallback_synthesis_never_trips_its_own_numeric_check`. The 2026-10-05
+    row keeps its real outcome (no rewrite). The reason the narrator call
+    failed on that leg is not recorded (the exception is swallowed in
+    `_synthesize_with_role`) and remains open.
 
 ## NOT DONE
 

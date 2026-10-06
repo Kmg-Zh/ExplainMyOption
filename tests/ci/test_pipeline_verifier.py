@@ -281,6 +281,25 @@ def test_verifier_pass_from_mock_role():
     assert result.verdict == "PASS"
 
 
+def test_fallback_synthesis_never_trips_its_own_numeric_check():
+    """Regression (2026-10-05 PLUG leg): the deterministic fallback printed the
+    residual percentage in its own takeaway; validate_synthesis then rejected it
+    as an LLM-invented number and escalated the leg to a terminal break."""
+    import dataclasses
+
+    from explain_my_option.report.synthesis import fallback_synthesis
+    from explain_my_option.report.validate import validate_synthesis
+
+    for residual in (12.0, 40.0, 105636668.0):
+        facts = dataclasses.replace(_sample_facts(), residual_pct=residual)
+        syn = fallback_synthesis(facts, llm_failed=True)
+        assert validate_synthesis(syn) == [], residual
+        pre = deterministic_precheck(
+            syn, facts, suppress_vega=False, observation_reliable=True
+        )
+        assert pre is None or not is_hard_verifier_fail(pre), residual
+
+
 def test_hedge_directive_is_partial_not_hard_fail():
     """Hedge/sizing directives are soft (PARTIAL, flag hedge_advice); only the
     literal prohibited list is a hard FAIL."""
