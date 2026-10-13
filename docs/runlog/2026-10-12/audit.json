@@ -1,0 +1,377 @@
+{
+  "aapl_vertical_long": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "Reflect (PARTIAL): The move is explained primarily by the underlying rally feeding through the option\u2019s positive directional exposure, with gamma adding a small convexity tail. Theta decay offset part of that gain, while the residual stays small enough to read as normal model noise rather than a separate story. There is no supported Layer B catalyst here: the run has no retrieved headlines, and the observation lock means we should not invent a squeeze, borrow, or implied-volatility narrative. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "Confidence is tempered by the unreliable observation flag and the absence of headlines, but the attribution is still clear because the dominant modeled factor is explicit and the residual is low. The ex-div and American-vs-European checks do not indicate a material early-exercise effect, so the carry explanation remains secondary.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Watch whether a larger spot gap or a full-surface reprice would change the convexity balance more than the current Taylor view suggests.",
+        "Verify any future tape for borrow stress, squeeze conditions, or implied volatility shifts before adding a Layer B explanation."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The move is explained primarily by the underlying rally feeding through the option\u2019s positive directional exposure, with gamma adding a small convexity tail. Theta decay offset part of that gain, while the residual stays small enough to read as normal model noise rather than a separate story. There is no supported Layer B catalyst here: the run has no retrieved headlines, and the observation lock means we should not invent a squeeze, borrow, or implied-volatility narrative.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is tempered by the unreliable observation flag and the absence of headlines, but the attribution is still clear because the dominant modeled factor is explicit and the residual is low. The ex-div and American-vs-European checks do not indicate a material early-exercise effect, so the carry explanation remains secondary.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether a larger spot gap or a full-surface reprice would change the convexity balance more than the current Taylor view suggests.",
+            "Verify any future tape for borrow stress, squeeze conditions, or implied volatility shifts before adding a Layer B explanation."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "aapl_vertical_short": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "Reflect (PARTIAL): The position was driven mainly by the underlying rally against a short call, with second-order curvature and time decay contributing smaller offsets. The residual is small, so the Taylor view is broadly consistent with the full revaluation; with no retrieved headlines and observation locked, there is no separate catalyst layer to add. The American setup is a carry and theta case rather than an early-exercise case. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "The driver split is internally coherent and the residual is low, but observation reliability is not strong and the feed notes a mark-calibrated limitation. Vega narrative is suppressed by the code, and there are no usable headlines, so the diagnosis stays at the coarse factor level rather than reaching for a finer event story.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Watch whether a fuller reprice or higher-order convexity would meaningfully change the attribution if the spot move extends.",
+        "Keep the dividend and remaining time value in view, but the current setup does not point to early exercise as the key issue."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The position was driven mainly by the underlying rally against a short call, with second-order curvature and time decay contributing smaller offsets. The residual is small, so the Taylor view is broadly consistent with the full revaluation; with no retrieved headlines and observation locked, there is no separate catalyst layer to add. The American setup is a carry and theta case rather than an early-exercise case.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The driver split is internally coherent and the residual is low, but observation reliability is not strong and the feed notes a mark-calibrated limitation. Vega narrative is suppressed by the code, and there are no usable headlines, so the diagnosis stays at the coarse factor level rather than reaching for a finer event story.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether a fuller reprice or higher-order convexity would meaningfully change the attribution if the spot move extends.",
+            "Keep the dividend and remaining time value in view, but the current setup does not point to early exercise as the key issue."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "jpm_straddle_call": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Theta decay",
+      "verdict": "Reflect (PARTIAL): The move is best explained by time decay in the model: the option lost value even though spot edged higher and implied volatility also firmed slightly. The remaining gap is consistent with higher-order truncation noise and path effects around a short-dated American contract, but there is no separate news catalyst in the digest to assign as the cause. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "The factor decomposition points cleanly to theta as the dominant modeled driver, and the market-move bands are small. Confidence is capped by the medium residual share, observation not being reliable, and the absence of retrieved headlines, so the run should be read as a model revaluation rather than a catalyst-led move.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Watch whether the full reprice remains close to the Taylor view as expiry approaches, since short-dated options can be distorted by truncation and boundary effects.",
+        "No headline-based mechanism was available in the digest, so there is nothing to validate for borrow, squeeze, or IV-crush behavior."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Theta decay",
+          "verdict": "The move is best explained by time decay in the model: the option lost value even though spot edged higher and implied volatility also firmed slightly. The remaining gap is consistent with higher-order truncation noise and path effects around a short-dated American contract, but there is no separate news catalyst in the digest to assign as the cause.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The factor decomposition points cleanly to theta as the dominant modeled driver, and the market-move bands are small. Confidence is capped by the medium residual share, observation not being reliable, and the absence of retrieved headlines, so the run should be read as a model revaluation rather than a catalyst-led move.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether the full reprice remains close to the Taylor view as expiry approaches, since short-dated options can be distorted by truncation and boundary effects.",
+            "No headline-based mechanism was available in the digest, so there is nothing to validate for borrow, squeeze, or IV-crush behavior."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "jpm_straddle_put": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "Reflect (PARTIAL): The move is best explained by the put\u2019s negative delta against the higher underlying, with smaller contributions from theta decay and a modest vol reprice. The residual is low, so the Taylor view is broadly consistent with the model revaluation and there is no separate catalyst story to layer in from the tape. Because observation quality is flagged as weak and Vega narrative is suppressed, the vol line should be treated as a modeling component rather than a headline-driven explanation. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "The attribution is coherent and the residual is small, but the feed is marked unreliable and there were no headlines to confirm a separate event-driven mechanism. The American premium is present but small, so early exercise is not the main explanation.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Check whether the spot move or a full-surface reprice explains any remaining gap in the model decomposition, especially given the weak observation flag.",
+        "Monitor the implied volatility input and the quoted surface for consistency, but do not infer a separate catalyst from the available tape."
+      ],
+      "american_commentary": "The dividend does not appear to cover the remaining time value by a material amount, so early exercise is not a dominant factor in the move.",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The move is best explained by the put\u2019s negative delta against the higher underlying, with smaller contributions from theta decay and a modest vol reprice. The residual is low, so the Taylor view is broadly consistent with the model revaluation and there is no separate catalyst story to layer in from the tape. Because observation quality is flagged as weak and Vega narrative is suppressed, the vol line should be treated as a modeling component rather than a headline-driven explanation.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The attribution is coherent and the residual is small, but the feed is marked unreliable and there were no headlines to confirm a separate event-driven mechanism. The American premium is present but small, so early exercise is not the main explanation.",
+          "evidence": [],
+          "takeaways": [
+            "Check whether the spot move or a full-surface reprice explains any remaining gap in the model decomposition, especially given the weak observation flag.",
+            "Monitor the implied volatility input and the quoted surface for consistency, but do not infer a separate catalyst from the available tape."
+          ],
+          "american_commentary": "The dividend does not appear to cover the remaining time value by a material amount, so early exercise is not a dominant factor in the move.",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "spy_reversal_put": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Theta decay",
+      "verdict": "The modeled one-day move was dominated by time decay, with delta and vega acting as secondary offsets rather than the main explanation. The residual is modest enough to leave the theta-led attribution intact, and the spot and implied-vol moves were both small, so there is no separate catalyst story to layer on top of the blotter.",
+      "confidence_level": "medium",
+      "confidence_rationale": "The attribution is internally consistent and observation quality is reliable, but the residual is not negligible and the market feed is limited to the contract-level marks with no relevant headlines. That keeps the diagnosis at medium confidence rather than high, and there is no Layer B mechanism to validate or reject.",
+      "evidence": [],
+      "takeaways": [
+        "Check whether Taylor truncation or full-surface repricing would meaningfully alter the residual before treating the theta bucket as fully explanatory.",
+        "Monitor the time-value-versus-dividend balance around American exercise, since the early-exercise premium is present but small and the dividend does not dominate remaining time value."
+      ],
+      "american_commentary": "The option retains a small American premium versus the European cross-check, and the dividend does not cover the remaining time value, so early exercise is only a minor consideration.",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Theta decay",
+          "verdict": "The modeled one-day move was dominated by time decay, with delta and vega acting as secondary offsets rather than the main explanation. The residual is modest enough to leave the theta-led attribution intact, and the spot and implied-vol moves were both small, so there is no separate catalyst story to layer on top of the blotter.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The attribution is internally consistent and observation quality is reliable, but the residual is not negligible and the market feed is limited to the contract-level marks with no relevant headlines. That keeps the diagnosis at medium confidence rather than high, and there is no Layer B mechanism to validate or reject.",
+          "evidence": [],
+          "takeaways": [
+            "Check whether Taylor truncation or full-surface repricing would meaningfully alter the residual before treating the theta bucket as fully explanatory.",
+            "Monitor the time-value-versus-dividend balance around American exercise, since the early-exercise premium is present but small and the dividend does not dominate remaining time value."
+          ],
+          "american_commentary": "The option retains a small American premium versus the European cross-check, and the dividend does not cover the remaining time value, so early exercise is only a minor consideration.",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "The candidate is consistent with the supplied facts: the dominant modeled driver is theta, the observation is reliable, and the residual band is modest. With no news titles and no named headline mechanisms, there is no Layer B catalyst to cover and no basis for an external-cause explanation. The narrative stays within model/math language for the residual and does not attribute it to outside events. No prohibited trade-advice language is present.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "spy_reversal_call": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Theta decay",
+      "verdict": "The position\u2019s one-day change is dominated by time decay, with spot and implied volatility both essentially flat and the Taylor residual staying small. The move is therefore best read as a carry-driven revaluation of the option rather than a catalyst-led repricing. The American-versus-European check shows no material early-exercise effect, so the dividend/exercise boundary is not part of the explanation.",
+      "confidence_level": "medium",
+      "confidence_rationale": "The attribution is supported by high coverage, a low residual band, and reliable observations. Confidence is tempered only by the lack of news catalysts and the fact that the run is a model revaluation rather than a tradeable mark-to-market explanation.",
+      "evidence": [],
+      "takeaways": [
+        "Watch whether the next revaluation remains dominated by decay or whether a larger spot move causes higher-order truncation to matter.",
+        "Verify that the absence of material early-exercise premium persists; there is no meaningful dividend or exercise boundary distortion in the current marks."
+      ],
+      "american_commentary": "The dividend does not cover the remaining time value, so immediate exercise is sub-optimal and the American premium is negligible.",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Theta decay",
+          "verdict": "The position\u2019s one-day change is dominated by time decay, with spot and implied volatility both essentially flat and the Taylor residual staying small. The move is therefore best read as a carry-driven revaluation of the option rather than a catalyst-led repricing. The American-versus-European check shows no material early-exercise effect, so the dividend/exercise boundary is not part of the explanation.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The attribution is supported by high coverage, a low residual band, and reliable observations. Confidence is tempered only by the lack of news catalysts and the fact that the run is a model revaluation rather than a tradeable mark-to-market explanation.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether the next revaluation remains dominated by decay or whether a larger spot move causes higher-order truncation to matter.",
+            "Verify that the absence of material early-exercise premium persists; there is no meaningful dividend or exercise boundary distortion in the current marks."
+          ],
+          "american_commentary": "The dividend does not cover the remaining time value, so immediate exercise is sub-optimal and the American premium is negligible.",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "The candidate is consistent with the supplied facts: dominant driver is theta, observation is reliable, and there are no headlines or catalyst mechanisms to cover. The narrative stays within model-language (time decay, Taylor residual, early-exercise check) and does not attribute the residual to any external event. No prohibited trade-advice phrases are present.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "vz_div_call": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "The position\u2019s move was dominated by a favorable spot rally that lifted call value, with gamma adding some convexity support while theta and lower implied volatility worked against the move. The remaining gap is consistent with higher-order model effects and revaluation noise rather than a separate catalyst, and the run does not support a distinct news-based explanation because no relevant headlines were retrieved.",
+      "confidence_level": "medium",
+      "confidence_rationale": "The driver call is well supported by the blotter and the attribution coverage is high, but the residual is still meaningful enough to leave some method-level noise and higher-order effects in play. Confidence is held at medium because there are no relevant headlines to cross-check a catalyst and the market feed notes a calibrated mark with local volatility deferred.",
+      "evidence": [],
+      "takeaways": [
+        "Monitor whether a fuller reprice or higher-order convexity effects would materially change the modeled split between spot and residual.",
+        "No catalyst layer was provided here, so there is no borrow, squeeze, or IV-crush signal to verify from headlines."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The position\u2019s move was dominated by a favorable spot rally that lifted call value, with gamma adding some convexity support while theta and lower implied volatility worked against the move. The remaining gap is consistent with higher-order model effects and revaluation noise rather than a separate catalyst, and the run does not support a distinct news-based explanation because no relevant headlines were retrieved.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The driver call is well supported by the blotter and the attribution coverage is high, but the residual is still meaningful enough to leave some method-level noise and higher-order effects in play. Confidence is held at medium because there are no relevant headlines to cross-check a catalyst and the market feed notes a calibrated mark with local volatility deferred.",
+          "evidence": [],
+          "takeaways": [
+            "Monitor whether a fuller reprice or higher-order convexity effects would materially change the modeled split between spot and residual.",
+            "No catalyst layer was provided here, so there is no borrow, squeeze, or IV-crush signal to verify from headlines."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "Layer A is aligned: the dominant driver is delta / favorable spot move, matching the code. Layer B is not required here because no headline mechanisms are present and the critic did not require them. The narrative keeps the residual in model/math terms ('higher-order model effects' and 'revaluation noise') and does not blame it on an external event. No quiet-day issue appears because the run is not a no_escalation state, and no prohibited trade-advice language is present.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "plug_deep_otm": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "Reflect (PARTIAL): The run is primarily explained by the lower spot price moving the call further out of the money, with gamma partly offsetting and theta adding additional decay. Vega also declines with the implied-vol move, but that narrative is de-emphasized because the observation is unreliable and the desk explicitly suppresses a Vega story here; the remaining gap is consistent with higher-order truncation and path effects in the model reprice. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "The factor split is clear and the dominant modeled driver is stable, but observation reliability is flagged false and the residual remains material enough to warrant caution. There are no headlines to anchor an external catalyst, so Layer B stays empty and the explanation should stay at the model-reprice level.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Watch whether the spot move keeps dominating the model reprice, since truncation and other higher-order effects can still distort a first-pass Taylor view.",
+        "Verify quote quality and the surface fit before leaning on the volatility line, because the feed is incomplete and the Vega narrative is suppressed."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The run is primarily explained by the lower spot price moving the call further out of the money, with gamma partly offsetting and theta adding additional decay. Vega also declines with the implied-vol move, but that narrative is de-emphasized because the observation is unreliable and the desk explicitly suppresses a Vega story here; the remaining gap is consistent with higher-order truncation and path effects in the model reprice.",
+          "confidence_level": "medium",
+          "confidence_rationale": "The factor split is clear and the dominant modeled driver is stable, but observation reliability is flagged false and the residual remains material enough to warrant caution. There are no headlines to anchor an external catalyst, so Layer B stays empty and the explanation should stay at the model-reprice level.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether the spot move keeps dominating the model reprice, since truncation and other higher-order effects can still distort a first-pass Taylor view.",
+            "Verify quote quality and the surface fit before leaning on the volatility line, because the feed is incomplete and the Vega narrative is suppressed."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  }
+}
