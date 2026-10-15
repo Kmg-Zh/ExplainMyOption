@@ -49,13 +49,13 @@ from explain_my_option.intel.planner import CueQueryPlanner
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource
 from explain_my_option.intel.types import SearchQuery
 from explain_my_option.paths import HISTORICAL_OUTPUT_DIR, historical_compare_dir
-from ci.engine_config import engine_config_for_tests
+from explain_my_option.pricing.config import EngineConfig
 from explain_my_option.pricing.facade import price_and_attribute
 from explain_my_option.report.schema import DiagnosticSynthesis
 from explain_my_option.report.validate import validate_synthesis
 from explain_my_option.pipeline.config import PipelineConfig
 
-CFG = engine_config_for_tests()
+CFG = EngineConfig.fast()
 
 
 def _require_openai_api_key() -> None:
@@ -114,13 +114,8 @@ def _deps_for_case(case: BenchmarkCase) -> GraphDeps:
 
 
 def _pipeline_config() -> PipelineConfig:
-    return PipelineConfig(
-        features={"a1", "a2", "a3"},
-        diag_budget=1,
-        diag_iterations=0,
-        verify_budget=0,
-        require_openai=True,
-    )
+    # Scores the narrator itself, so the verifier role is off.
+    return PipelineConfig(verify=False, require_openai=True)
 
 
 def run_governed_case(case: BenchmarkCase) -> GovernedRunResult:

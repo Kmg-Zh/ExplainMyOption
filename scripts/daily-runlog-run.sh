@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Daily unattended run of the Task C3 live-book run log, launched by
+# Daily unattended run of the live-book run log, launched by
 # ~/Library/LaunchAgents/com.explainmyoption.daily-runlog.plist at 9:15pm
 # local time (Mon-Fri, 15min after the other daily job so they don't fight
 # over the same OneDrive-synced working tree at once).

@@ -15,9 +15,7 @@ run, not an estimate.
 
 from __future__ import annotations
 
-import json
 import os
-import statistics
 import sys
 import time
 from collections import Counter, defaultdict
@@ -47,12 +45,11 @@ from explain_my_option.graph.deps import (  # noqa: E402
 )
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource  # noqa: E402
 from explain_my_option.pipeline.llm_roles import default_openai_roles  # noqa: E402
-from ci.engine_config import engine_config_for_tests  # noqa: E402
+from explain_my_option.pricing.config import EngineConfig  # noqa: E402
 
 OUT_PATH = _REPO_ROOT / "docs" / "studies" / "agent_budget.md"
 
-# Task A4.5's two verified real cases (scripts/fetch_chains.py CASES, not
-# re-typed by hand -- kept in sync manually since that dict is script-local).
+# The two verified real cases (mirrors scripts/fetch_chains.py CASES).
 REAL_CASES = {
     "gme_squeeze_2021_real": dict(
         ticker="GME", option_type="put", strike=55.0, expiry="2021-02-19",
@@ -64,18 +61,13 @@ REAL_CASES = {
     ),
 }
 
-# Graph node name -> B4 stage bucket. IV inversion happens inside the
-# "quant" node's price_and_attribute() call, not a separate node -- it is
-# not separately measurable without invasive engine instrumentation (see
-# the FINDING recorded in WORK_ORDER_REPORT.md for this task).
+# Graph node name -> stage bucket. IV inversion happens inside the "quant"
+# node's price_and_attribute() call, so it is not timed separately.
 STAGE_BUCKETS = {
     "fetch_market": "data_fetch",
     "quant": "pricing",
     "blotter": "pricing",
     "diagnostic_pass": "diagnostic_tools",
-    "react_plan": "diagnostic_tools",
-    "react_tool_exec": "diagnostic_tools",
-    "diag_finalize": "diagnostic_tools",
     "plan_search": "search",
     "search": "search",
     "digest_news": "llm_roles",
@@ -83,8 +75,8 @@ STAGE_BUCKETS = {
     "synthesize": "llm_roles",
     "reconcile_debate": "llm_roles",
     "verify": "llm_roles",
-    "revise_synthesis": "llm_roles",
     "reflect_verifier": "llm_roles",
+    "terminal_unexplained_break": "llm_roles",
     "finalize_leg_report": "report_render",
 }
 
@@ -104,7 +96,7 @@ def _offline_deps(leg):
 
     return GraphDeps(
         market=PatchingMarketLoader(FixtureMarketLoader(leg.fixture), {leg.ticker: patches}),
-        pnl=OfficialFdmPnlSource(config=engine_config_for_tests()),
+        pnl=OfficialFdmPnlSource(config=EngineConfig.fast()),
         intel=IntelRegistry(
             {
                 "yfinance_news": StubIntelSource("yfinance_news"),
@@ -119,9 +111,9 @@ def _real_case_deps(spec):
     return GraphDeps(
         market=HistoricalChainMarketLoader(
             as_of=spec["as_of"], prev_as_of=spec["prev_as_of"],
-            config=engine_config_for_tests(),
+            config=EngineConfig.fast(),
         ),
-        pnl=OfficialFdmPnlSource(config=engine_config_for_tests()),
+        pnl=OfficialFdmPnlSource(config=EngineConfig.fast()),
         intel=IntelRegistry(
             {
                 "yfinance_news": StubIntelSource("yfinance_news"),

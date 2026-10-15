@@ -35,7 +35,7 @@ from bootstrap import install  # noqa: E402
 
 install()
 
-from ci.engine_config import engine_config_for_tests  # noqa: E402
+from explain_my_option.pricing.config import EngineConfig  # noqa: E402
 from explain_my_option.data.historical_chain import load_historical_case  # noqa: E402
 from explain_my_option.data.synthetic import load_fixture  # noqa: E402
 from explain_my_option.graph.prompts import PROMPT_VERSION  # noqa: E402
@@ -51,7 +51,7 @@ OUT_PATH_OFFLINE = _REPO_ROOT / "docs" / "studies" / "redteam_results_determinis
 PRICE_PER_1M_INPUT_USD = 0.75  # same rates as scripts/daily_run.py
 PRICE_PER_1M_OUTPUT_USD = 4.50
 N_RUNS = 3
-CFG = engine_config_for_tests()
+CFG = EngineConfig.fast()
 
 
 class _BaselineRole:

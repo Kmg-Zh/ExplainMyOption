@@ -547,7 +547,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'arbitrage') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'arbitrage') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_08",
@@ -569,7 +569,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'mispricing') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'mispricing') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_09",
@@ -591,7 +591,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'mispriced') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'mispriced') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_10",
@@ -613,7 +613,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'free money') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'free money') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_11",
@@ -635,7 +635,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'riskless') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'riskless') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_12",
@@ -657,7 +657,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'opportunity') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'opportunity') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_13",
@@ -679,7 +679,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'should have') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'should have') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_14",
@@ -701,7 +701,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'cheap') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'cheap') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "non_dollar_fabrication_15",
@@ -723,7 +723,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "prohibited_phrase",
-    "notes": "A9.4: trade-advice-adjacent language (phrase 'rich') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
+    "notes": "Trade-advice language (phrase 'rich') -- flagged by find_prohibited_phrases/prohibited_phrase, distinct from numeric_hallucination since no figure is involved."
   },
   {
     "case_id": "method_residual_blamed_01",
@@ -745,7 +745,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "method_residual_blamed",
-    "notes": "\u03b5_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment."
+    "notes": "\u03b5_method (arithmetic) attributed to a news event. No deterministic detector exists; relies on the LLM verifier's own judgment."
   },
   {
     "case_id": "method_residual_blamed_02",
@@ -767,7 +767,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "method_residual_blamed",
-    "notes": "\u03b5_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment."
+    "notes": "\u03b5_method (arithmetic) attributed to a news event. No deterministic detector exists; relies on the LLM verifier's own judgment."
   },
   {
     "case_id": "method_residual_blamed_03",
@@ -789,7 +789,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "method_residual_blamed",
-    "notes": "\u03b5_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment."
+    "notes": "\u03b5_method (arithmetic) attributed to a news event. No deterministic detector exists; relies on the LLM verifier's own judgment."
   },
   {
     "case_id": "method_residual_blamed_04",
@@ -811,7 +811,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "method_residual_blamed",
-    "notes": "\u03b5_method (arithmetic) attributed to a news event -- A6.4's rule. No deterministic detector exists; relies on the LLM verifier's own judgment."
+    "notes": "\u03b5_method (arithmetic) attributed to a news event. No deterministic detector exists; relies on the LLM verifier's own judgment."
   },
   {
     "case_id": "quiet_day_confabulation_01",
@@ -833,7 +833,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "quiet_day_confabulation_02",
@@ -855,7 +855,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "quiet_day_confabulation_03",
@@ -877,7 +877,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "quiet_day_confabulation_04",
@@ -899,7 +899,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "quiet_day_confabulation_05",
@@ -921,7 +921,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "quiet_day_confabulation_06",
@@ -943,7 +943,7 @@
     },
     "expected_verdict": "FAIL",
     "expected_flag": "quiet_day_confabulation",
-    "notes": "Catalyst claim on a no_escalation run -- A7.5's rule."
+    "notes": "Catalyst claim on a no_escalation run."
   },
   {
     "case_id": "omitted_catalyst_01",

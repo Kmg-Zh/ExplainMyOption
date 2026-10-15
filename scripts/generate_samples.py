@@ -29,7 +29,7 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv()
 
-from ci.engine_config import engine_config_for_tests  # noqa: E402
+from explain_my_option.pricing.config import EngineConfig  # noqa: E402
 from explain_my_option.agent_graph import run_pipeline  # noqa: E402
 from explain_my_option.data.historical_chain import load_historical_case  # noqa: E402
 from explain_my_option.data.synthetic import load_fixture  # noqa: E402
@@ -38,10 +38,9 @@ from explain_my_option.graph.deps import FixtureMarketLoader, GraphDeps, Officia
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource  # noqa: E402
 from explain_my_option.intel.types import SearchQuery  # noqa: E402
 from explain_my_option.pipeline.llm_roles import LlmRoleRegistry, default_openai_roles  # noqa: E402
-from explain_my_option.report.schema import DiagnosticSynthesis  # noqa: E402
 
 OUT_DIR = _REPO_ROOT / "docs" / "samples"
-CFG = engine_config_for_tests()
+CFG = EngineConfig.fast()
 
 
 @dataclass
@@ -55,12 +54,12 @@ class _CachedSnapshotLoader:
         from explain_my_option.data_loader import LoadedData
 
         snap = load_historical_case(self.case_name)
-        return LoadedData(snapshot=snap, news=[], surface=None, surface_prev=None)
+        return LoadedData(snapshot=snap, surface=None, surface_prev=None)
 
 
 class _InjectionNewsSource:
     """Returns one fixed headline carrying an injected instruction,
-    regardless of query -- for the containment sample (C1.5)."""
+    regardless of query -- for the containment sample."""
 
     def __init__(self, source_id: str, headline: str) -> None:
         self.source_id = source_id
@@ -90,16 +89,16 @@ def _write(name: str, report: str) -> None:
     print(f"wrote docs/samples/{name}")
 
 
-class _FabricatedNarrator:
-    """Deliberately claims a dollar figure not in the real GME blotter --
-    for demonstrating terminal_unexplained_break honestly (see note below),
-    not a mock of "what the real narrator said"."""
+class _TradeAdviceNarrator:
+    """Deliberately uses trade-advice language on the real GME blotter, to
+    demonstrate terminal_unexplained_break (see sample_abstain), not a mock
+    of what the real narrator said."""
 
     def structured_invoke(self, *, system, human, schema):
         del system, human
         return schema(
             primary_driver="Vega / implied volatility",
-            verdict="The desk gained $2.50 on the contract today, driven by the IV expansion.",
+            verdict="The IV expansion drove the move and leaves the put looking cheap.",
             confidence_level="medium",
             confidence_rationale="Vega dominated the Taylor decomposition.",
             evidence=[],
@@ -109,19 +108,14 @@ class _FabricatedNarrator:
 
 
 def sample_abstain(roles) -> dict:
-    """C1.1: GME squeeze real case -- terminal_unexplained_break.
+    """GME squeeze real case -- terminal_unexplained_break.
 
-    A real gpt-5.4-mini narrator run against this same real case (tried
-    first, see docs/samples/README.md) produced a well-explained PARTIAL,
-    not a terminal break -- reliable marks on this case keep the residual
-    small, and the system's own revise_synthesis loop gives a real model a
-    second chance to self-correct, so an organic hard-fail-to-exhaustion is
-    rare against a well-behaved model. To show the mechanism honestly, this
-    file uses a fixed narrator that deliberately claims a dollar figure not
-    in the real blotter (same construction as tests/ci/test_pipeline_leg_graph.py
-    and the redteam fabricated_dollar cases) -- the market data, Greeks, and
-    routing are all real and unmodified; only the narrator's text is scripted,
-    disclosed as such below.
+    A real gpt-5.4-mini narrator on this case produced a well-explained
+    PARTIAL, so a scripted narrator shows the abstain path: its trade-advice
+    language ("cheap") is a hard FAIL the code reproduces, which ends the
+    leg in a terminal break. (An invented dollar figure would not show it:
+    the narrator step swaps such prose for the rule-based summary before the
+    verifier runs.) Market data, Greeks and routing are real and unmodified.
     """
     deps = GraphDeps(
         market=_CachedSnapshotLoader("gme_squeeze_2021_real"),
@@ -129,7 +123,7 @@ def sample_abstain(roles) -> dict:
         intel=_STUB_INTEL,
     )
     forced_roles = LlmRoleRegistry(
-        narrator=_FabricatedNarrator(), verifier=roles.verifier,
+        narrator=_TradeAdviceNarrator(), verifier=roles.verifier,
         challenger=roles.challenger, digester=roles.digester,
     )
     state = run_pipeline(
@@ -141,7 +135,7 @@ def sample_abstain(roles) -> dict:
 
 
 def sample_quiet_day(roles) -> dict:
-    """C1.2: a real verified quiet day -- expect no_escalation."""
+    """A real verified quiet day -- expect no_escalation."""
     deps = GraphDeps(
         market=_CachedSnapshotLoader("quiet_aapl_2023-04-24"),
         pnl=OfficialFdmPnlSource(config=CFG),
@@ -156,7 +150,7 @@ def sample_quiet_day(roles) -> dict:
 
 
 def sample_real_chain(roles) -> dict:
-    """C1.3: the real ex-div case -- market ΔP + reconcile_mark_vs_model."""
+    """The real ex-div case -- market ΔP + reconcile_mark_vs_model."""
     deps = GraphDeps(
         market=_CachedSnapshotLoader("aapl_exdiv_2023_real"),
         pnl=OfficialFdmPnlSource(config=CFG),
@@ -171,7 +165,7 @@ def sample_real_chain(roles) -> dict:
 
 
 def sample_no_llm(ticker: str) -> None:
-    """C1.4: python app.py --ticker ... --no-llm, a real live run."""
+    """python app.py --ticker ... --no-llm, a real live run."""
     import os
 
     env = dict(os.environ)
@@ -192,19 +186,13 @@ def sample_no_llm(ticker: str) -> None:
 
 
 def sample_injection_contained(roles) -> dict:
-    """C1.5: an injected instruction in a headline; contained.
+    """An injected instruction in a headline; contained.
 
-    Uses the vol_crush synthetic fixture, not a real chain: both real cases
-    available this session fail to reach search at all -- AAPL ex-div hits
-    A7's no_escalation gate (move too small), and GME's real quotes are
-    "thin" enough to set observation_reliable=False, which independently
-    skips search regardless of materiality (planner.py: `if not
-    observation_reliable: skip_reason="observation_lock"`). Both confirmed
-    by an earlier attempt in this session (section 6 read "No catalyst
-    search" on both -- not the defence working, a leg that never got to the
-    headline). vol_crush has a large, reliably-quoted move specifically so
-    search/narrate/verify actually run and the injected headline reaches
-    the narrator -- the property this sample needs to demonstrate anything.
+    Uses the vol_crush synthetic fixture: neither real case reaches search
+    (the AAPL ex-div day has nothing to explain, and GME's thin quotes lock
+    the observation, which skips search). vol_crush has a large move with no
+    quote lock, so search, narration and verification all run and the
+    injected headline reaches the narrator.
     """
     intel = IntelRegistry(
         {
@@ -231,7 +219,7 @@ def main() -> int:
     import os
 
     if not os.getenv("OPENAI_API_KEY"):
-        print("SKIP: OPENAI_API_KEY not set. C1 samples 1/2/3/5 need a real narrator/verifier.")
+        print("SKIP: OPENAI_API_KEY not set. The abstain, quiet-day, real-chain and injection samples need a real narrator/verifier.")
         return 0
 
     roles = default_openai_roles()
@@ -241,7 +229,7 @@ def main() -> int:
     print("running sample_quiet_day (real quiet-day case)...")
     s2 = sample_quiet_day(roles)
     print("running sample_real_chain (real ex-div case)...")
-    s3 = sample_real_chain(roles)
+    sample_real_chain(roles)
     print("running sample_no_llm (live AAPL, --no-llm)...")
     sample_no_llm("AAPL")
     print("running sample_injection_contained (injected headline)...")
@@ -270,7 +258,7 @@ uses a synthetic stress fixture.
 
 | File | Command | Model | Data source | Real vs synthetic |
 |---|---|---|---|---|
-| [`sample_abstain.md`](sample_abstain.md) | `scripts/generate_samples.py::sample_abstain` (GME squeeze, real DoltHub chain slice) | `gpt-5.4-mini` verifier/digester/challenger; narrator is a **fixed, scripted role** (see below) | DoltHub (`gme_squeeze_2021_real`, committed slice) | Market data, Greeks, and routing are real and unmodified. A real `gpt-5.4-mini` narrator run against this same case produced a well-explained PARTIAL, not a terminal break (reliable marks keep the residual small, and `revise_synthesis` gives a real model a second chance to self-correct) -- so the narrator here is fixed to deliberately claim a dollar figure not in the real blotter (same construction as `tests/ci/test_pipeline_leg_graph.py` and the `fabricated_dollar` red-team cases), to show the mechanism honestly rather than force a rare, unreliable real failure. `terminal_unexplained_break={findings1.get('terminal_unexplained_break')}` this run. |
+| [`sample_abstain.md`](sample_abstain.md) | `scripts/generate_samples.py::sample_abstain` (GME squeeze, real DoltHub chain slice) | `gpt-5.4-mini` verifier/digester/challenger; narrator is a **fixed, scripted role** (see below) | DoltHub (`gme_squeeze_2021_real`, committed slice) | Market data, Greeks, and routing are real and unmodified. A real `gpt-5.4-mini` narrator on this case produced a well-explained PARTIAL, not a terminal break, so the narrator here is fixed to use trade-advice language ("cheap"): a hard FAIL the code reproduces, which ends the leg in a terminal break. `terminal_unexplained_break={findings1.get('terminal_unexplained_break')}` this run. |
 | [`sample_quiet_day.md`](sample_quiet_day.md) | `scripts/generate_samples.py::sample_quiet_day` (AAPL 2023-04-24, real DoltHub chain slice) | `gpt-5.4-mini` (not called -- `no_escalation` short-circuits before the narrator) | DoltHub (`quiet_aapl_2023-04-24`, committed slice, selected deterministically as a quiet day) | Real. `no_escalation={s2.get('no_escalation')}` this run. |
 | [`sample_real_chain.md`](sample_real_chain.md) | `scripts/generate_samples.py::sample_real_chain` (AAPL ex-div, real DoltHub chain slice) | `gpt-5.4-mini` | DoltHub (`aapl_exdiv_2023_real`, committed slice) | Real. Reliable marks both dates -- `reconcile_mark_vs_model`/market ΔP are real, not model-only. |
 | [`sample_no_llm.md`](sample_no_llm.md) | `explain-my-option --ticker AAPL --type call --no-llm` | none (zero LLM calls) | live yfinance (as-of: run date) | Real live quote. Narrative is the deterministic `fallback_synthesis`, not an LLM. |

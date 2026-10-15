@@ -49,11 +49,11 @@ from explain_my_option.paths import (
     historical_case_dir,
 )
 from explain_my_option.pricing import price_and_attribute
-from ci.engine_config import engine_config_for_tests
+from explain_my_option.pricing.config import EngineConfig
 from explain_my_option.pipeline.config import PipelineConfig
 from explain_my_option.report.schema import DiagnosticSynthesis
 
-CFG = engine_config_for_tests()
+CFG = EngineConfig.fast()
 GOLDEN_SUMMARY = HISTORICAL_SUMMARY_PATH
 
 
@@ -97,13 +97,8 @@ def _deps_for_case(case: BenchmarkCase) -> GraphDeps:
 
 
 def _pipeline_config() -> PipelineConfig:
-    return PipelineConfig(
-        features={"a1", "a2", "a3"},
-        diag_budget=1,
-        diag_iterations=0,
-        verify_budget=0,
-        require_openai=True,
-    )
+    # Scores the narrator itself, so the verifier role is off.
+    return PipelineConfig(verify=False, require_openai=True)
 
 
 def _assert_case_narrative(case: BenchmarkCase, scores: dict[str, Any]) -> None:

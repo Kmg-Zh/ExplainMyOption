@@ -41,7 +41,7 @@ from live_book.portfolio_book import (
     PinnedLeg,
     load_pinned_book,
 )
-from live_book.compare_runs import compare_run_dirs, find_latest_run
+from live_book.compare_runs import compare_run_dirs
 from live_book.strikes import pick_strike
 from explain_my_option.agent_graph import run_pipeline
 from explain_my_option.data.cache import (
@@ -64,7 +64,6 @@ from explain_my_option.graph.prompts import PROMPT_VERSION
 from explain_my_option.intel.sources import IntelRegistry, StubIntelSource
 from explain_my_option.pipeline.llm_roles import default_openai_roles, llm_run_metadata
 from explain_my_option.paths import LIVE_BOOK_OUTPUT_DIR, TESTS_DIR
-from ci.engine_config import engine_config_for_tests
 from explain_my_option.pricing.config import EngineConfig
 from explain_my_option.pricing.facade import price_and_attribute
 from explain_my_option.pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
@@ -128,7 +127,7 @@ def build_offline_bundles(
     *,
     config: EngineConfig | None = None,
 ) -> tuple[list[PositionBundle], list[DiagnosticSynthesis]]:
-    cfg = config or engine_config_for_tests()
+    cfg = config or EngineConfig.fast()
     bundles: list[PositionBundle] = []
     syntheses: list[DiagnosticSynthesis] = []
     for leg in OFFLINE_LEGS:
@@ -210,7 +209,7 @@ def _offline_fixture_deps_for_leg(leg: OfflineLeg) -> GraphDeps:
         market=PatchingMarketLoader(
             FixtureMarketLoader(leg.fixture), {leg.ticker: patches}
         ),
-        pnl=OfficialFdmPnlSource(config=engine_config_for_tests()),
+        pnl=OfficialFdmPnlSource(config=EngineConfig.fast()),
         intel=IntelRegistry(
             {
                 "yfinance_news": StubIntelSource("yfinance_news"),
@@ -317,7 +316,7 @@ def _persist_run(
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "position_count": pf.position_count,
         "tickers": pf.tickers,
-        "total_pnl": pf.total_pnl,
+        "total_pnl": pf.total_model_pnl,
         "cache_path": str(DEFAULT_CACHE),
         "cache_as_of_dates": list_as_of_dates(),
         "cache_snapshot_count": count_snapshots(),

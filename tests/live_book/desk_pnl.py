@@ -29,13 +29,9 @@ from explain_my_option.report.reconciliation import (
     THIN_VOLUME,
     WIDE_SPREAD_PCT_MID,
     build_reconciliation_facts,
-    quote_tier,
 )
 
 RUNS_ROOT = LIVE_BOOK_OUTPUT_DIR
-
-_tier = quote_tier  # backward compat for tests
-
 
 @dataclass
 class LegVerdict:

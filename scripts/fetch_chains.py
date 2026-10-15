@@ -3,7 +3,7 @@
 
 Queries DoltHub + yfinance live (the DoltHub API is slow -- expect a couple
 of minutes per case) and writes the resulting ``MarketSnapshot`` as a small
-JSON slice under ``tests/ci/fixtures/historical/``. Not bulk data: one
+JSON slice under ``tests/fixtures/historical/``. Not bulk data: one
 snapshot per case, not the raw day chains.
 
 Usage::
@@ -31,7 +31,7 @@ from explain_my_option.data.historical_chain import HistoricalChainMarketLoader 
 
 OUT_DIR = _REPO_ROOT / "tests" / "ci" / "fixtures" / "historical"
 
-# A4.5: the only two confirmed convertible cases -- do not add others here
+# The only two confirmed convertible cases -- do not add others here
 # without independently re-verifying convertibility per docs/dev/DATA_SOURCES.md.
 CASES = {
     "gme_squeeze_2021_real": dict(
@@ -52,8 +52,8 @@ CASES = {
     ),
 }
 
-# A7.1: quiet-day cases, from scripts/find_quiet_days.py's deterministic
-# selection (tests/ci/fixtures/quiet_days/quiet_days_2023.json) -- a
+# Quiet-day cases, from scripts/find_quiet_days.py's deterministic
+# selection (tests/fixtures/quiet_days/quiet_days_2023.json) -- a
 # near-ATM, ~25-45 DTE contract picked per selected date pair.
 QUIET_DAY_CASES = {
     "quiet_aapl_2023-04-24": dict(

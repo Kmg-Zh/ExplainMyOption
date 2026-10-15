@@ -1,36 +1,17 @@
 #!/usr/bin/env python3
-"""Task C3.5: the daily live-book run.
+"""The daily live-book run log.
 
-Runs docs/runlog/book.json (Task C3.1: 8 legs, >=35 DTE at inception, no
-rolls) through the real graph for every leg, writes
-docs/runlog/YYYY-MM-DD/report.md and appends one line to
+Runs every leg of docs/runlog/book.json through the real graph, writes
+docs/runlog/YYYY-MM-DD/{report.md,audit.json} and appends one row to
 docs/runlog/metrics.jsonl.
 
-Ground rules (spec Sec. C3.5, verbatim): commit report and metrics line
-EVERY trading day. Do not backfill, do not simulate, do not generate a
-run for a day it did not run. A gap is honest; a fabricated entry
-destroys the artefact's value. This script only ever writes *today's*
-entry -- there is no backfill mode, on purpose.
+Only today's entry is ever written: no backfill, no simulated days. A gap is
+honest; a fabricated entry would destroy the log's value. The roll-up report
+is the deterministic portfolio render, not an extra LLM call; legs that are
+quiet days make no LLM call at all (legs_silent).
 
-C3.4's "inference budget allocated by residual" is not new logic here --
-it is Task A7's existing no_escalation gate, already shipped in the leg
-graph. This script does not re-implement it; it only records, per leg,
-which side of that gate each leg landed on (legs_narrated / legs_silent)
-and each leg's llm_calls.
-
-C3.4 also asks for "one book-level synthesis per day regardless." Per the
-spec's own ground rules (Sec. 0.2: the agent graph topology is frozen
-except for hardening -- no new LLM calls), this is NOT a new LLM call: it
-is the existing deterministic render_portfolio_report() roll-up, which
-already runs across every leg's report unconditionally. Adding a genuine
-new "book-level LLM" call would (a) violate the frozen-topology rule and
-(b) contradict C3.4's own point that scarce inference should be allocated
-by a number the LLM does not control -- spending one every day regardless
-of materiality is the opposite of that. Recorded as a deliberate scoping
-choice, not an oversight.
-
-    python scripts/daily_run.py                # today, needs OPENAI_API_KEY
-    python scripts/daily_run.py --dry-run       # price + diagnose, don't write/commit
+    python scripts/daily_run.py            # today, needs OPENAI_API_KEY
+    python scripts/daily_run.py --dry-run  # price and diagnose, write nothing
 """
 
 from __future__ import annotations
@@ -42,7 +23,7 @@ import statistics
 import sys
 import time
 from collections import Counter
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +45,7 @@ from explain_my_option.graph.deps import default_deps  # noqa: E402
 from explain_my_option.graph.prompts import PROMPT_VERSION  # noqa: E402
 from explain_my_option.pipeline.llm_roles import default_openai_roles  # noqa: E402
 from explain_my_option.report.facts import PositionBundle  # noqa: E402
-from explain_my_option.report.reconciliation import build_reconciliation_facts, marks_reliable  # noqa: E402
+from explain_my_option.report.reconciliation import build_reconciliation_facts  # noqa: E402
 from explain_my_option.report.schema import DiagnosticSynthesis  # noqa: E402
 from explain_my_option.report.template import render_portfolio_report  # noqa: E402
 
@@ -76,16 +57,14 @@ METRICS_PATH = RUNLOG_DIR / "metrics.jsonl"
 # counted in `residual_pct_excluded_legs`.
 MIN_PCT_DENOMINATOR_USD = 0.005
 
-# Same rate used in Task B4's docs/studies/agent_budget.md -- gpt-5.4-mini
-# standard (non-batch), third-party aggregator (OpenAI's own pricing page
-# 403'd this session's fetch tool). Token counts below are exact; the $
-# figure is only as accurate as that page currently says.
+# gpt-5.4-mini list price, as in docs/studies/agent_budget.md. Token counts
+# are exact; the dollar figure is only as current as that price.
 PRICE_PER_1M_INPUT_USD = 0.75
 PRICE_PER_1M_OUTPUT_USD = 4.50
 
 
 def _skew_proxy(bundles_by_id: dict[str, PositionBundle]) -> dict:
-    """C3.3: a skew proxy for the risk-reversal pair, no fitting, two points."""
+    """Skew proxy from the risk-reversal pair: two quoted points, no fitting."""
     put = bundles_by_id.get("spy_reversal_put")
     call = bundles_by_id.get("spy_reversal_call")
     if put is None or call is None:
@@ -178,13 +157,8 @@ def main() -> int:
         )
         bundles_by_id[leg_id] = bundle
         if not args.dry_run:
-            # So tomorrow's run finds a real t-1 instead of the hv20 proxy --
-            # without this, every day would look like day 1. Surface is not
-            # threaded through run_pipeline()'s return dict today; t-1
-            # lookup itself (data.cache.load_t1) only reads iv_now/
-            # option_price_now off the cached snapshot, not the surface, so
-            # this still fixes the day-1 problem -- local-vol continuity
-            # across days is the only thing narrower here.
+            # Cache today's snapshot so tomorrow's run finds a real T-1 mark
+            # instead of the HV20 proxy (t-1 lookup reads only the snapshot).
             if not upsert_snapshot(state["snapshot"], None):
                 print(f"  not cached as t-1: {leg_id} has a sentinel IV "
                       f"({state['snapshot'].iv_now:g})", file=sys.stderr)
@@ -202,26 +176,13 @@ def main() -> int:
 
         tools_run_all.extend(findings.get("tools_run") or [])
         skipped_tools_all.extend(findings.get("skipped_tools") or [])
-        # MarketSnapshot.quote_tier_now is only populated on some loader
-        # paths (e.g. the real DoltHub historical cases) -- the live
-        # YFinanceMarketLoader path used here leaves it unset, and the
-        # report's own "Quote tier" line actually comes from
-        # build_reconciliation_facts().quote_tier, computed fresh here for
-        # the same reason (this bit MY script, not the shipped report --
-        # confirmed by re-checking against the rendered report text).
+        # The same reconciliation facts the report prints (quote tier, basis).
         rec = build_reconciliation_facts(state["snapshot"], state["pricing"])
         quote_tier_counts[rec.quote_tier or "unknown"] += 1
 
-        # diag_finalize_node can set diagnostic_findings["terminal_unexplained_break"]
-        # early (diag_residual_pct > 15% with the diagnostic-tool budget
-        # exhausted) without the leg actually terminating there -- it can
-        # still reach a normal PARTIAL/PASS verdict via the full narrate+
-        # verify path afterward, and nothing clears the flag when that
-        # happens. terminal_unexplained_break_node (the real terminal
-        # state) always also sets verifier_status="FAIL", so require both,
-        # not the flag alone -- confirmed against this book's own day-1
-        # run, where 6/8 legs showed the stale flag with a genuine PARTIAL
-        # verdict (see WORK_ORDER_REPORT.md FINDING for the full story).
+        # The diagnostic pass flags a residual left unexplained after its tool
+        # budget, but the leg still narrates and verifies; only a code-confirmed
+        # verifier FAIL ends the leg in the terminal state.
         if findings.get("terminal_unexplained_break") and findings.get("verifier_status") == "FAIL":
             terminal_states_by_leg[leg_id] = "terminal_unexplained_break"
         elif state.get("terminal_no_comparable_observation"):
@@ -239,12 +200,12 @@ def main() -> int:
             residual_method_pcts.append(100.0 * abs(rec_pnl.residual_pnl) / total)
         else:
             residual_pct_excluded_legs += 1
-        escalation_bases.append("model" if marks_reliable(state["snapshot"].quote_tier_now) else "method")
+        escalation_bases.append(rec.escalation_basis)
         if findings.get("verifier_status"):
             verifier_verdicts.append(findings["verifier_status"])
         # A hard LLM FAIL that code could not confirm is downgraded to PARTIAL;
         # count it so a downgrade is never silently an "ordinary" PARTIAL.
-        trace = state.get("verifier_trace") or []
+        trace = (findings.get("verifier_audit") or {}).get("trace") or []
         if any(row.get("llm_verdict") == "FAIL" for row in trace):
             verifier_downgraded += 1
         audit_by_leg[leg_id] = {
