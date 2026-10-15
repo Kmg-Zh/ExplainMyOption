@@ -195,7 +195,7 @@ def build_leg_diagnosis_subgraph(
     def diagnostic_pass_node(state: LegState) -> LegState:
         ports = _resolve_ports(state["leg"], deps)
         snap, pricing = state["snapshot"], state["pricing"]
-        result = run_diagnostic_pass(snap, pricing, state.get("surface"), config=getattr(ports.pnl, "config", None))
+        result = run_diagnostic_pass(snap, pricing, state.get("surface"), pnl=ports.pnl)
         out: LegState = {"diagnostic_findings": result.as_dict(), "verifier_trace": []}
         if result.no_escalation:
             out["no_escalation"] = True

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, NewsItem, format_untrusted_source
+from ..intel.types import NewsItem
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..pricing.types import MarketSnapshot, PricingResult
 from ..report.catalysts import normalize_catalyst_tags
 from ..report.desk_packet import format_desk_packet

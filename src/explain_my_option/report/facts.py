@@ -6,8 +6,7 @@ from dataclasses import dataclass, field, fields
 from datetime import date
 from typing import Literal, Sequence
 
-from ..data_loader import NewsItem
-from ..intel.types import SearchPlan
+from ..intel.types import NewsItem, SearchPlan
 from ..pricing.types import MarketSnapshot, PricingResult, intrinsic_value
 from .formatting import contract_id
 from .reconciliation import ReconciliationFacts, build_reconciliation_facts
@@ -378,7 +377,8 @@ def build_position_facts(
         d_vol_pts=pnl.d_vol * 100,
         price_prev=price_prev,
         price_now=pricing.greeks_now.price,
-        pnl_pct=_pct(total, price_prev),
+        # Per-option return on the T-1 model price; quantity × multiplier cancels.
+        pnl_pct=_pct(pricing.pnl.total_pnl, price_prev),
         headline_pnl_usd=mark_pnl if headline_is_mtm else total,
         headline_is_mtm=headline_is_mtm,
         model_pnl_usd=total,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..pricing.types import MarketSnapshot, PricingResult
-from .formatting import contract_id, money, num
+from .formatting import contract_id, money, num, official_model
 
 
 def _md_table(headers: list[str], rows: list[list[str]]) -> list[str]:
@@ -82,7 +82,7 @@ def build_quant_section(snap: MarketSnapshot, pricing: PricingResult) -> str:
             ],
         )
     )
-    lines.extend(["", "### 1-day factor PnL (official FDM, position-scaled)"])
+    lines.extend(["", f"### 1-day factor PnL (official {official_model(diag.engine)}, position-scaled)"])
     lines.extend(
         _md_table(
             ["Factor", "USD"],

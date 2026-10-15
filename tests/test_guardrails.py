@@ -10,14 +10,14 @@ import pytest
 from support import FAST, ScriptedRole, synthesis
 
 from explain_my_option.data.synthetic import list_fixtures, load_fixture
-from explain_my_option.data_loader import (
+from explain_my_option.graph.prompts import compose_diagnose_system_prompt
+from explain_my_option.intel.relevance import coarse_keep
+from explain_my_option.intel.types import NewsItem
+from explain_my_option.intel.untrusted import (
     UNTRUSTED_SOURCE_INSTRUCTION,
-    NewsItem,
     format_untrusted_news_item,
     format_untrusted_source,
 )
-from explain_my_option.graph.prompts import compose_diagnose_system_prompt
-from explain_my_option.intel.relevance import coarse_keep
 from explain_my_option.pipeline.challenger import CHALLENGER_SYSTEM_PROMPT, reconcile_with_challenge, run_catalyst_challenge
 from explain_my_option.pipeline.digest import INTEL_DIGEST_SYSTEM_PROMPT, run_intel_digest
 from explain_my_option.pipeline.leg_graph import NO_ESCALATION_TEXT

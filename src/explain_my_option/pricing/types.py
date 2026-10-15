@@ -210,6 +210,15 @@ class VolSurfaceData:
 
 
 @dataclass
+class LoadedData:
+    """What a market loader returns: today's snapshot and optional vol grids."""
+
+    snapshot: MarketSnapshot
+    surface: Optional[VolSurfaceData] = None
+    surface_prev: Optional[VolSurfaceData] = None
+
+
+@dataclass
 class PricingSpec:
     """Single-date pricing request consumed by ``PricingEngine`` implementations."""
 
@@ -232,7 +241,8 @@ class PricingDiagnostics:
 
     data_source: DataSource
     exercise_style: ExerciseStyle
-    engine: EngineId = "fdm_flat"
+    # The reference engine uses an EngineId; another PnL source names its own.
+    engine: str = "fdm_flat"
     ql_version: Optional[str] = None
     iv_prev_source: Optional[IvPrevSource] = None
     local_vol_used: bool = False

@@ -7,6 +7,7 @@ from support import FAST
 
 from explain_my_option.data.historical_chain import load_historical_case
 from explain_my_option.data.synthetic import list_fixtures, load_fixture
+from explain_my_option.graph.deps import OfficialFdmPnlSource
 from explain_my_option.graph.diagnostic_controller import (
     FREE_TOOLS,
     MAX_DIAGNOSTIC_TOOL_CALLS,
@@ -21,7 +22,7 @@ def _diagnose(name: str):
         snap, surf = load_historical_case(name), None
     else:
         snap, surf = load_fixture(name)
-    return run_diagnostic_pass(snap, price_and_attribute(snap, surf, config=FAST), surf, config=FAST)
+    return run_diagnostic_pass(snap, price_and_attribute(snap, surf, config=FAST), surf, pnl=OfficialFdmPnlSource(config=FAST))
 
 
 def _costly(findings) -> list[str]:

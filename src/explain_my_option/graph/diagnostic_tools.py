@@ -1,14 +1,17 @@
-"""Deterministic diagnostic tools for ``diagnostic_pass`` (no LLM)."""
+"""Deterministic diagnostic tools for ``diagnostic_pass`` (no LLM).
+
+The two revaluation audits ask the PnL source to reprice; the rest is arithmetic
+on facts the source already produced.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from ..pricing.analysis_api import path_reprice, taylor_second_order
-from ..pricing.config import EngineConfig
 from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
 from ..report.facts import american_facts
 from ..report.reconciliation import build_reconciliation_facts
+from .deps import PnlSource
 
 
 def reconcile_mark_vs_model(
@@ -47,13 +50,8 @@ def quote_quality_and_noise_band(
     }
 
 
-def run_taylor_second_order(
-    snap: MarketSnapshot,
-    pricing: PricingResult,
-    *,
-    config: Optional[EngineConfig] = None,
-) -> dict[str, Any]:
-    result = taylor_second_order(snap, pricing, config=config)
+def run_taylor_second_order(pnl: PnlSource, snap: MarketSnapshot, pricing: PricingResult) -> dict[str, Any]:
+    result = pnl.second_order(snap, pricing)
     return {
         "vanna": result.vanna,
         "volga": result.volga,
@@ -66,14 +64,9 @@ def run_taylor_second_order(
 
 
 def run_path_reprice(
-    snap: MarketSnapshot,
-    pricing: PricingResult,
-    surface: Optional[VolSurfaceData],
-    *,
-    config: Optional[EngineConfig] = None,
+    pnl: PnlSource, snap: MarketSnapshot, pricing: PricingResult, surface: Optional[VolSurfaceData]
 ) -> dict[str, Any]:
-    result = path_reprice(snap, pricing, surface=surface, config=config)
-    return result.as_dict()
+    return pnl.path_reprice(snap, pricing, surface).as_dict()
 
 
 def american_dividend_exercise_check(

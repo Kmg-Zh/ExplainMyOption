@@ -1,4 +1,5 @@
-"""Diagnose system prompt: structured default + optional author-local extra.
+"""Narrator system prompt: the governance text, the PnL source's methodology
+paragraph, and an optional author-local extra.
 
 The product path uses ``with_structured_output(DiagnosticSynthesis)``.
 Incomplete-data eval instructions live in a gitignored file (or env) so other
@@ -10,22 +11,29 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION
 
 # Bump whenever an LLM-facing prompt (narrator, verifier, critic, digester),
 # the desk packet, or the verifier's decision logic changes. Red-team results
 # and run-log rows are only comparable within one version.
 PROMPT_VERSION = "v3.2"
 
+# How the reference engine computes the official PnL. A PnL source describes its
+# own method through its ``methodology`` attribute.
+QUANTLIB_METHODOLOGY = """**Official model ΔP:** QuantLib American **FDM** (`FdBlackScholesVanillaEngine`). Local vol when
+today's implied-vol grid passes a Dupire calibration probe; otherwise flat contract IV. Exercise
+style follows the snapshot (American by default for US equity)."""
+
+GENERIC_METHODOLOGY = """**Official model ΔP:** computed by the desk's own pricing engine; the blotter shows that
+engine's prices, Greeks and attribution."""
+
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
-PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
+_PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
 
 All dollar amounts in the desk blotter are **pre-computed by the quant engine** — you do not
 reprice or invent sensitivities.
 
-**Official model ΔP:** QuantLib American **FDM** (`FdBlackScholesVanillaEngine`). Local vol when
-today's implied-vol grid passes a Dupire calibration probe; otherwise flat contract IV. Exercise
-style follows the snapshot (American by default for US equity).
+{methodology}
 
 **Taylor blotter (Greek-based):** close-to-close attribution using **T-1 engine Greeks**:
   ΔP ≈ Delta·ΔS + ½·Gamma·(ΔS)² + Vega·Δσ + Theta·Δt + **residual (ε)**
@@ -61,11 +69,11 @@ same engine after each input move; step sum equals model ΔP (audit residual ≈
 Your job is to **explain** these layers and tie news to both the dominant factor and any named
 catalyst in the headlines — never override the blotter."""
 
-# Public default — structured synthesis for the industrial report template.
-STRUCTURED_DIAGNOSE_SYSTEM_PROMPT = """You are a derivatives desk analyst diagnosing 1-day option PnL.
+# Structured synthesis for the report template; {methodology} is filled per PnL source.
+_DIAGNOSE_SYSTEM_TEMPLATE = """You are a derivatives desk analyst diagnosing 1-day option PnL.
 Your job: explain why the price moved, not forecast the next move. Output DiagnosticSynthesis only.
 
-""" + PRICING_ATTRIBUTION_CONTEXT + """
+""" + _PRICING_ATTRIBUTION_CONTEXT + """
 
 ### Two layers (both, when evidence exists — not a single-track tree)
 
@@ -130,6 +138,13 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
 ### Untrusted content
 """ + UNTRUSTED_SOURCE_INSTRUCTION
 
+
+def diagnose_system_prompt(methodology: str = QUANTLIB_METHODOLOGY) -> str:
+    return _DIAGNOSE_SYSTEM_TEMPLATE.replace("{methodology}", methodology.strip())
+
+
+STRUCTURED_DIAGNOSE_SYSTEM_PROMPT = diagnose_system_prompt()
+
 _EXTRA_ENV = "EMO_DIAGNOSE_SYSTEM_EXTRA"
 _EXTRA_FILE_ENV = "EMO_DIAGNOSE_SYSTEM_EXTRA_FILE"
 
@@ -165,9 +180,12 @@ def compose_diagnose_system_prompt(
     *,
     base: str | None = None,
     extra: str | None = None,
+    methodology: str | None = None,
 ) -> str:
-    """``extra=None`` means 'not provided here' (caller already resolved env)."""
-    body = (base or STRUCTURED_DIAGNOSE_SYSTEM_PROMPT).strip()
+    """``base`` replaces the whole prompt; otherwise ``methodology`` (default: the
+    reference engine's) fills the pricing paragraph. ``extra=None`` means 'not
+    provided here' (caller already resolved env)."""
+    body = (base or diagnose_system_prompt(methodology or QUANTLIB_METHODOLOGY)).strip()
     body = body + "\n\n" + blotter_field_whitelist_section()
     add = (extra or "").strip()
     if add:

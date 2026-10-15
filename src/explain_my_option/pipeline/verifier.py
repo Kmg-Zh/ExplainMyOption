@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..report.catalysts import external_cause_terms, missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
@@ -17,7 +17,7 @@ from ..report.validate import (
     find_prohibited_synonyms,
     validate_synthesis,
 )
-from .llm_roles import LlmRole
+from .llm_roles import LlmRole, LlmUnavailable
 from .verifier_schema import DiagnosticVerifierResult, GuardedVerifierResult
 
 VERIFIER_SYSTEM_PROMPT = """You are an independent diagnostic verifier for an options PnL explain report.
@@ -140,6 +140,9 @@ def _evidence_provenance_rationale() -> str:
     )
 
 
+_VERIFIER_UNAVAILABLE_RATIONALE = "No LLM verifier is configured; the code checks passed."
+
+
 def _hedge_advice_rationale() -> str:
     return (
         "Hedge, rebalance or profit-taking directive in the narrative -- this "
@@ -160,6 +163,7 @@ DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
         "Vega story not falsifiable from quote",
         _observation_lock_rationale(),
         _missing_catalyst_rationale(),
+        _VERIFIER_UNAVAILABLE_RATIONALE,
     }
 )
 
@@ -461,10 +465,15 @@ def verify_synthesis(
         f"Independent critic Layer B required: {(catalyst_challenge or {}).get('layer_b_required')}\n"
         f"Independent critic mechanisms: {(catalyst_challenge or {}).get('mechanisms') or 'none'}\n"
     )
-    raw = role.structured_invoke(
-        system=VERIFIER_SYSTEM_PROMPT,
-        human=human,
-        schema=DiagnosticVerifierResult,
-    )
+    try:
+        raw = role.structured_invoke(
+            system=VERIFIER_SYSTEM_PROMPT,
+            human=human,
+            schema=DiagnosticVerifierResult,
+        )
+    except LlmUnavailable:
+        return DiagnosticVerifierResult(
+            verdict="PARTIAL", policy_flags=["verifier_unavailable"], rationale=_VERIFIER_UNAVAILABLE_RATIONALE
+        )
     result = GuardedVerifierResult.model_validate(raw.model_dump())
     return _confirm_hard_flags(result, synthesis, no_escalation=no_escalation)

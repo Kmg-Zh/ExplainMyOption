@@ -130,7 +130,7 @@ Seven modules under `tests/`, offline and keyless (credentials are blanked for e
 | `test_report.py` | Signed % shares and the gross-movement basis, residual drill at position size, reconciliation, the blotter goldens |
 | `test_diagnostics.py` | Tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
 | `test_guardrails.py` | Code checks before the verifier, code confirmation of LLM hard flags, untrusted-text containment, digest and critic contracts |
-| `test_pipeline.py` | The LangGraph workflow end to end with scripted LLM roles: routing, quiet days, coverage gaps, book fan-out, CLI |
+| `test_pipeline.py` | The LangGraph workflow end to end with scripted LLM roles: routing, quiet days, coverage gaps, book fan-out, CLI, a desk's own PnL source with the engine deleted |
 | `test_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, search planning, news sources |
 | `test_historical_cases.py` | The historical events below, each pinned to its desk lesson, plus the eval's no-lookahead rule |
 
@@ -265,3 +265,7 @@ flowchart TB
   FAIL --> DONE([done])
   FIN --> DONE
 ```
+
+## Using it with your own PnL system
+
+`fetch_market` and `quant` are ports; the yfinance loader and the QuantLib engine are the bundled implementations. A desk that passes its own market loader and PnL source gets the same workflow, checks and report on its own numbers, without QuantLib or yfinance. The contract, what to copy and the other plug points are in [docs/INTEGRATION.md](docs/INTEGRATION.md); a runnable example is [examples/bring_your_own_pnl.py](examples/bring_your_own_pnl.py).

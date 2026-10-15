@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ..data_loader import NewsItem, format_untrusted_news_item
+from ..intel.types import NewsItem
+from ..intel.untrusted import format_untrusted_news_item
 from ..pricing.types import MarketSnapshot, PricingResult
 from .blotter import build_quant_section
 from .facts import build_position_facts

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..data_loader import NewsItem
-from ..intel.types import SearchPlan
+from ..intel.types import NewsItem, SearchPlan
 from .facts import PositionBundle, PositionFacts, build_portfolio_facts, build_position_facts
+from .formatting import is_reference_engine, official_model, pct
 from .formatting import money as _money
-from .formatting import pct
 from .reconciliation import ReconciliationFacts
 from .schema import DiagnosticSynthesis
 
@@ -139,7 +138,8 @@ def _attribution_table(facts: PositionFacts) -> str:
         else ""
     )
     lines = [
-        f"Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities){share_note}:",
+        f"Greek-based (Taylor) attribution (official {official_model(facts.engine)} Greeks, "
+        f"T-1 sensitivities){share_note}:",
         "",
         "| Attribution Component | Value ($) | % Share | Quant Driver |",
         "| :--- | ---: | ---: | :--- |",
@@ -445,7 +445,10 @@ def render_position_report(
 ) -> str:
     """Seven-section morning-pack diagnostic report for one position."""
     news = news or []
-    status = f"Verified by QuantLib ({facts.engine})"
+    if is_reference_engine(facts.engine):
+        status = f"Verified by QuantLib ({facts.engine})"
+    else:
+        status = f"Priced by {facts.engine}"
     headline_label = "Mark MTM PnL" if facts.headline_is_mtm else "Model PnL (no mark)"
     gross = sum(abs(r.usd) for r in facts.attribution)
     driver_parts = [

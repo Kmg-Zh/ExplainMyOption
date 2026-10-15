@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import runpy
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -211,3 +214,44 @@ def test_pinned_books_name_explicit_unique_contracts(path):
     ids = [leg.get("leg_id") or leg["ticker"] for leg in legs]
     assert len(ids) == len(set(ids))
     assert all(leg.get("strike") and leg.get("expiry") for leg in legs)
+
+
+# --- Your own PnL system (docs/INTEGRATION.md) ----------------------------------------------
+
+EXAMPLE = REPO_ROOT / "examples" / "bring_your_own_pnl.py"
+# What docs/INTEGRATION.md says a desk with its own adapters may delete.
+REFERENCE_ENGINE_FILES = (
+    "pricing/analysis_api.py", "pricing/calibrate.py", "pricing/engines", "pricing/facade.py",
+    "pricing/ql_engine.py", "pricing/registry.py", "pricing/risk.py", "pricing/second_order.py",
+    "pricing/sequential_reval.py", "pricing/surface.py", "pricing/vol_models.py", "data_loader.py",
+    "data/cache.py", "data/dividends.py", "data/historical_chain.py", "data/rates.py", "data/realized.py",
+    "cli.py",
+)
+
+
+def test_the_example_runs_a_desk_pnl_source_end_to_end():
+    report = runpy.run_path(str(EXAMPLE))["main"]()
+    assert "Priced by desk_risk" in report
+    assert "QuantLib" not in report and "FDM" not in report
+    # The headline return is per option, not the 10 × 100 position PnL over one option's price.
+    assert "`+$1,550.0000` (+36.7%)" in report
+    assert "`taylor_second_order` — the PnL source has no revaluation hook" in report
+
+
+def test_the_agent_runs_with_the_reference_engine_deleted(tmp_path):
+    pkg = tmp_path / "explain_my_option"
+    shutil.copytree(REPO_ROOT / "src" / "explain_my_option", pkg, ignore=shutil.ignore_patterns("__pycache__"))
+    for rel in REFERENCE_ENGINE_FILES:
+        path = pkg / rel
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
+    script = f"""
+import runpy, sys
+for name in ("QuantLib", "yfinance", "pandas", "scipy", "numpy"):
+    sys.modules[name] = None  # importing any of them now fails
+sys.path.insert(0, {str(tmp_path)!r})
+import explain_my_option
+assert explain_my_option.__file__.startswith({str(tmp_path)!r}), explain_my_option.__file__
+assert "## 7. Risk Watchlist" in runpy.run_path({str(EXAMPLE)!r})["main"]()
+"""
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

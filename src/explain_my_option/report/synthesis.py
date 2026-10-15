@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..data_loader import NewsItem, format_untrusted_source
-from ..graph.prompts import compose_diagnose_system_prompt
-from ..intel.types import SearchPlan
+from ..graph.prompts import GENERIC_METHODOLOGY, compose_diagnose_system_prompt
+from ..intel.types import NewsItem, SearchPlan
+from ..intel.untrusted import format_untrusted_source
 from ..pipeline.digest import IntelDigest, coarse_kept_news
 from ..pipeline.llm_roles import LlmUnavailable
 from ..pricing.types import MarketSnapshot, PricingResult
@@ -326,6 +326,7 @@ def synthesize_diagnosis(
         system = compose_diagnose_system_prompt(
             base=ports.diagnose_system_prompt if ports is not None else None,
             extra=ports.diagnose_system_extra if ports is not None else None,
+            methodology=getattr(ports.pnl, "methodology", GENERIC_METHODOLOGY) if ports is not None else None,
         )
         human = _human_prompt(snap, pricing, facts, layer_b_news, plan, findings)
         result = role.structured_invoke(system=system, human=human, schema=DiagnosticSynthesis)

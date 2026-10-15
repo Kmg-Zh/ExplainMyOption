@@ -1,8 +1,10 @@
 """Deterministic diagnostic pass: which tools run, and what the run escalates to.
 
 Free tools are arithmetic on already-priced facts and always run when their
-inputs exist. One costly tool (a full revaluation or a model cross-check) may
-run per pass. No LLM is involved.
+inputs exist. One costly tool (a full revaluation or an early-exercise check)
+may run per pass. The two revaluation audits need the PnL source's optional
+``second_order`` / ``path_reprice`` hooks; without them they are skipped with
+the reason recorded. No LLM is involved.
 """
 
 from __future__ import annotations
@@ -10,10 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from ..pricing.config import EngineConfig
 from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
 from ..report.reconciliation import build_reconciliation_facts
 from . import diagnostic_tools as tools
+from .deps import PnlSource
 
 MAX_DIAGNOSTIC_TOOL_CALLS = 1
 
@@ -30,8 +32,10 @@ LOW_SEVERITY_THRESHOLD_PCT = 10.0
 # follow-up full revaluation when none ran yet. It audits the blotter and
 # never escalates.
 FOLLOW_UP_RESIDUAL_PCT = 5.0
-# Costly slot spent and residual or mark gap still above this: terminal break.
+# The costly audit ran (or the PnL source cannot run it) and the residual or
+# mark gap is still above this: terminal break.
 TERMINAL_BREAK_PCT = 15.0
+_NO_REVALUATION = "the PnL source has no revaluation hook"
 # Taylor is local: past this ratio of second- to first-order terms it diverges
 # rather than converging slowly. Provisional; see the README "Regime rule".
 TAYLOR_REGIME_THRESHOLD = 0.35
@@ -145,10 +149,13 @@ def run_diagnostic_pass(
     pricing: PricingResult,
     surface: Optional[VolSurfaceData] = None,
     *,
-    config: Optional[EngineConfig] = None,
+    pnl: PnlSource,
 ) -> DiagnosticFindings:
+    """Run the deterministic tools; ``pnl`` is the PnL source that priced the leg."""
     findings = DiagnosticFindings()
     res_pct = residual_pct(pricing)
+    can_second_order = hasattr(pnl, "second_order")
+    can_reprice = hasattr(pnl, "path_reprice")
 
     if snap.option_price_now > 0 and snap.option_price_prev > 0:
         _run_tool(findings, "reconcile_mark_vs_model", lambda: tools.reconcile_mark_vs_model(snap, pricing))
@@ -159,8 +166,11 @@ def run_diagnostic_pass(
         findings.suppress_vega_narrative = bool(quote.get("iv_move_within_noise"))
         findings.observation_reliable = bool(quote.get("observation_reliable", True))
 
-    _run_tool(findings, "taylor_second_order", lambda: tools.run_taylor_second_order(snap, pricing, config=config))
-    second = findings.results["taylor_second_order"]
+    if can_second_order:
+        _run_tool(findings, "taylor_second_order", lambda: tools.run_taylor_second_order(pnl, snap, pricing))
+    else:
+        _skip(findings, "taylor_second_order", _NO_REVALUATION)
+    second = findings.results.get("taylor_second_order") or {}
     findings.r_spot = abs(pricing.pnl.gamma_pnl) / max(abs(pricing.pnl.delta_pnl), 1e-12)
     findings.r_vol = abs(float(second.get("volga_pnl", 0.0))) / max(abs(pricing.pnl.vega_pnl), 1e-12)
     findings.taylor_regime = "INVALID" if max(findings.r_spot, findings.r_vol) > TAYLOR_REGIME_THRESHOLD else "VALID"
@@ -174,32 +184,40 @@ def run_diagnostic_pass(
     if flag_ex_div:
         findings.ex_div_attribution = tools.ex_div_attribution_split(snap, pricing)
 
+    deep_unavailable = False
     if calibrated_ok:
         _skip(findings, "deep_diagnostics", "mark calibrated and gap small")
     else:
         deep, skipped = _pick_deep_tool(severity=max(res_pct, gap_pct), flag_ex_div=flag_ex_div)
         for name, reason in skipped:
             _skip(findings, name, reason)
-        if deep == "path_reprice":
-            _run_tool(findings, deep, lambda: tools.run_path_reprice(snap, pricing, surface, config=config))
+        if deep == "path_reprice" and can_reprice:
+            _run_tool(findings, deep, lambda: tools.run_path_reprice(pnl, snap, pricing, surface))
+        elif deep == "path_reprice":
+            _skip(findings, deep, _NO_REVALUATION)
+            deep_unavailable = True
         elif deep == "american_dividend_exercise_check":
             _run_tool(findings, deep, lambda: am_check)
     considered = {*findings.tools_run, *(s.name for s in findings.skipped_tools)}
     if flag_ex_div and "american_dividend_exercise_check" not in considered:
         _skip(findings, "american_dividend_exercise_check", "budget exhausted or lower priority")
 
-    if findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS and max(res_pct, gap_pct) > TERMINAL_BREAK_PCT:
+    slot_used = findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS or deep_unavailable
+    if slot_used and max(res_pct, gap_pct) > TERMINAL_BREAK_PCT:
         findings.terminal_unexplained_break = True
         findings.terminal_cause = "unexplained_residual"
     findings.no_escalation = nothing_to_explain(snap, pricing, findings)
 
     if not findings.no_escalation and res_pct > FOLLOW_UP_RESIDUAL_PCT and "path_reprice" not in findings.tools_run:
-        _run_tool(
-            findings,
-            "path_reprice",
-            lambda: tools.run_path_reprice(snap, pricing, surface, config=config),
-            budgeted=False,
-        )
+        if can_reprice:
+            _run_tool(
+                findings,
+                "path_reprice",
+                lambda: tools.run_path_reprice(pnl, snap, pricing, surface),
+                budgeted=False,
+            )
+        elif not deep_unavailable:
+            _skip(findings, "path_reprice", _NO_REVALUATION)
     return findings
 
 

@@ -11,6 +11,7 @@ from support import FAST
 
 from explain_my_option.data.historical_chain import load_historical_case
 from explain_my_option.data.synthetic import list_fixtures, load_fixture
+from explain_my_option.graph.deps import OfficialFdmPnlSource
 from explain_my_option.graph.diagnostic_controller import run_diagnostic_pass
 from explain_my_option.intel.types import SearchPlan
 from explain_my_option.paths import GOLDEN_DIR
@@ -109,7 +110,7 @@ def test_residual_drill_is_position_scaled_and_residual_after_nets_second_order(
     'Residual after' is the Taylor residual left once vanna and volga are added."""
     snap, surf, pricing = _priced("vol_crush")
     snap = dataclasses.replace(snap, quantity=2.0, multiplier=100.0)
-    findings = run_diagnostic_pass(snap, pricing, surf, config=FAST).as_dict()
+    findings = run_diagnostic_pass(snap, pricing, surf, pnl=OfficialFdmPnlSource(config=FAST)).as_dict()
     facts = build_position_facts(snap, pricing)
     report = render_position_report(facts, fallback_synthesis(facts, llm_unavailable=True), diagnostic_findings=findings)
 

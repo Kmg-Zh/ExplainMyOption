@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from ..data_loader import NewsItem
+from ..intel.types import NewsItem
 
 # (tag, tokens that mean the headline contains this mechanism,
 #  tokens that mean the narrative already covered it)

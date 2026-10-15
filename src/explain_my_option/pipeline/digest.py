@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, NewsItem, format_untrusted_news_item
 from ..intel.relevance import coarse_keep
+from ..intel.types import NewsItem
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_news_item
 from ..report.catalysts import (
     CATALYST_TAGS,
     MICROSTRUCTURE_TAGS,
