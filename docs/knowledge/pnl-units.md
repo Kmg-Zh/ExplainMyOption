@@ -45,7 +45,7 @@ Signs: call delta ∈ [0, 1], put delta ∈ [-1, 0]; long-vanilla vega ≥ 0.
 
 ## Display scale (position blotter)
 
-`price_and_attribute` always attributes **1 option**. The product report (`src/explain_my_option/report_generator.py`) is a **single-position blotter**: contract identity, quantity, market move, Greeks, factor PnL.
+`price_and_attribute` always attributes **1 option**. The product blotter (`src/explain_my_option/report/blotter.py`) is a **single-position table**: contract identity, quantity, market move, Greeks, factor PnL.
 
 ```text
 display_pnl = engine_pnl * quantity * multiplier

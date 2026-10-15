@@ -12,9 +12,9 @@ live adapter on 2026-09-16: `19.1975 * 4 = 76.79000091552734` for
 2021-01-25, matching the independently-confirmed as-traded close below to
 7 significant figures, and `check_basis_consistency` now passes for
 both dates. `gme_squeeze_2021_real` and `aapl_exdiv_2023_real` are both
-committed as frozen slices under `tests/ci/fixtures/historical/`
+committed as frozen slices under `tests/fixtures/historical/`
 (`scripts/fetch_chains.py`), exercised offline by
-`tests/ci/test_historical_real_cases.py`.
+`tests/test_historical_cases.py`.
 
 The split-basis analysis below is kept as the record of *why* the split
 mismatch exists and how it was diagnosed. It was written when the GME check

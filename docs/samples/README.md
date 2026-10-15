@@ -1,8 +1,7 @@
 # Sample reports
 
-Generated 2026-10-05T04:46:55+00:00 by
-`scripts/generate_samples.py`. Every file below is the literal output of a
-real run -- not hand-written. Two limitations are disclosed here rather than
+Generated 2026-10-15 by `scripts/generate_samples.py` (prompt version v3.2).
+Every file below is the literal output of a real run -- not hand-written. Two limitations are disclosed here rather than
 worked around silently: (1) neither real historical case naturally reaches
 `terminal_unexplained_break` with a well-behaved real narrator, so
 `sample_abstain.md` is a constructed demonstration of that mechanism; (2)
@@ -13,7 +12,7 @@ uses a synthetic stress fixture.
 
 | File | Command | Model | Data source | Real vs synthetic |
 |---|---|---|---|---|
-| [`sample_abstain.md`](sample_abstain.md) | `scripts/generate_samples.py::sample_abstain` (GME squeeze, real DoltHub chain slice) | `gpt-5.4-mini` verifier/digester/challenger; narrator is a **fixed, scripted role** (see below) | DoltHub (`gme_squeeze_2021_real`, committed slice) | Market data, Greeks, and routing are real and unmodified. A real `gpt-5.4-mini` narrator run against this same case produced a well-explained PARTIAL, not a terminal break (reliable marks keep the residual small, and `revise_synthesis` gives a real model a second chance to self-correct) -- so the narrator here is fixed to deliberately claim a dollar figure not in the real blotter (same construction as `tests/ci/test_pipeline_leg_graph.py` and the `fabricated_dollar` red-team cases), to show the mechanism honestly rather than force a rare, unreliable real failure. `terminal_unexplained_break=True` this run. |
+| [`sample_abstain.md`](sample_abstain.md) | `scripts/generate_samples.py::sample_abstain` (GME squeeze, real DoltHub chain slice) | narrator is a **fixed, scripted role** (see below); no LLM is reached: code rejects the narrative before the verifier | DoltHub (`gme_squeeze_2021_real`, committed slice) | Market data, Greeks, and routing are real and unmodified. A real `gpt-5.4-mini` narrator on this case produced a well-explained PARTIAL, not a terminal break, so the narrator here is fixed to use trade-advice language ("cheap"): a hard FAIL the code reproduces, which ends the leg in a terminal break. `terminal_unexplained_break=True` this run. |
 | [`sample_quiet_day.md`](sample_quiet_day.md) | `scripts/generate_samples.py::sample_quiet_day` (AAPL 2023-04-24, real DoltHub chain slice) | `gpt-5.4-mini` (not called -- `no_escalation` short-circuits before the narrator) | DoltHub (`quiet_aapl_2023-04-24`, committed slice, selected deterministically as a quiet day) | Real. `no_escalation=True` this run. |
 | [`sample_real_chain.md`](sample_real_chain.md) | `scripts/generate_samples.py::sample_real_chain` (AAPL ex-div, real DoltHub chain slice) | `gpt-5.4-mini` | DoltHub (`aapl_exdiv_2023_real`, committed slice) | Real. Reliable marks both dates -- `reconcile_mark_vs_model`/market ΔP are real, not model-only. |
 | [`sample_no_llm.md`](sample_no_llm.md) | `explain-my-option --ticker AAPL --type call --no-llm` | none (zero LLM calls) | live yfinance (as-of: run date) | Real live quote. Narrative is the deterministic `fallback_synthesis`, not an LLM. |

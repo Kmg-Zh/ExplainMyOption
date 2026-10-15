@@ -9,7 +9,7 @@
 
 * **Mark MTM PnL**: `-$0.1500` (-3.4%)
 * **Model ΔP**: `-$0.1500`
-* **Primary drivers**: **Delta PnL** (47%) and **Vega PnL** (38%) and **Theta decay** (13%).
+* **Primary drivers**: **Delta PnL** (-47.5%) and **Vega PnL** (+38.3%) and **Theta decay** (-13.2%).
 * **Verdict**: Nothing to explain. The move is accounted for by carry and a small spot move; the unexplained portion is within tolerance. No news search was performed.
 * **Confidence**: **Medium** — Escalation metric is at or below the quiet-day threshold; see the Mark Reconciliation section for the exact figures.
 
@@ -41,16 +41,16 @@
 
 ## 4. Quantitative PnL Attribution
 
-Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% shares use sum-of-|components| because |total PnL| is near zero):
+Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (the components largely offset, so % Share is of the gross movement Σ|component|):
 
 | Attribution Component | Value ($) | % Share | Quant Driver |
 | :--- | ---: | ---: | :--- |
-| **Delta PnL (ΔS · Delta)** | `-$0.3297` | +47.5% | Stock moved from $182.89 to $182.41 (-0.4800) |
+| **Delta PnL (ΔS · Delta)** | `-$0.3297` | -47.5% | Stock moved from $182.89 to $182.41 (-0.4800) |
 | **Gamma PnL (½(ΔS)² · Gamma)** | `+$0.0062` | +0.9% | Convexity from the spot move |
-| **Vega PnL (Δσ · Vega)** | `+$0.2661` | +38.3% | IV moved +1.96 vol pts (19.70% → 19.57%) |
-| **Theta decay (Δt · Theta)** | `-$0.0918` | +13.2% | Calendar time decay (1 day) |
-| **Unexplained residual (ε)** | `-$0.0008` | +0.1% | American EE, skew curvature, dividend discreteness, model gap |
-| **Total Model PnL** | **-$0.1500** | **100.0%** | ΔP = P₁ − P₀ (model) |
+| **Vega PnL (Δσ · Vega)** | `+$0.2661` | +38.3% | IV moved +1.96 vol pts (17.25% → 19.22%) |
+| **Theta decay (Δt · Theta)** | `-$0.0918` | -13.2% | Calendar time decay (1 day) |
+| **Unexplained residual (ε)** | `-$0.0008` | -0.1% | American EE, skew curvature, dividend discreteness, model gap |
+| **Total Model PnL** | **-$0.1500** | **-21.6%** | ΔP = P₁ − P₀ (model) |
 
 ---
 
@@ -58,15 +58,15 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 * **Taylor residual**: `-$0.0008` (0.6% of |model|)
 
-### Second-order Taylor (Layer 3)
+### Second-order Taylor (vanna, volga)
 * other second-order: `+$0.0103`
-* Combined: `+$0.0103` | Residual after: `-$0.1603`
+* Combined: `+$0.0103` | Residual after: `-$0.0112`
 
-### Ex-div attribution overlay (FO; official PnL stays American FDM Taylor)
-* **Spot drop vs dividend**: spot `-$0.4800` vs next cash dividend `+$0.2400` (gap `-$0.2400`)
-* **American FDM vs European analytic (no cash div, cross-check)**: `+$4.2750` vs `+$4.2268` (gap `+$0.0482`)
-* **Early-exercise premium** (American vs European, same dividend schedule, signed, not floored): `+$0.0000` — not material
-* **Dividend PV effect** (European, same divs − no divs): `+$0.0474`
+### Ex-div attribution overlay (official PnL stays the American FDM Taylor blotter)
+* **Spot drop vs dividend** (per share): spot `-$0.4800` vs next cash dividend `+$0.2400` (gap `-$0.2400`)
+* **American FDM vs European analytic (no cash div, cross-check, per option)**: `+$4.2750` vs `+$4.2268` (gap `+$0.0482`)
+* **Early-exercise premium** (American vs European, same dividend schedule, signed, not floored, per option): `+$0.0000` — not material
+* **Dividend PV effect** (European, same divs − no divs, per option): `+$0.0474`
 * **Dividend coverage** (dividend / time value): `0.13` — carry/theta case, not an early-exercise case
 * **Vol (Taylor Vega PnL)**: `+$0.2661`
 * **Residual (Taylor ε)**: `-$0.0008`

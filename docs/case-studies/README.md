@@ -5,7 +5,7 @@ quotes both days via `src/explain_my_option/data/historical_chain.py`
 (DoltHub `post-no-preference/options`); the rest stay **synthetic**
 (spot/IV tuned for residual behavior) with **frozen as-of news** drawn from
 cited public sources — not live headlines mixed with a historical `as_of`.
-See `tests/ci/stress_fixtures/README.md` for why each synthetic case can't
+See `tests/fixtures/stress/README.md` for why each synthetic case can't
 be (or, for GME/AAPL, no longer needs to be) converted.
 
 Walkthroughs explain the **mechanism** (Taylor vs residual, what search is allowed

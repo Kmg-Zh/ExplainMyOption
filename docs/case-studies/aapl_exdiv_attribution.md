@@ -49,7 +49,7 @@ On AAPL, IV crush is a first-class Taylor slice (Vega). The leftover residual is
 AAPL's 28% → 18% IV move is a 10 vol point move — large enough that
 `taylor_second_order` (Layer 3, vanna/volga via bump-and-revalue on the
 official FDM engine) is not noise. Numbers below are from a live run of
-`tests/ci/fixtures/aapl_exdiv_2023.json` through `run_diagnostic_pass`
+`tests/fixtures/stress/aapl_exdiv_2023.json` through `run_diagnostic_pass`
 (`python -c` snippet in the commit that added this section):
 
 | Term | \$ | % of \|ΔP\| |
@@ -68,7 +68,7 @@ no-div European comparison (b, legacy above), and FDM truncation — the
 same honest bucket described in "What Taylor misses," just smaller now
 that the vol convexity term has been named rather than lumped in.
 
-**Regime (A5.3):** `r_vol = 0.599` (volga against a small first-order Vega
+**Regime:** `r_vol = 0.599` (volga against a small first-order Vega
 PnL) exceeds the 0.35 threshold, so `taylor_regime = INVALID` on this
 fixture — the Taylor split above is a reference view, not the headline;
 `path_reprice`'s full revaluation is. `path_reprice` already runs on this

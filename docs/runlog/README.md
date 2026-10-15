@@ -1,13 +1,12 @@
-# Live book run log (Task C3)
+# Live book run log
 
-`book.json`: 8 real, live-discovered contracts (Task C3.1), all opened at
+`book.json`: 8 real, live-discovered contracts, all opened at
 ≥35 DTE so none expires inside a 30-day window — no roll policy needed.
 Sizing rule is in the file itself (`sizing_rule` field).
 
 `python scripts/daily_run.py` runs the book through the real graph once
 per trading day, writes `YYYY-MM-DD/report.md`, and appends one line to
-`metrics.jsonl` (schema: see the script's own docstring, matches the spec
-verbatim). It also caches each leg's snapshot so the next trading day has
+`metrics.jsonl` (schema: see the script). It also caches each leg's snapshot so the next trading day has
 a real t-1 to compare against instead of the `hv20_proxy` fallback.
 
 **Rule, enforced by hand, not by the script:** one entry per real trading
@@ -33,7 +32,7 @@ Two verifier prompt fixes landed this way, both found by reading the real
 alone: `v3.1-b1.2` stopped the verifier hard-failing correct model-language
 ("higher-order effects", "path effects") as `method_residual_blamed`
 (which caused 2 of the first 4 escalations in this log); `v3.1-b1.3`
-narrowed `prohibited_phrase` to the literal A9.4 word list instead of any
+narrowed `prohibited_phrase` to the literal trade-advice word list instead of any
 hedge-adjacent phrasing (which caused a 3rd). `v3.1-b1.4` (2026-10-05) changed the verifier's *decision logic*, not only
 its wording: a hard LLM FAIL (numeric / prohibited phrase / quiet-day /
 method-residual) now stays a FAIL only if a deterministic code check
@@ -48,10 +47,20 @@ LLM said FAIL and code overruled it) and `residual_pct_excluded_legs`
 `audit.json` (per leg: candidate synthesis, every verifier verdict, terminal
 cause) so any escalation can be explained afterwards.
 
-Days before the relevant
-fix landed keep their real outcome, including any escalation that fix
-would have prevented — see `docs/dev/WORK_ORDER_REPORT.md` FINDINGS for
-the full incident writeups. Nothing is backfilled or rewritten.
+`v3.2` (2026-10-15) is a cleanup release with no change to the verdict
+logic. Four things change in later rows. (1) The narrator's desk packet and
+the report give attribution shares the sign of their dollar amount, and use
+gross movement as the base only when the components largely offset.
+(2) Ticket tags are gone from the prompt text. (3) Quiet days no longer run
+a costly follow-up revaluation. (4) `verifier_downgraded` is now counted from
+`audit.json`'s verifier trace. Before v3.2 it read a key the pipeline never
+returned, so every row logged 0. The 2026-10-05 to 10-14 audit files record
+3 downgrades in 58 verifier verdicts.
+
+Days before the relevant fix landed keep their real outcome, including any
+escalation that fix would have prevented; the incident write-ups are in
+[`docs/archive/WORK_ORDER_REPORT.md`](../archive/WORK_ORDER_REPORT.md).
+Nothing is backfilled or rewritten.
 
 After 20+ real trading days, `docs/studies/runlog_summary.md` will cover:
 distribution of daily cost/latency/both residuals, how many days abstained
