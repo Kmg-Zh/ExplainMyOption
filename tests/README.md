@@ -1,66 +1,49 @@
-# Tests layout
-
-Three suites under `tests/`. Run the offline parts check with:
+# Tests
 
 ```bash
-./scripts/run-tests.sh
+./scripts/run-tests.sh          # same as: python -m pytest
 ```
 
-`bootstrap.py` at this level is only import glue (`python tests/.../foo.py`). Not a fourth suite.
+The suite is offline and keyless. `conftest.py` blanks every credential for
+each test, so a local `.env` can never turn a test into a paid API call.
+LLM roles are scripted (`support.py`); market data comes from committed
+fixtures.
 
-| Folder | What it is | Needs network / API key? |
-|--------|------------|--------------------------|
-| `ci/` | Parts check: engine, graph, report. Fake markets in `ci/fixtures/`, expected blotters in `ci/golden/` | No |
-| `live_book/` | Recent real-data book (full diagnosis). Archives in `live_book/output/` (not on GitHub) | Live run yes; `--offline` and archive replay use frozen snapshots; `test_determinism_llm.py` needs `OPENAI_API_KEY` |
-| `historical/` | Famous-event fixtures with frozen as-of news | `run.py` needs `OPENAI_API_KEY` |
+| Module | What it pins |
+|--------|--------------|
+| `test_pricing.py` | Arbitrage and numerical invariants of the official American FDM engine, mark calibration, the analysis tools |
+| `test_report.py` | Attribution shares (signed, gross basis only when components offset), residual drill at position size, reconciliation, blotter goldens |
+| `test_diagnostics.py` | The deterministic diagnostic pass: tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
+| `test_guardrails.py` | What the narrator may say: code checks before the verifier, code confirmation of LLM hard flags, untrusted-text containment, digest and critic |
+| `test_pipeline.py` | The LangGraph workflow end to end: routing, coverage gaps, verifier outcomes, book fan-out, CLI, graph topology |
+| `test_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, search planning, news sources |
+| `test_historical_cases.py` | The historical events, each pinned to its desk lesson, and the eval's no-lookahead rule |
 
-Retired names (`tests/experiments`, `tests/benchmark_compare`, `tests/historical_benchmark`) must not come back — `ci/test_repo_layout.py` guards that.
+Blotter goldens live in `fixtures/golden/`; regenerate them after an
+intended blotter change with `EMO_UPDATE_GOLDEN=1 ./scripts/run-tests.sh -k golden`.
 
-## Parts check (`ci/`)
+## Fixtures
 
-| Module | Covers |
-|--------|--------|
-| `test_pricing_facade`, `test_lsm_merton`, `test_ladder_regression` | Engine / analysis API |
-| `test_data_pipeline`, `test_diagnostic_pass`, `test_report_*` | Data + blotter + 7-section report |
-| `test_planner`, `test_intel`, `test_agent_graph` | Materiality / cues, Tavily+SEC ports, graph compile |
-| `test_news_digest` | Headline labels (relevant / background / discarded) |
-| `test_meta_earnings_gap` | Offline fixture + frozen news (stays in `ci/`; historical suite is live-LLM scoring) |
-| `test_pipeline_*` | Book `Send`, residual loop, verifier, topology |
-| `test_governance_scorecard` | Offline A1 gates: numeric hallucination, observation/vega lock, missing catalyst, terminal unexplained break, skipped tools |
-| `test_exdiv_attribution` | Ex-div FO overlay (spot≈div, EE premium, vol, residual) + tool skip reasons |
-| `test_repo_layout` | Paths, no stray root reports |
+| Folder | Contents |
+|--------|----------|
+| `fixtures/` | Synthetic market snapshots (also the CLI's `--fixture` names) |
+| `fixtures/stress/` | Hand-chosen spot/IV that force a residual regime ([README](fixtures/stress/README.md)) |
+| `fixtures/historical/` | Real-chain slices from DoltHub, quotes on both days ([README](fixtures/historical/README.md)) |
+| `fixtures/quiet_days/` | The deterministic quiet-day selection ([README](fixtures/quiet_days/README.md)) |
+| `fixtures/books/` | A demo multi-leg book |
+| `fixtures/golden/` | Expected blotter Markdown |
 
-Governance scorecard fixtures (synthesis JSON, not market snapshots) live in
-`tests/ci/fixtures/governance/`. Run the scoreboard with:
+## Evaluation harnesses (not part of pytest)
 
-```bash
-python tests/ci/test_governance_scorecard.py
-```
+These run the product against live or archived data and need network and,
+for the LLM roles, `OPENAI_API_KEY`. Their `output/` folders are gitignored.
 
-## Historical events
+| Folder | What | Command |
+|--------|------|---------|
+| `historical/` | The historical events with frozen as-of news, scored against a rubric | `python tests/historical/run.py` |
+| `live_book/` | The pinned live book; the 21:00 scheduled job runs it daily | `python tests/live_book/portfolio_e2e.py --offline` |
+| `redteam/` | The constructed attack set behind `docs/studies/redteam_results.md` | `python scripts/run_redteam.py` |
 
-Agent-visible headlines must have `published <= as_of`. Later papers, explainers,
-and the JSON `input_text` scenario note are **eval ground truth only** — they are
-not fed to the graph.
-
-```bash
-./scripts/run-benchmark-live.sh
-python tests/historical/run.py
-python tests/historical/run.py --case vow_float_squeeze_2008
-```
-
-Walkthroughs: [docs/case-studies/README.md](../docs/case-studies/README.md). Frozen product reports (not eval archives): [docs/samples/](../docs/samples/README.md).
-
-## Live book
-
-```bash
-./scripts/run-portfolio-e2e.sh
-python tests/live_book/portfolio_e2e.py --offline
-python tests/live_book/replay_archives.py
-python tests/live_book/test_determinism_llm.py  # needs OPENAI_API_KEY
-```
-
-Pin: `tests/live_book/pinned_books/book_2026-10-05.json`. Replay uses archived
-snapshots + news (no live Yahoo). Presentation notebooks live in `notebooks/`
-(committed). Suite `output/` folders are gitignored archives. Hiring/demo captures of the
-product report live in [`docs/samples/`](../docs/samples/README.md) — not in `output/`.
+Agent-visible headlines in the historical eval are published on or before
+`as_of`; later articles, papers and the case's `input_text` are ground truth
+for scoring only and are never fed to the graph.

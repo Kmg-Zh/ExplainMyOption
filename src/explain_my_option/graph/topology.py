@@ -24,7 +24,7 @@ def leg_mermaid(
     roles: LlmRoleRegistry | None = None,
     xray: bool = False,
 ) -> str:
-    """Mermaid for one leg diagnosis subgraph (A2 loop + A3 verifier edges)."""
+    """Mermaid for one leg diagnosis subgraph."""
     from ..pipeline.config import PipelineConfig
     from ..pipeline.leg_graph import build_leg_diagnosis_subgraph
 

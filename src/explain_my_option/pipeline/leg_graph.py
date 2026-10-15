@@ -1,39 +1,34 @@
-"""Unified leg pipeline with explicit A2/A3 control-flow nodes."""
+"""One option leg, as a LangGraph subgraph.
+
+fetch_market → quant → blotter → diagnostic_pass → plan_search → search →
+digest_news → challenge_catalyst → synthesize → reconcile_debate → verify →
+finalize_leg_report. Market, pricing, blotter and diagnostics use no LLM. A
+quiet day ends after ``diagnostic_pass`` with a fixed report; a data or basis
+failure ends at ``leg_failure_finalize`` before any pricing.
+"""
 
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, Literal, TypedDict
+from dataclasses import replace
+from typing import Any, Callable, Literal
 
 from langgraph.graph import END, START, StateGraph
 
 from ..data.observation import NoComparableObservationError, check_basis_consistency
 from ..graph.deps import FixtureMarketLoader, GraphDeps, default_deps, fixture_deps
-from ..graph.diagnostic_controller import (
-    LOW_SEVERITY_THRESHOLD_PCT,
-    NO_ESCALATION_MATERIALITY_ABS_USD,
-    NO_ESCALATION_MATERIALITY_PCT_OF_MID,
-    run_diagnostic_pass,
-)
+from ..graph.diagnostic_controller import run_diagnostic_pass
 from ..graph.state import OptionState
 from ..intel.types import SearchPlan
 from ..report import PositionBundle, render_portfolio_report, synthesize_diagnosis
+from ..report.blotter import build_quant_section
 from ..report.facts import build_position_facts
-from ..report.reconciliation import build_reconciliation_facts
 from ..report.schema import DiagnosticSynthesis
-from ..report_generator import build_quant_section
-from ..report.synthesis import fallback_synthesis, synthesis_to_legacy_diagnosis
-from .challenger import reconcile_with_challenge, run_catalyst_challenge
-from .digest import IntelDigest, coarse_kept_news, run_intel_digest
 from .book_schema import BookLegSpec
+from .challenger import reconcile_with_challenge, run_catalyst_challenge
 from .config import PipelineConfig
-from .diagnostic_loop import (
-    choose_a2_tool,
-    compute_residual_pct,
-    execute_diagnostic_tool,
-    merge_iteration,
-)
-from .llm_roles import LlmRole, LlmRoleRegistry, OpenAiRole, default_openai_roles
+from .digest import IntelDigest, run_intel_digest
+from .llm_roles import LlmRoleRegistry, default_openai_roles
 from .types import LegResult
 from .verifier import (
     DETERMINISTIC_PRECHECK_RATIONALES,
@@ -45,27 +40,6 @@ from .verifier import (
 )
 from .verifier_schema import DiagnosticVerifierResult
 
-
-def _timed_node(name: str, fn: Callable[["LegState"], dict]) -> Callable[["LegState"], dict]:
-    """B4: wrap a node with wall-clock timing into ``state["stage_timings"]``.
-
-    Pure observability -- times the node's own body, merges the elapsed
-    seconds into whatever dict the node already returns, and changes no
-    routing/decision. See docs/studies/agent_budget.md.
-    """
-
-    def wrapped(state: "LegState") -> dict:
-        t0 = time.perf_counter()
-        result = fn(state) or {}
-        elapsed = time.perf_counter() - t0
-        timings = dict(state.get("stage_timings") or {})
-        timings[name] = timings.get(name, 0.0) + elapsed
-        return {**result, "stage_timings": timings}
-
-    return wrapped
-
-
-# A7.3: verbatim, terminal no_escalation report text.
 NO_ESCALATION_TEXT = (
     "Nothing to explain. The move is accounted for by carry and a small "
     "spot move; the unexplained portion is within tolerance. No news "
@@ -76,23 +50,12 @@ NO_ESCALATION_TEXT = (
 class LegState(OptionState, total=False):
     leg: BookLegSpec
     leg_error: str | None
-    leg_ok: bool
     terminal_no_comparable_observation: bool
-    observation_status_t1: str
-    observation_status_t: str
     basis_mismatch_suspected: bool
     no_escalation: bool
     llm_calls: int
-    diag_budget_remaining: int
-    diag_iterations: int
-    diag_tool_history: list[dict[str, Any]]
-    diag_residual_pct: float
-    diag_next_tool: str
-    catalyst_challenge: dict[str, Any]
     verifier_trace: list[dict[str, Any]]
-    verify_budget_remaining: int
-    # B4: wall-clock per node, keyed by graph node name -- pure observability,
-    # no effect on routing/decisions. See docs/studies/agent_budget.md.
+    # Wall-clock seconds per node; observability only, never read by routing.
     stage_timings: dict[str, float]
 
 
@@ -100,22 +63,24 @@ class LegBranchState(LegState, total=False):
     leg_results: list[LegResult]
 
 
+def _timed_node(name: str, fn: Callable[[LegState], dict]) -> Callable[[LegState], dict]:
+    def wrapped(state: LegState) -> dict:
+        t0 = time.perf_counter()
+        result = fn(state) or {}
+        timings = dict(state.get("stage_timings") or {})
+        timings[name] = timings.get(name, 0.0) + time.perf_counter() - t0
+        return {**result, "stage_timings": timings}
+
+    return wrapped
+
+
 def _resolve_ports(leg: BookLegSpec, deps: GraphDeps | None) -> GraphDeps:
     if leg.fixture:
-        base = deps or fixture_deps(leg.fixture)
-        return GraphDeps(
-            market=FixtureMarketLoader(leg.fixture),
-            pnl=base.pnl,
-            planner=base.planner,
-            intel=base.intel,
-            diagnose_system_prompt=base.diagnose_system_prompt,
-            diagnose_system_extra=base.diagnose_system_extra,
-        )
+        return replace(deps or fixture_deps(leg.fixture), market=FixtureMarketLoader(leg.fixture))
     return deps or default_deps()
 
 
-def _apply_leg_overrides(state: LegState, leg: BookLegSpec) -> None:
-    snap = state["snapshot"]
+def _apply_leg_overrides(snap, leg: BookLegSpec) -> None:
     snap.ticker = leg.ticker
     for key, val in leg.overrides.items():
         setattr(snap, key, val)
@@ -129,77 +94,35 @@ def _apply_leg_overrides(state: LegState, leg: BookLegSpec) -> None:
     snap.exercise_style = leg.exercise_style
 
 
-def _synthesize_with_role(
-    *,
-    role: LlmRole,
-    state: LegState,
-    ports: GraphDeps,
-) -> DiagnosticSynthesis:
-    if isinstance(role, OpenAiRole):
-        return synthesize_diagnosis(
-            state["snapshot"],
-            state["pricing"],
-            state.get("news", []),
-            plan=state.get("search_plan"),
-            ports=ports,
-            diagnostic_findings=state.get("diagnostic_findings"),
-            role=role,
-        )
-    facts = build_position_facts(
-        state["snapshot"], state["pricing"], news_count=len(state.get("news", []))
-    )
-    system = (
-        "Return DiagnosticSynthesis JSON only. Cover Layer A (dominant Taylor driver) "
-        "and Layer B (headline catalysts). Residual truncation does not replace the tape."
-    )
-    findings = state.get("diagnostic_findings") or {}
-    digest = IntelDigest.model_validate(
-        state.get("intel_digest") or findings.get("intel_digest") or {}
-    )
-    titles = [n.title for n in coarse_kept_news(state.get("news", [])) if n.title]
-    if not titles:
-        titles = [item.title for item in digest.relevant if item.title]
-    human = (
-        f"Contract: {facts.contract_label}\n"
-        f"Primary driver: {facts.primary_driver}\n"
-        f"Confidence: {facts.confidence}\n"
-        f"Observation reliable: {bool(findings.get('observation_reliable', True))}\n"
-        f"Tools run: {', '.join(findings.get('tools_run', [])) or 'none'}\n"
-        f"Digest brief: {digest.brief or 'none'}\n"
-        f"News titles: {titles[:5]}\n"
-        "Cover Layer A (dominant Taylor driver) and any named headline catalysts "
-        "(IV crush, borrow, squeeze, float, ex-div) in verdict and takeaways.\n"
-    )
-    try:
-        syn = role.structured_invoke(
-            system=system,
-            human=human,
-            schema=DiagnosticSynthesis,
-        )
-        if isinstance(syn, DiagnosticSynthesis):
-            return syn
-        return DiagnosticSynthesis.model_validate(syn)
-    except Exception:
-        layer_b = coarse_kept_news(state.get("news", []))
-        if not layer_b:
-            layer_b = state.get("news", [])
-        return fallback_synthesis(
-            facts,
-            llm_failed=True,
-            diagnostic_findings=findings,
-            news=layer_b,
-        )
+def _observation_reliable(state: LegState) -> bool:
+    return bool((state.get("diagnostic_findings") or {}).get("observation_reliable", True))
 
 
-def _apply_observation_lock_to_synthesis(
-    synthesis: DiagnosticSynthesis, findings: dict[str, Any] | None
-) -> DiagnosticSynthesis:
-    """Drop catalyst evidence when quote reliability is locked."""
-    if bool((findings or {}).get("observation_reliable", True)):
-        return synthesis
-    if not synthesis.evidence:
+def _apply_observation_lock(synthesis: DiagnosticSynthesis, *, observation_reliable: bool) -> DiagnosticSynthesis:
+    """Drop catalyst evidence when the quote is too unreliable to support it."""
+    if observation_reliable or not synthesis.evidence:
         return synthesis
     return synthesis.model_copy(update={"evidence": []})
+
+
+def _no_escalation_synthesis() -> DiagnosticSynthesis:
+    return DiagnosticSynthesis(
+        primary_driver="Theta / carry",
+        verdict=NO_ESCALATION_TEXT,
+        confidence_level="high",
+        confidence_rationale=(
+            "Escalation metric is at or below the quiet-day threshold; see the "
+            "Mark Reconciliation section for the exact figures."
+        ),
+        evidence=[],
+        takeaways=["No action needed; move is within theta/carry tolerance."],
+        american_commentary="",
+    )
+
+
+def _last_verdict(state: LegState) -> DiagnosticVerifierResult:
+    trace = state.get("verifier_trace") or []
+    return DiagnosticVerifierResult.model_validate(trace[-1] if trace else {"verdict": "PARTIAL"})
 
 
 def build_leg_diagnosis_subgraph(
@@ -221,284 +144,87 @@ def build_leg_diagnosis_subgraph(
                 expiry=state.get("expiry") or leg.expiry,
             )
         except NoComparableObservationError as exc:
-            # A3.2: a data coverage gap, never reported as an unexplained
-            # break. No pricing call below this point.
-            return {
-                "leg_ok": False,
-                "leg_error": exc.report_text(),
-                "terminal_no_comparable_observation": True,
-                "observation_status_t1": exc.status_t1.value,
-                "observation_status_t": exc.status_t.value,
-            }
+            # A data coverage gap, never an unexplained break: nothing is priced.
+            return {"leg_error": exc.report_text(), "terminal_no_comparable_observation": True}
         except Exception as exc:
-            return {"leg_ok": False, "leg_error": str(exc)}
+            return {"leg_error": str(exc)}
 
         snap = data.snapshot
+        is_call, is_put = snap.option_type == "call", snap.option_type == "put"
         basis = check_basis_consistency(
             spot=snap.spot_now,
             rate=snap.risk_free_rate,
             time_to_expiry_years=snap.time_to_expiry_years,
-            call_mid=snap.mid if snap.option_type == "call" else None,
-            call_strike=snap.strike if snap.option_type == "call" else None,
-            put_mid=snap.mid if snap.option_type == "put" else None,
-            put_strike=snap.strike if snap.option_type == "put" else None,
+            call_mid=snap.mid if is_call else None,
+            call_strike=snap.strike if is_call else None,
+            put_mid=snap.mid if is_put else None,
+            put_strike=snap.strike if is_put else None,
         )
         if basis.basis_mismatch_suspected:
-            # A3.5: never apply a correction factor -- report and stop.
+            # Never apply a correction factor: report and stop.
             return {
-                "leg_ok": False,
                 "leg_error": (
                     f"Basis mismatch suspected: {basis.failing_invariant} failed "
                     f"({basis.detail}). No correction applied; case aborted."
                 ),
                 "basis_mismatch_suspected": True,
             }
-
-        next_state: LegState = {
-            "snapshot": data.snapshot,
+        _apply_leg_overrides(snap, leg)
+        return {
+            "snapshot": snap,
             "surface": data.surface,
             "surface_prev": data.surface_prev,
-            "ticker": data.snapshot.ticker,
-            "option_type": data.snapshot.option_type,
-            "leg_ok": True,
+            "ticker": snap.ticker,
+            "option_type": snap.option_type,
             "leg_error": None,
         }
-        _apply_leg_overrides(next_state, leg)
-        return next_state
-
-    def route_after_fetch(state: LegState) -> Literal["quant", "leg_failure_finalize"]:
-        if state.get("leg_error"):
-            return "leg_failure_finalize"
-        return "quant"
 
     def quant_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
+        ports = _resolve_ports(state["leg"], deps)
         try:
-            return {
-                "pricing": ports.pnl.attribute(
-                    state["snapshot"],
-                    state.get("surface"),
-                    state.get("surface_prev"),
-                )
-            }
+            return {"pricing": ports.pnl.attribute(state["snapshot"], state.get("surface"), state.get("surface_prev"))}
         except Exception as exc:
-            return {"leg_ok": False, "leg_error": str(exc)}
-
-    def route_after_quant(state: LegState) -> Literal["blotter", "leg_failure_finalize"]:
-        if state.get("leg_error"):
-            return "leg_failure_finalize"
-        return "blotter"
+            return {"leg_error": str(exc)}
 
     def blotter_node(state: LegState) -> LegState:
         try:
-            return {
-                "blotter": build_quant_section(state["snapshot"], state["pricing"])
-            }
+            return {"blotter": build_quant_section(state["snapshot"], state["pricing"])}
         except Exception as exc:
-            return {"leg_ok": False, "leg_error": str(exc)}
+            return {"leg_error": str(exc)}
 
     def diagnostic_pass_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        cfg = getattr(ports.pnl, "config", None)
-        findings = run_diagnostic_pass(
-            state["snapshot"],
-            state["pricing"],
-            state.get("surface"),
-            config=cfg,
-        )
-        return {
-            "diagnostic_findings": findings.as_dict(),
-            "diag_budget_remaining": config.diag_budget,
-            "diag_iterations": 0,
-            "diag_tool_history": [],
-            "diag_residual_pct": compute_residual_pct(state["pricing"]),
-            "diag_next_tool": "",
-            "verify_budget_remaining": config.verify_budget,
-            "verifier_trace": [],
-        }
-
-    def route_residual_gate(
-        state: LegState,
-    ) -> Literal["react_plan", "diag_finalize"]:
-        budget = int(state.get("diag_budget_remaining", 0))
-        iterations = int(state.get("diag_iterations", 0))
-        residual = float(state.get("diag_residual_pct", 0.0))
-        if budget <= 0 or iterations >= config.diag_iterations:
-            return "diag_finalize"
-        next_tool = choose_a2_tool(
-            residual_pct=residual,
-            tools_run=list((state.get("diagnostic_findings") or {}).get("tools_run") or []),
-        )
-        if next_tool is None:
-            return "diag_finalize"
-        return "react_plan"
-
-    def react_plan_node(state: LegState) -> LegState:
-        residual = float(state.get("diag_residual_pct", 0.0))
-        next_tool = choose_a2_tool(
-            residual_pct=residual,
-            tools_run=list((state.get("diagnostic_findings") or {}).get("tools_run") or []),
-        )
-        return {"diag_next_tool": next_tool or ""}
-
-    def react_tool_exec_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        cfg = getattr(ports.pnl, "config", None)
-        tool_name = state.get("diag_next_tool")
-        if not tool_name:
-            return {}
-        residual_before = float(state.get("diag_residual_pct", 0.0))
-        payload = execute_diagnostic_tool(
-            tool_name=tool_name,
-            snap=state["snapshot"],
-            pricing=state["pricing"],
-            surface=state.get("surface"),
-            engine_config=cfg,
-        )
-        next_budget = int(state.get("diag_budget_remaining", config.diag_budget)) - 1
-        next_iterations = int(state.get("diag_iterations", 0)) + 1
-        next_residual = residual_before
-        # path_reprice (A5.1: the only tool this loop can still pick --
-        # taylor_second_order is free and already ran upstream) reports its
-        # own audited residual; use it so the gate below sees progress
-        # instead of looping on a stale pre-reprice number.
-        if tool_name == "path_reprice" and "residual_vs_model" in payload:
-            next_residual = abs(
-                100.0
-                * float(payload["residual_vs_model"])
-                / max(abs(state["pricing"].pnl.total_pnl), 1e-12)
-            )
-        merged = merge_iteration(
-            findings=state.get("diagnostic_findings") or {},
-            tool_name=tool_name,
-            payload=payload,
-            residual_before=residual_before,
-            budget_remaining=next_budget,
-            iterations=next_iterations,
-        )
-        return {
-            "diagnostic_findings": merged,
-            "diag_budget_remaining": next_budget,
-            "diag_iterations": next_iterations,
-            "diag_residual_pct": next_residual,
-            "diag_next_tool": "",
-        }
-
-    def route_budget_gate(
-        state: LegState,
-    ) -> Literal["residual_gate", "diag_finalize"]:
-        budget = int(state.get("diag_budget_remaining", 0))
-        iterations = int(state.get("diag_iterations", 0))
-        if budget <= 0 or iterations >= config.diag_iterations:
-            return "diag_finalize"
-        return "residual_gate"
-
-    def diag_finalize_node(state: LegState) -> LegState:
-        findings = dict(state.get("diagnostic_findings") or {})
-        if int(state.get("diag_budget_remaining", 0)) <= 0 and float(
-            state.get("diag_residual_pct", 0.0)
-        ) > 15.0:
-            findings["terminal_unexplained_break"] = True
-
-        # A7.2/A7.3: nothing to explain -- deterministic, no LLM call, no
-        # search. Computed directly from build_reconciliation_facts (A6)
-        # rather than read back off reconcile_mark_vs_model's tool-call
-        # result: that tool only runs when snap.option_price_now/prev are
-        # both positive (a pre-existing, unrelated gate in this function,
-        # above), which most synthetic fixtures leave at 0 -- the metric
-        # itself is always computable from state["snapshot"]/["pricing"].
-        rec = build_reconciliation_facts(state["snapshot"], state["pricing"])
-        metric = rec.escalation_metric_pct
-        # A7.2's ratio gate alone would also fire on a large, dramatic
-        # move the Taylor decomposition happens to explain well (e.g. a
-        # vol crush with near-zero residual) -- not "nothing to explain."
-        # Require the move itself to be small too.
-        snap = state["snapshot"]
-        mid = snap.mid or snap.option_price_prev
-        if mid and mid > 0:
-            materiality_floor = NO_ESCALATION_MATERIALITY_PCT_OF_MID * mid
-        else:
-            materiality_floor = NO_ESCALATION_MATERIALITY_ABS_USD
-        materiality_floor *= snap.position_scale()  # rec.model_pnl_usd is position-scaled
-        no_escalation = (
-            not findings.get("terminal_unexplained_break")
-            and metric <= LOW_SEVERITY_THRESHOLD_PCT
-            and abs(rec.model_pnl_usd) < materiality_floor
-        )
-        out: LegState = {"diagnostic_findings": findings}
-        if no_escalation:
-            findings["no_escalation"] = True
-            synthesis = DiagnosticSynthesis(
-                primary_driver="Theta / carry",
-                verdict=NO_ESCALATION_TEXT,
-                confidence_level="high",
-                confidence_rationale=(
-                    "Escalation metric is at or below the quiet-day threshold; see the "
-                    "Mark Reconciliation section for the exact figures."
-                ),
-                evidence=[],
-                takeaways=["No action needed; move is within theta/carry tolerance."],
-                american_commentary="",
-            )
-            out["diagnostic_synthesis"] = synthesis.model_dump()
+        ports = _resolve_ports(state["leg"], deps)
+        snap, pricing = state["snapshot"], state["pricing"]
+        result = run_diagnostic_pass(snap, pricing, state.get("surface"), config=getattr(ports.pnl, "config", None))
+        out: LegState = {"diagnostic_findings": result.as_dict(), "verifier_trace": []}
+        if result.no_escalation:
             out["no_escalation"] = True
+            out["diagnostic_synthesis"] = _no_escalation_synthesis().model_dump()
         return out
 
-    def route_after_diag_finalize(
-        state: LegState,
-    ) -> Literal["plan_search", "finalize_leg_report"]:
-        # A7.2: no search on a no_escalation day -- reuses the existing
-        # finalize_leg_report node (no new node), skipping
-        # plan_search/search/digest_news/challenge_catalyst/synthesize/
-        # verify entirely.
-        if bool(state.get("no_escalation")):
-            return "finalize_leg_report"
-        return "plan_search"
-
     def plan_search_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        findings = state.get("diagnostic_findings") or {}
-        obs = bool(findings.get("observation_reliable", True))
-        return {
-            "search_plan": ports.planner.plan(
-                state["snapshot"],
-                state["pricing"],
-                observation_reliable=obs,
-            )
-        }
+        ports = _resolve_ports(state["leg"], deps)
+        plan = ports.planner.plan(
+            state["snapshot"], state["pricing"], observation_reliable=_observation_reliable(state)
+        )
+        return {"search_plan": plan}
 
     def search_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        ticker = state.get("ticker") or state["snapshot"].ticker
+        ports = _resolve_ports(state["leg"], deps)
         plan = state.get("search_plan") or SearchPlan()
-        news, skipped, failed = ports.intel.execute(plan, ticker=ticker)
-        plan = plan.model_copy(
-            update={"skipped_sources": list(skipped), "failed_sources": list(failed)}
-        )
+        news, skipped, failed = ports.intel.execute(plan, ticker=state.get("ticker") or state["snapshot"].ticker)
+        plan = plan.model_copy(update={"skipped_sources": list(skipped), "failed_sources": list(failed)})
         return {"news": news, "search_plan": plan}
 
     def digest_news_node(state: LegState) -> LegState:
-        ticker = state.get("ticker") or state["snapshot"].ticker
         digest = run_intel_digest(
             role=roles.digester,
-            ticker=ticker,
+            ticker=state.get("ticker") or state["snapshot"].ticker,
             news=state.get("news", []),
         )
-        findings = dict(state.get("diagnostic_findings") or {})
-        findings["intel_digest"] = digest.model_dump()
-        calls = int(state.get("llm_calls", 0))
-        if not digest.reason:  # A9.1: only count an actual LLM invocation
-            calls += 1
-        return {
-            "intel_digest": digest.model_dump(),
-            "diagnostic_findings": findings,
-            "llm_calls": calls,
-        }
+        findings = {**(state.get("diagnostic_findings") or {}), "intel_digest": digest.model_dump()}
+        calls = int(state.get("llm_calls", 0)) + (0 if digest.reason else 1)  # reason set = no LLM call
+        return {"intel_digest": digest.model_dump(), "diagnostic_findings": findings, "llm_calls": calls}
 
     def challenge_catalyst_node(state: LegState) -> LegState:
         challenge = run_catalyst_challenge(
@@ -510,168 +236,94 @@ def build_leg_diagnosis_subgraph(
             diagnostic_findings=state.get("diagnostic_findings"),
         )
         payload = challenge.model_dump()
-        findings = dict(state.get("diagnostic_findings") or {})
-        findings["catalyst_challenge"] = payload
-        calls = int(state.get("llm_calls", 0))
-        if not challenge.suppress_reason:  # A9.1: only count an actual LLM invocation
-            calls += 1
+        findings = {**(state.get("diagnostic_findings") or {}), "catalyst_challenge": payload}
+        calls = int(state.get("llm_calls", 0)) + (0 if challenge.suppress_reason else 1)
         return {"catalyst_challenge": payload, "diagnostic_findings": findings, "llm_calls": calls}
 
     def synthesize_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        findings = state.get("diagnostic_findings") or {}
-        syn = _synthesize_with_role(role=roles.narrator, state=state, ports=ports)
-        syn = _apply_observation_lock_to_synthesis(syn, findings)
-        return {
-            "diagnostic_synthesis": syn.model_dump(),
-            "llm_calls": int(state.get("llm_calls", 0)) + 1,
-        }
+        ports = _resolve_ports(state["leg"], deps)
+        synthesis = synthesize_diagnosis(
+            state["snapshot"],
+            state["pricing"],
+            state.get("news", []),
+            plan=state.get("search_plan"),
+            ports=ports,
+            diagnostic_findings=state.get("diagnostic_findings"),
+            role=roles.narrator,
+        )
+        synthesis = _apply_observation_lock(synthesis, observation_reliable=_observation_reliable(state))
+        return {"diagnostic_synthesis": synthesis.model_dump(), "llm_calls": int(state.get("llm_calls", 0)) + 1}
 
     def reconcile_debate_node(state: LegState) -> LegState:
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
-        challenge = state.get("catalyst_challenge") or (
-            (state.get("diagnostic_findings") or {}).get("catalyst_challenge")
-        )
-        merged = reconcile_with_challenge(synthesis, challenge)
+        merged = reconcile_with_challenge(synthesis, state.get("catalyst_challenge"))
         return {"diagnostic_synthesis": merged.model_dump()}
 
     def route_verify_gate(state: LegState) -> Literal["verify", "finalize_leg_report"]:
-        if int(state.get("verify_budget_remaining", 0)) > 0:
-            return "verify"
-        return "finalize_leg_report"
+        return "verify" if config.verify else "finalize_leg_report"
 
     def verify_node(state: LegState) -> LegState:
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
         findings = state.get("diagnostic_findings") or {}
-        synthesis = _apply_observation_lock_to_synthesis(synthesis, findings)
-        digest = IntelDigest.model_validate(
-            state.get("intel_digest") or findings.get("intel_digest") or {}
-        )
-        relevant_titles = [item.title for item in digest.relevant if item.title]
-        facts = build_position_facts(
-            state["snapshot"], state["pricing"], news_count=len(state.get("news", []))
-        )
+        digest = IntelDigest.model_validate(state.get("intel_digest") or {})
+        facts = build_position_facts(state["snapshot"], state["pricing"], news_count=len(state.get("news", [])))
         verdict = verify_synthesis(
             synthesis,
             facts,
             role=roles.verifier,
             suppress_vega=bool(findings.get("suppress_vega_narrative")),
             observation_reliable=bool(findings.get("observation_reliable", True)),
-            news_titles=relevant_titles,
-            catalyst_challenge=state.get("catalyst_challenge") or findings.get("catalyst_challenge"),
+            news_titles=[item.title for item in digest.relevant if item.title],
+            catalyst_challenge=state.get("catalyst_challenge"),
             no_escalation=bool(findings.get("no_escalation")),
             news=list(state.get("news") or []),
-            as_of=getattr(state["snapshot"], "as_of", None),
+            as_of=state["snapshot"].as_of,
         )
-        trace: list[dict[str, Any]] = list(state.get("verifier_trace") or [])
-        trace.append(verdict.model_dump())
-        remaining = int(state.get("verify_budget_remaining", config.verify_budget)) - 1
-        # A9.1: deterministic_precheck (inside verify_synthesis) intercepts
-        # most hard-rule violations before any LLM call; rationale strings
-        # from that path are fixed, code-authored sentences, never the
-        # LLM's own prose -- a cheap, if slightly indirect, "was this
-        # deterministic" signal without changing verify_synthesis's return
-        # type for two call sites over one counter.
-        calls = int(state.get("llm_calls", 0))
-        if verdict.rationale not in DETERMINISTIC_PRECHECK_RATIONALES:
-            calls += 1
-        # Audit trail: the candidate the verifier saw plus every verdict, so a
-        # terminal break (or a downgrade) can be explained after the fact.
-        audit_findings = dict(findings)
-        audit = dict(audit_findings.get("verifier_audit") or {})
+        trace = [*(state.get("verifier_trace") or []), verdict.model_dump()]
+        # Precheck verdicts carry fixed, code-authored rationales; only the
+        # others came from an LLM call.
+        calls = int(state.get("llm_calls", 0)) + (verdict.rationale not in DETERMINISTIC_PRECHECK_RATIONALES)
+        # Audit trail: the candidate the verifier saw plus every verdict.
+        audit = dict(findings.get("verifier_audit") or {})
         audit.setdefault("candidates", []).append(synthesis.model_dump())
         audit["trace"] = trace
-        audit_findings["verifier_audit"] = audit
         return {
             "verifier_trace": trace,
-            "verify_budget_remaining": remaining,
             "llm_calls": calls,
-            "diagnostic_findings": audit_findings,
+            "diagnostic_findings": {**findings, "verifier_audit": audit},
         }
 
     def route_verify_result(
         state: LegState,
-    ) -> Literal[
-        "finalize_leg_report",
-        "revise_synthesis",
-        "reflect_verifier",
-        "terminal_unexplained_break",
-    ]:
-        trace = list(state.get("verifier_trace") or [])
-        if not trace:
+    ) -> Literal["finalize_leg_report", "reflect_verifier", "terminal_unexplained_break"]:
+        verdict = _last_verdict(state)
+        if verdict.verdict == "PASS":
             return "finalize_leg_report"
-        last = trace[-1]
-        verdict = last.get("verdict")
-        remaining = int(state.get("verify_budget_remaining", 0))
-        if verdict == "PASS":
-            return "finalize_leg_report"
-        if verdict == "PARTIAL":
-            return "reflect_verifier"
-        if verdict == "FAIL":
-            if remaining > 0:
-                return "revise_synthesis"
-            result = DiagnosticVerifierResult.model_validate(last)
-            if is_hard_verifier_fail(result):
-                return "terminal_unexplained_break"
-            return "reflect_verifier"
-        return "finalize_leg_report"
+        if verdict.verdict == "FAIL" and is_hard_verifier_fail(verdict):
+            return "terminal_unexplained_break"
+        return "reflect_verifier"
 
     def reflect_verifier_node(state: LegState) -> LegState:
-        findings = dict(state.get("diagnostic_findings") or {})
-        synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
-        trace = list(state.get("verifier_trace") or [])
-        last = trace[-1] if trace else {}
-        verdict = DiagnosticVerifierResult.model_validate(
-            last
-            or {
-                "verdict": "PARTIAL",
-                "missing_evidence": [],
-                "policy_flags": [],
-                "rationale": "",
-            }
-        )
-        obs_reliable = bool(findings.get("observation_reliable", True))
+        verdict = _last_verdict(state)
         synthesis = apply_verifier_reflection(
-            synthesis,
+            DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {}),
             verdict,
-            observation_reliable=obs_reliable,
+            observation_reliable=_observation_reliable(state),
         )
-        findings["verifier_status"] = "PARTIAL"
-        findings["verifier_reflect"] = verdict.model_dump()
-        return {
-            "diagnostic_findings": findings,
-            "diagnostic_synthesis": synthesis.model_dump(),
+        findings = {
+            **(state.get("diagnostic_findings") or {}),
+            "verifier_status": "PARTIAL",
+            "verifier_reflect": verdict.model_dump(),
         }
-
-    def revise_synthesis_node(state: LegState) -> LegState:
-        leg = state["leg"]
-        ports = _resolve_ports(leg, deps)
-        findings = state.get("diagnostic_findings") or {}
-        syn = _synthesize_with_role(role=roles.narrator, state=state, ports=ports)
-        syn = _apply_observation_lock_to_synthesis(syn, findings)
-        return {
-            "diagnostic_synthesis": syn.model_dump(),
-            "llm_calls": int(state.get("llm_calls", 0)) + 1,
-        }
+        return {"diagnostic_findings": findings, "diagnostic_synthesis": synthesis.model_dump()}
 
     def terminal_unexplained_break_node(state: LegState) -> LegState:
-        findings = dict(state.get("diagnostic_findings") or {})
-        findings["terminal_unexplained_break"] = True
-        findings["verifier_status"] = "FAIL"
-        synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
-        trace = list(state.get("verifier_trace") or [])
-        last = trace[-1] if trace else {}
-        missing = list(last.get("missing_evidence") or [])
-        result = DiagnosticVerifierResult.model_validate(
-            last or {"verdict": "FAIL", "rationale": ""}
-        )
-        flags = [f for f in result.policy_flags if f in HARD_FAIL_POLICY_FLAGS]
-        sentence = violation_sentence(result)
-        findings["terminal_cause"] = "verifier_hard_fail"
-        findings["terminal_verifier_flags"] = flags
-        findings["terminal_violation"] = sentence
+        verdict = _last_verdict(state)
+        flags = [f for f in verdict.policy_flags if f in HARD_FAIL_POLICY_FLAGS]
+        sentence = violation_sentence(verdict)
         flag_text = ", ".join(flags) or "policy"
+        missing = list(verdict.missing_evidence or [])
+        synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
         synthesis = synthesis.model_copy(
             update={
                 "verdict": f"Verifier FAIL — terminal break escalation ({flag_text})."
@@ -683,58 +335,49 @@ def build_leg_diagnosis_subgraph(
                 ],
             }
         )
-        return {
-            "diagnostic_findings": findings,
-            "diagnostic_synthesis": synthesis.model_dump(),
+        findings = {
+            **(state.get("diagnostic_findings") or {}),
+            "terminal_unexplained_break": True,
+            "verifier_status": "FAIL",
+            "terminal_cause": "verifier_hard_fail",
+            "terminal_verifier_flags": flags,
+            "terminal_violation": sentence,
         }
+        return {"diagnostic_findings": findings, "diagnostic_synthesis": synthesis.model_dump()}
 
     def finalize_leg_report_node(state: LegState) -> LegState:
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})
-        diagnosis = synthesis_to_legacy_diagnosis(synthesis)
         bundle = PositionBundle(
             snapshot=state["snapshot"],
             pricing=state["pricing"],
             news=state.get("news", []),
             plan=state.get("search_plan"),
         )
-        findings = state.get("diagnostic_findings") or {}
-        report = render_portfolio_report(
-            [bundle],
-            [synthesis],
-            leg_findings=[findings],
-        )
-        return {
-            "diagnosis": diagnosis,
-            "diagnostic_synthesis": synthesis.model_dump(),
-            "report": report,
-        }
+        report = render_portfolio_report([bundle], [synthesis], leg_findings=[state.get("diagnostic_findings") or {}])
+        return {"diagnosis": synthesis.verdict.strip(), "report": report}
 
     def leg_failure_finalize_node(state: LegState) -> LegState:
         msg = state.get("leg_error") or "Leg failed before report finalization."
-        no_comparable = bool(state.get("terminal_no_comparable_observation"))
-        basis_mismatch = bool(state.get("basis_mismatch_suspected"))
-        if no_comparable:
+        if state.get("terminal_no_comparable_observation"):
             heading = "## No Comparable Observation"
-            takeaways = ["No pricing or news search was performed; this is a data coverage limitation."]
-        elif basis_mismatch:
+            takeaway = "No pricing or news search was performed; this is a data coverage limitation."
+        elif state.get("basis_mismatch_suspected"):
             heading = "## Basis Mismatch Suspected"
-            takeaways = ["No pricing was performed; the raw quotes failed a basis-consistency check."]
+            takeaway = "No pricing was performed; the raw quotes failed a basis-consistency check."
         else:
             heading = "## Leg Failure"
-            takeaways = ["Inspect fixture or market input for this leg."]
-        return {
-            "diagnosis": msg,
-            "diagnostic_synthesis": {
-                "primary_driver": "Unresolved",
-                "verdict": msg,
-                "confidence_level": "low",
-                "confidence_rationale": msg,
-                "evidence": [],
-                "takeaways": takeaways,
-                "american_commentary": "",
-            },
-            "report": f"{heading}\n\n{msg}\n",
-        }
+            takeaway = "Inspect fixture or market input for this leg."
+        synthesis = DiagnosticSynthesis(
+            primary_driver="Unresolved",
+            verdict=msg,
+            confidence_level="low",
+            confidence_rationale=msg,
+            takeaways=[takeaway],
+        )
+        return {"diagnosis": msg, "diagnostic_synthesis": synthesis.model_dump(), "report": f"{heading}\n\n{msg}\n"}
+
+    def on_error(next_node: str) -> Callable[[LegState], str]:
+        return lambda state: "leg_failure_finalize" if state.get("leg_error") else next_node
 
     graph = StateGraph(LegState)
     for name, fn in (
@@ -742,11 +385,6 @@ def build_leg_diagnosis_subgraph(
         ("quant", quant_node),
         ("blotter", blotter_node),
         ("diagnostic_pass", diagnostic_pass_node),
-        ("residual_gate", lambda state: {}),
-        ("react_plan", react_plan_node),
-        ("react_tool_exec", react_tool_exec_node),
-        ("budget_gate", lambda state: {}),
-        ("diag_finalize", diag_finalize_node),
         ("plan_search", plan_search_node),
         ("search", search_node),
         ("digest_news", digest_news_node),
@@ -754,7 +392,6 @@ def build_leg_diagnosis_subgraph(
         ("synthesize", synthesize_node),
         ("reconcile_debate", reconcile_debate_node),
         ("verify", verify_node),
-        ("revise_synthesis", revise_synthesis_node),
         ("reflect_verifier", reflect_verifier_node),
         ("terminal_unexplained_break", terminal_unexplained_break_node),
         ("finalize_leg_report", finalize_leg_report_node),
@@ -763,37 +400,12 @@ def build_leg_diagnosis_subgraph(
         graph.add_node(name, _timed_node(name, fn))
 
     graph.add_edge(START, "fetch_market")
-    graph.add_conditional_edges(
-        "fetch_market",
-        route_after_fetch,
-        ["quant", "leg_failure_finalize"],
-    )
-    graph.add_conditional_edges(
-        "quant",
-        route_after_quant,
-        ["blotter", "leg_failure_finalize"],
-    )
-    graph.add_edge("blotter", "diagnostic_pass")
+    graph.add_conditional_edges("fetch_market", on_error("quant"), ["quant", "leg_failure_finalize"])
+    graph.add_conditional_edges("quant", on_error("blotter"), ["blotter", "leg_failure_finalize"])
+    graph.add_conditional_edges("blotter", on_error("diagnostic_pass"), ["diagnostic_pass", "leg_failure_finalize"])
     graph.add_conditional_edges(
         "diagnostic_pass",
-        route_residual_gate,
-        ["react_plan", "diag_finalize"],
-    )
-    graph.add_edge("react_plan", "react_tool_exec")
-    graph.add_edge("react_tool_exec", "budget_gate")
-    graph.add_conditional_edges(
-        "budget_gate",
-        route_budget_gate,
-        ["residual_gate", "diag_finalize"],
-    )
-    graph.add_conditional_edges(
-        "residual_gate",
-        route_residual_gate,
-        ["react_plan", "diag_finalize"],
-    )
-    graph.add_conditional_edges(
-        "diag_finalize",
-        route_after_diag_finalize,
+        lambda state: "finalize_leg_report" if state.get("no_escalation") else "plan_search",
         ["plan_search", "finalize_leg_report"],
     )
     graph.add_edge("plan_search", "search")
@@ -801,50 +413,17 @@ def build_leg_diagnosis_subgraph(
     graph.add_edge("digest_news", "challenge_catalyst")
     graph.add_edge("challenge_catalyst", "synthesize")
     graph.add_edge("synthesize", "reconcile_debate")
-    graph.add_conditional_edges(
-        "reconcile_debate",
-        route_verify_gate,
-        ["verify", "finalize_leg_report"],
-    )
+    graph.add_conditional_edges("reconcile_debate", route_verify_gate, ["verify", "finalize_leg_report"])
     graph.add_conditional_edges(
         "verify",
         route_verify_result,
-        [
-            "finalize_leg_report",
-            "revise_synthesis",
-            "reflect_verifier",
-            "terminal_unexplained_break",
-        ],
+        ["finalize_leg_report", "reflect_verifier", "terminal_unexplained_break"],
     )
-    graph.add_edge("revise_synthesis", "reconcile_debate")
     graph.add_edge("reflect_verifier", "finalize_leg_report")
     graph.add_edge("terminal_unexplained_break", "finalize_leg_report")
     graph.add_edge("finalize_leg_report", END)
     graph.add_edge("leg_failure_finalize", END)
     return graph.compile()
-
-
-def run_leg_pipeline(
-    leg: BookLegSpec,
-    *,
-    config: PipelineConfig | None = None,
-    deps: GraphDeps | None = None,
-    roles: LlmRoleRegistry | None = None,
-) -> LegState:
-    cfg = config or PipelineConfig.from_env()
-    app = build_leg_diagnosis_subgraph(config=cfg, deps=deps, roles=roles)
-    initial: LegState = {
-        "leg": leg,
-        "ticker": leg.ticker,
-        "option_type": leg.option_type,
-        "strike": leg.strike,
-        "expiry": leg.expiry,
-        "quantity": leg.quantity,
-        "multiplier": leg.multiplier,
-        "verify_budget_remaining": cfg.verify_budget,
-        "diag_budget_remaining": cfg.diag_budget,
-    }
-    return app.invoke(initial)
 
 
 def build_leg_branch_subgraph(
@@ -853,60 +432,38 @@ def build_leg_branch_subgraph(
     deps: GraphDeps | None = None,
     roles: LlmRoleRegistry | None = None,
 ):
+    """The leg subgraph plus a packing node that emits one ``LegResult`` for the book."""
     leg_graph = build_leg_diagnosis_subgraph(config=config, deps=deps, roles=roles)
 
     def pack_leg_result_node(state: LegBranchState) -> LegBranchState:
-        leg = state["leg"]
-        if state.get("leg_error") or not state.get("snapshot") or not state.get("pricing"):
-            msg = state.get("leg_error") or "leg pipeline failed"
-            return {
-                "leg_results": [
-                    {
-                        "leg_id": leg.leg_id,
-                        "ok": False,
-                        "error": msg,
-                        "bundle": None,
-                        "synthesis": state.get("diagnostic_synthesis"),
-                        "diagnostic_findings": state.get("diagnostic_findings") or {},
-                        "report": state.get("report", ""),
-                        "blotter": state.get("blotter", ""),
-                        "diagnosis": state.get("diagnosis", msg),
-                        "stage_timings": state.get("stage_timings") or {},
-                        "llm_calls": state.get("llm_calls"),
-                        "no_escalation": bool(state.get("no_escalation")),
-                        "terminal_no_comparable_observation": bool(
-                            state.get("terminal_no_comparable_observation")
-                        ),
-                    }
-                ]
-            }
-        bundle = PositionBundle(
-            snapshot=state["snapshot"],
-            pricing=state["pricing"],
-            news=state.get("news", []),
-            plan=state.get("search_plan"),
+        ok = not state.get("leg_error") and bool(state.get("snapshot")) and bool(state.get("pricing"))
+        error = None if ok else (state.get("leg_error") or "leg pipeline failed")
+        bundle = (
+            PositionBundle(
+                snapshot=state["snapshot"],
+                pricing=state["pricing"],
+                news=state.get("news", []),
+                plan=state.get("search_plan"),
+            )
+            if ok
+            else None
         )
-        return {
-            "leg_results": [
-                {
-                    "leg_id": leg.leg_id,
-                    "ok": True,
-                    "error": None,
-                    "bundle": bundle,
-                    "synthesis": state.get("diagnostic_synthesis"),
-                    "diagnostic_findings": state.get("diagnostic_findings") or {},
-                    "report": state.get("report", ""),
-                    "blotter": state.get("blotter", ""),
-                    "diagnosis": state.get("diagnosis", ""),
-                    "stage_timings": state.get("stage_timings") or {},
-                    "llm_calls": state.get("llm_calls"),
-                    "no_escalation": bool(state.get("no_escalation")),
-                    "terminal_no_comparable_observation": bool(
-                        state.get("terminal_no_comparable_observation")
-                    ),
-                }
-            ]
+        result: LegResult = {
+            "leg_id": state["leg"].leg_id,
+            "ok": ok,
+            "error": error,
+            "bundle": bundle,
+            "synthesis": state.get("diagnostic_synthesis"),
+            "diagnostic_findings": state.get("diagnostic_findings") or {},
+            "report": state.get("report", ""),
+            "blotter": state.get("blotter", ""),
+            "diagnosis": state.get("diagnosis", error or ""),
+            "stage_timings": state.get("stage_timings") or {},
+            "llm_calls": state.get("llm_calls"),
+            "no_escalation": bool(state.get("no_escalation")),
+            "terminal_no_comparable_observation": bool(state.get("terminal_no_comparable_observation")),
         }
+        return {"leg_results": [result]}
 
     graph = StateGraph(LegBranchState)
     graph.add_node("leg_pipeline", leg_graph)

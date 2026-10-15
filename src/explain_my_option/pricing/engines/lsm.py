@@ -8,22 +8,15 @@ import numpy as np
 
 from ..config import EngineConfig, MertonParams, default_merton_params
 from ..ql_engine import (
-    _day_count,
     _parse_iso,
     _payoff,
     _require_ql,
     _to_ql_date,
     build_bsm_process,
     set_evaluation_date,
+    year_fraction,
 )
 from ..types import Greeks, PricingSpec
-
-
-def _year_frac(eval_date, expiry: str) -> float:
-    ql = _require_ql()
-    eval_d = _to_ql_date(eval_date)
-    exp = _parse_iso(expiry)
-    return max(_day_count().yearFraction(eval_d, exp), 1.0 / 365.0)
 
 
 def price_lsm_bs(
@@ -174,7 +167,7 @@ def price_lsm_merton(
 ) -> tuple[Greeks, list[str]]:
     cfg = config or EngineConfig.from_env()
     p = params or default_merton_params()
-    t = _year_frac(spec.eval_date, spec.expiry)
+    t = year_fraction(spec.eval_date, spec.expiry)
     seed = cfg.lsm_seed if cfg.lsm_seed else 42
     paths = simulate_merton_paths(
         spec.spot,

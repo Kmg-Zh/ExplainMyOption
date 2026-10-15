@@ -1,28 +1,23 @@
-"""Canonical repo layout paths — product, tests, and local artifacts."""
+"""Repository layout: fixtures, eval suites and their (gitignored) output folders."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-# <repo>/
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Product entry
-APP_PATH = REPO_ROOT / "app.py"
-
-# tests/ — three suites
 TESTS_DIR = REPO_ROOT / "tests"
-CI_DIR = TESTS_DIR / "ci"
 LIVE_BOOK_DIR = TESTS_DIR / "live_book"
 HISTORICAL_DIR = TESTS_DIR / "historical"
 
-FIXTURES_DIR = CI_DIR / "fixtures"
-# Task A4.6: the five hand-tuned "case" fixtures (spot/IV chosen to force a
-# specific residual regime), relabeled out of FIXTURES_DIR to make clear
-# they are regression tests for the attribution code, not evidence about
-# any real trading day -- see tests/ci/stress_fixtures/README.md.
-STRESS_FIXTURES_DIR = CI_DIR / "stress_fixtures"
-GOLDEN_DIR = CI_DIR / "golden"
+# Synthetic market snapshots (the CLI's --fixture names live here).
+FIXTURES_DIR = TESTS_DIR / "fixtures"
+# Hand-tuned "case" fixtures (spot/IV chosen to force a residual regime):
+# regression inputs for the attribution code, not evidence about real days.
+STRESS_FIXTURES_DIR = FIXTURES_DIR / "stress"
+# Real-chain slices written by scripts/fetch_chains.py.
+HISTORICAL_FIXTURES_DIR = FIXTURES_DIR / "historical"
+GOLDEN_DIR = FIXTURES_DIR / "golden"
 HISTORICAL_SUMMARY_PATH = HISTORICAL_DIR / "historical_benchmark_summary.json"
 
 LIVE_BOOK_OUTPUT_DIR = LIVE_BOOK_DIR / "output"

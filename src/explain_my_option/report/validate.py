@@ -52,12 +52,10 @@ def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
     return list(dict.fromkeys(errors))
 
 
-# A9.4: the borrow field (A9.3) makes "opportunity"/"mispricing"/
-# "arbitrage"/"free money" newly likely -- a real elevated/extreme
-# q_implied is easy to misdescribe as a tradeable edge instead of a cost
-# now inside the model. "riskless", "should have", "cheap", "rich" are the
-# project's pre-existing red line (no trade advice, no "should have
-# exercised") made explicit and enforced, not new ground.
+# Trade-advice language is out of scope however well evidenced the rest is:
+# an elevated implied borrow is easy to misdescribe as an "opportunity" or
+# "mispricing" rather than a cost inside the model, and "should have
+# (exercised)" is hindsight advice.
 PROHIBITED_TRADE_ADVICE_PHRASES: tuple[str, ...] = (
     "arbitrage",
     "mispricing",
@@ -101,8 +99,7 @@ def find_hedge_directives(synthesis: DiagnosticSynthesis) -> list[str]:
 
 
 def find_prohibited_phrases(synthesis: DiagnosticSynthesis) -> list[str]:
-    """A9.4: trade-advice-adjacent language, distinct from numeric
-    hallucination (validate_synthesis) -- no dollar figure is involved."""
+    """Trade-advice language (no figure involved, unlike validate_synthesis)."""
     hits: list[str] = []
     for text in _narrative_texts(synthesis):
         if not text:

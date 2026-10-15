@@ -5,23 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
+from .ql_engine import _parse_iso, _require_ql
 from .types import SurfaceDiagnostics, VolSurfaceData
-
-
-def _require_ql():
-    try:
-        import QuantLib as ql
-    except ImportError as exc:  # pragma: no cover
-        raise ImportError(
-            "QuantLib is required for pricing. Install with: pip install QuantLib"
-        ) from exc
-    return ql
-
-
-def _parse_iso(d: str):
-    ql = _require_ql()
-    y, m, day = (int(x) for x in d.split("-"))
-    return ql.Date(day, m, y)
 
 
 def _clean_grid(surface: VolSurfaceData) -> tuple[list, list[float], list[list[float]], list[str]]:
@@ -30,7 +15,6 @@ def _clean_grid(surface: VolSurfaceData) -> tuple[list, list[float], list[list[f
     if not surface.expiries or not surface.strikes:
         return [], [], [], ["surface_unavailable"]
 
-    ql = _require_ql()
     n_e = len(surface.expiries)
     n_k = len(surface.strikes)
     raw = surface.matrix

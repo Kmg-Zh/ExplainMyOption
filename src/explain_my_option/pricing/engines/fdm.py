@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional, Sequence
+from typing import Optional
 
 from ..config import EngineConfig
 from ..ql_engine import (
@@ -16,13 +16,7 @@ from ..ql_engine import (
     set_evaluation_date,
 )
 from ..surface import build_black_variance_surface
-from ..types import (
-    DiscreteDividend,
-    EngineId,
-    Greeks,
-    PricingSpec,
-    VolSurfaceData,
-)
+from ..types import EngineId, Greeks, PricingSpec
 
 _VEGA_BUMP = 1.0e-4
 

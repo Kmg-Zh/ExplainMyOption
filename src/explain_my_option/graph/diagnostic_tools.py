@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from typing import Any, Optional
 
-from ..pricing.analysis_api import compare_to_official, path_reprice, taylor_second_order
+from ..pricing.analysis_api import path_reprice, taylor_second_order
 from ..pricing.config import EngineConfig
 from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
-from ..report.facts import _american_facts, _intrinsic
+from ..report.facts import american_facts
 from ..report.reconciliation import build_reconciliation_facts
 
 
@@ -48,24 +47,6 @@ def quote_quality_and_noise_band(
     }
 
 
-def run_compare_to_official(
-    snap: MarketSnapshot,
-    pricing: PricingResult,
-    surface: Optional[VolSurfaceData],
-    *,
-    config: Optional[EngineConfig] = None,
-) -> dict[str, Any]:
-    cross = compare_to_official(snap, surface, config=config)
-    return {
-        "official_price": cross.official_price,
-        "engine_used": cross.engine_used_for_official,
-        "lsm_bs": cross.lsm_bs,
-        "lsm_merton": cross.lsm_merton,
-        "rel_diff_lsm_bs": cross.rel_diff,
-        "limitations": cross.limitations,
-    }
-
-
 def run_taylor_second_order(
     snap: MarketSnapshot,
     pricing: PricingResult,
@@ -81,9 +62,6 @@ def run_taylor_second_order(
         "combined_pnl": result.combined_pnl,
         "residual_after": result.residual_after,
         "limitations": result.limitations,
-        "residual_first_order": result.residual_first_order,
-        "second_order_explained": result.second_order_explained,
-        "residual_reduction_pct": result.residual_reduction_pct,
     }
 
 
@@ -102,18 +80,9 @@ def american_dividend_exercise_check(
     snap: MarketSnapshot,
     pricing: PricingResult,
 ) -> dict[str, Any]:
-    am = _american_facts(snap, pricing)
-    intrinsic = _intrinsic(snap)
-    itm = intrinsic > 0
-    days_to_ex: int | None = None
-    if am.next_ex_div and snap.as_of:
-        try:
-            ex = datetime.strptime(am.next_ex_div, "%Y-%m-%d").date()
-            as_of = datetime.strptime(snap.as_of, "%Y-%m-%d").date()
-            days_to_ex = (ex - as_of).days
-        except ValueError:
-            days_to_ex = None
-    flag_window = days_to_ex is not None and 0 <= days_to_ex <= 30 and itm
+    am = american_facts(snap, pricing)
+    days_to_ex = am.days_to_ex
+    flag_window = days_to_ex is not None and 0 <= days_to_ex <= 30 and am.intrinsic > 0
     return {
         "exercise_style": am.exercise_style,
         "intrinsic": am.intrinsic,

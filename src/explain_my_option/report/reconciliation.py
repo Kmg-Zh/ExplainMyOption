@@ -1,12 +1,8 @@
-"""Mark-vs-model reconciliation and quote-quality checks (desk conventions).
-
-Shared by the product report, ``diagnostic_pass`` tools, and ``tests/live_book/desk_pnl.py``.
-"""
+"""Mark-vs-model reconciliation and quote-quality checks (desk conventions)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from ..pricing.types import MarketSnapshot, PricingResult
 
@@ -14,7 +10,6 @@ from ..pricing.types import MarketSnapshot, PricingResult
 WIDE_SPREAD_PCT_MID = 0.15
 THIN_VOLUME = 10
 THIN_OPEN_INTEREST = 50
-MIN_TOTAL_USD_FOR_PCT = 5.0
 VEGA_ZERO_EPS = 1e-9
 
 
@@ -33,17 +28,14 @@ class ReconciliationFacts:
     mark_calibrated: bool
     observation_reliable: bool
     deep_otm_itm: bool
-    pct_uses_abs_share: bool
-    # A6.1: the two residuals, named separately.
-    # residual_method = pnl.residual_pnl unchanged (ΔP_model - Taylor
-    # components) -- arithmetic, never news. residual_model =
-    # ΔP_market - ΔP_model, the only quantity a catalyst may explain; None
-    # without reliable marks on both dates.
+    # The two residuals. Method residual: ΔP_model minus the Taylor components
+    # (arithmetic, never news). Model residual: ΔP_market minus ΔP_model, the
+    # only one a catalyst may explain; None without marks on both dates.
     residual_method_usd: float
     residual_model_usd: float | None
     marks_reliable_now: bool
     marks_reliable_prev: bool
-    # A6.2: which residual actually drives escalation this run.
+    # Which residual drives escalation this run, and its size in percent.
     escalation_basis: str  # "model" | "method"
     escalation_metric_pct: float
 
@@ -67,9 +59,9 @@ def quote_tier(
 
 
 def marks_reliable(quote_tier: str | None) -> bool:
-    """A6.2: quote tier in {tight, normal} -- data.historical_chain's
-    vocabulary -- or this module's own "reliable" label, so both feed the
-    same gate. None (unknown/never verified) is never reliable."""
+    """True for a reliable tier in either vocabulary: historical chains use
+    "tight"/"normal", live quotes use this module's "reliable". None (never
+    verified) is not reliable."""
     return quote_tier in ("tight", "normal", "reliable")
 
 
@@ -119,13 +111,7 @@ def build_reconciliation_facts(
     reliable_tier = tier == "reliable"
     observation_reliable = reliable_tier and not (within_noise is True) and not deep_otm_itm
 
-    total_abs = abs(model_pnl)
-    pct_uses_abs_share = total_abs < MIN_TOTAL_USD_FOR_PCT
-
-    # A6.1/A6.2: the two residuals, and which one drives escalation.
-    # Scaled by position size (quantity * multiplier), matching model_pnl/
-    # mark_pnl above -- residual_method_usd is a blotter dollar figure, not
-    # the raw per-option pnl.residual_pnl.
+    # Position-scaled like model_pnl / mark_pnl above.
     residual_method = float(pnl.residual_pnl) * scale
     residual_model = (mark_pnl - model_pnl) if mark_pnl is not None else None
     tier_now = snap.quote_tier_now if snap.quote_tier_now is not None else tier
@@ -155,7 +141,6 @@ def build_reconciliation_facts(
         mark_calibrated=mark_cal,
         observation_reliable=observation_reliable,
         deep_otm_itm=deep_otm_itm,
-        pct_uses_abs_share=pct_uses_abs_share,
         residual_method_usd=residual_method,
         residual_model_usd=residual_model,
         marks_reliable_now=reliable_now,

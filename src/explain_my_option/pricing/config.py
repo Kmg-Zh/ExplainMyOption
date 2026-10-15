@@ -1,4 +1,4 @@
-"""Tunable engine defaults. Swap methods via env without editing call sites."""
+"""Engine defaults; env vars override grid sizes, LSM budget and the official engine."""
 
 from __future__ import annotations
 
@@ -14,8 +14,6 @@ DEFAULT_JUMP_INTENSITY = 0.5
 DEFAULT_JUMP_MEAN = -0.10
 DEFAULT_JUMP_VOL = 0.15
 
-LSM_CI_PATHS = 8192
-LSM_CI_STEPS = 100
 LSM_PROD_PATHS = 65536
 LSM_PROD_STEPS = 252
 
@@ -49,7 +47,13 @@ class EngineConfig:
     engine_override: Optional[EngineId] = None
 
     @classmethod
-    def from_env(cls) -> "EngineConfig":
+    def fast(cls) -> EngineConfig:
+        """Coarser FDM grid and a small, seeded LSM budget, for offline tests,
+        notebooks and study scripts. Not the product default."""
+        return cls(t_grid=80, x_grid=160, lsm_paths=4096, lsm_steps=50, lsm_seed=42)
+
+    @classmethod
+    def from_env(cls) -> EngineConfig:
         cfg = cls()
         t = os.getenv("EMO_FDM_TGRID")
         x = os.getenv("EMO_FDM_XGRID")

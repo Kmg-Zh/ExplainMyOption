@@ -1,26 +1,24 @@
-"""Structured LLM synthesis + deterministic fallback."""
+"""Narrator synthesis: one structured LLM call, with a deterministic fallback."""
 
 from __future__ import annotations
 
-import os
 from typing import TYPE_CHECKING
 
 from ..data_loader import NewsItem, format_untrusted_source
 from ..graph.prompts import compose_diagnose_system_prompt
 from ..intel.types import SearchPlan
-from ..pricing.types import MarketSnapshot, PricingResult
-from .catalysts import tags_from_news, with_inferred_microstructure
 from ..pipeline.digest import IntelDigest, coarse_kept_news
-from .facts import PositionFacts, build_position_facts
+from ..pipeline.llm_roles import LlmUnavailable
+from ..pricing.types import MarketSnapshot, PricingResult
+from .catalysts import MICROSTRUCTURE_TAGS, tags_from_headlines, tags_from_news, with_inferred_microstructure
 from .desk_packet import format_desk_packet
+from .facts import PositionFacts, build_position_facts
 from .schema import DiagnosticSynthesis, EvidenceItem
 from .validate import validate_synthesis
 
 if TYPE_CHECKING:
     from ..graph.deps import GraphDeps
     from ..pipeline.llm_roles import LlmRole
-
-_DEFAULT_LLM_MODEL = "gpt-5.4-mini"
 
 _DRIVER_LABELS = {
     "delta": "Delta / spot move",
@@ -41,7 +39,7 @@ def fallback_synthesis(
 ) -> DiagnosticSynthesis:
     """Deterministic narrative when the LLM is off or validation fails."""
     driver = _DRIVER_LABELS.get(facts.primary_driver, facts.primary_driver_label)
-    direction = "gained" if facts.total_pnl >= 0 else "lost"
+    direction = "gained" if facts.model_pnl_usd >= 0 else "lost"
     verdict = (
         f"The position {direction} value over the session; the largest attributed "
         f"component is {driver}. Residual and American effects are flagged when "
@@ -58,9 +56,8 @@ def fallback_synthesis(
             "in the quant tables only."
         )
     else:
-        rationale = facts.confidence_reasons[0] if facts.confidence_reasons else (
-            "Rule-based synthesis."
-        )
+        # confidence_reasons carry figures, which narrative fields never may.
+        rationale = "Rule-based summary; all figures are in the quantitative sections."
 
     takeaways: list[str] = []
     findings = diagnostic_findings or {}
@@ -208,8 +205,6 @@ def _prompt_layer_b_tags(news: list[NewsItem], findings: dict | None) -> list[st
     When digest.relevant is empty, do not forbid squeeze/float words that already
     appear in coarse-kept blotter headlines. Peer earnings are not promoted.
     """
-    from ..report.catalysts import MICROSTRUCTURE_TAGS, tags_from_headlines
-
     tags = _catalyst_tags(news, findings)
     if tags:
         return tags
@@ -303,85 +298,48 @@ def synthesize_diagnosis(
     plan: SearchPlan | None = None,
     ports: GraphDeps | None = None,
     diagnostic_findings: dict | None = None,
-    role: "LlmRole | None" = None,
+    role: LlmRole | None = None,
 ) -> DiagnosticSynthesis:
-    """Return structured synthesis; falls back on missing key, errors, or validation."""
+    """Narrator synthesis. Falls back to the rule-based summary when there is no
+    role or credentials, the call fails, or the prose carries figures."""
     facts = build_position_facts(snap, pricing, news_count=len(news))
     findings = diagnostic_findings or {}
     digest = _digest_from_findings(findings)
     layer_b_news = _layer_b_news(news, digest, findings)
 
-    def _finish(syn: DiagnosticSynthesis) -> DiagnosticSynthesis:
-        return apply_american_commentary_policy(syn, facts)
-
-    if not os.getenv("OPENAI_API_KEY"):
+    def fallback(*, unavailable: bool) -> DiagnosticSynthesis:
         syn = fallback_synthesis(
-            facts, llm_unavailable=True, diagnostic_findings=findings, news=layer_b_news
+            facts,
+            llm_unavailable=unavailable,
+            llm_failed=not unavailable,
+            diagnostic_findings=findings,
+            news=layer_b_news,
         )
         if _should_attach_evidence(findings):
             evidence = _evidence_for_synthesis(digest, layer_b_news, findings, syn.primary_driver)
             syn = syn.model_copy(update={"evidence": evidence})
-        return _finish(syn)
+        return apply_american_commentary_policy(syn, facts)
 
+    if role is None:
+        return fallback(unavailable=True)
     try:
-        if ports is not None:
-            system = compose_diagnose_system_prompt(
-                base=ports.diagnose_system_prompt,
-                extra=ports.diagnose_system_extra,
-            )
-        else:
-            system = compose_diagnose_system_prompt(extra=None)
-
+        system = compose_diagnose_system_prompt(
+            base=ports.diagnose_system_prompt if ports is not None else None,
+            extra=ports.diagnose_system_extra if ports is not None else None,
+        )
         human = _human_prompt(snap, pricing, facts, layer_b_news, plan, findings)
-
-        if role is not None:
-            # Go through the configured role so its model/temperature/seed
-            # (Task B3) and token-usage capture (Task B4) actually apply --
-            # this used to build its own ChatOpenAI straight from
-            # EMO_LLM_MODEL, silently ignoring any role the caller passed
-            # (WORK_ORDER_REPORT.md FINDING: real bug, not a naming choice).
-            result = role.structured_invoke(system=system, human=human, schema=DiagnosticSynthesis)
-        else:
-            from langchain_core.messages import HumanMessage, SystemMessage
-            from langchain_openai import ChatOpenAI
-
-            model = os.getenv("EMO_LLM_MODEL", _DEFAULT_LLM_MODEL)
-            llm = ChatOpenAI(model=model, temperature=0, timeout=45)
-            structured = llm.with_structured_output(DiagnosticSynthesis)
-            result = structured.invoke(
-                [SystemMessage(content=system), HumanMessage(content=human)]
-            )
+        result = role.structured_invoke(system=system, human=human, schema=DiagnosticSynthesis)
         if not isinstance(result, DiagnosticSynthesis):
             result = DiagnosticSynthesis.model_validate(result)
-
-        errors = validate_synthesis(result)
-        if errors:
-            syn = fallback_synthesis(
-                facts, llm_failed=True, diagnostic_findings=findings, news=layer_b_news
-            )
-            if _should_attach_evidence(findings):
-                evidence = _evidence_for_synthesis(
-                    digest, layer_b_news, findings, syn.primary_driver
-                )
-                syn = syn.model_copy(update={"evidence": evidence})
-            return _finish(syn)
-        if _should_attach_evidence(findings) and digest.relevant:
-            result = result.model_copy(
-                update={
-                    "evidence": _digest_to_evidence(digest, result.primary_driver),
-                }
-            )
-        return _finish(result)
+    except LlmUnavailable:
+        return fallback(unavailable=True)
     except Exception:
-        syn = fallback_synthesis(
-            facts, llm_failed=True, diagnostic_findings=findings, news=layer_b_news
-        )
-        if _should_attach_evidence(findings):
-            evidence = _evidence_for_synthesis(
-                digest, layer_b_news, findings, syn.primary_driver
-            )
-            syn = syn.model_copy(update={"evidence": evidence})
-        return _finish(syn)
+        return fallback(unavailable=False)
+    if validate_synthesis(result):
+        return fallback(unavailable=False)
+    if _should_attach_evidence(findings) and digest.relevant:
+        result = result.model_copy(update={"evidence": _digest_to_evidence(digest, result.primary_driver)})
+    return apply_american_commentary_policy(result, facts)
 
 
 def _coverage_band(explained_pct: float) -> str:
@@ -471,8 +429,8 @@ def _human_prompt(
             "### Layer B — intel digest (labels; all kept headlines are in the blotter)",
         ]
     )
-    # B1.1: headline text (and the digester's own brief, itself derived from
-    # untrusted headlines) is external content, delimited here too.
+    # Headlines, and the digester's brief derived from them, are external
+    # content and stay delimited as untrusted.
     _src_idx = 0
     if digest.brief:
         _src_idx += 1
@@ -553,8 +511,3 @@ def _human_prompt(
         for note in plan.honesty_notes():
             lines.append(f"- [{note}]")
     return "\n".join(lines)
-
-
-def synthesis_to_legacy_diagnosis(synthesis: DiagnosticSynthesis) -> str:
-    """Short string for OptionState['diagnosis'] backward compatibility."""
-    return synthesis.verdict.strip()

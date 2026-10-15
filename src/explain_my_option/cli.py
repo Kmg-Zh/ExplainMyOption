@@ -1,21 +1,8 @@
 """Explain My Option — CLI and Streamlit UI.
 
-Two ways to run:
-
-    # CLI
-    python app.py --ticker AAPL --type call
-    python app.py --fixture vol_crush
-
-    # Streamlit UI
-    streamlit run app.py
-
-D1: lives under ``src/`` so the installed console script
-(``explain-my-option``, ``pyproject.toml``'s ``[project.scripts]``) can
-actually import it — ``app.py`` at the repo root is not installed by
-``pip install .``, so ``app:run_cli`` used to raise ``ModuleNotFoundError``
-after a real install. The root ``app.py`` is now a thin delegator to this
-module, kept only so ``streamlit run app.py`` and ``python app.py`` still
-work unchanged.
+    python app.py --ticker AAPL --type call      # CLI (or the installed `explain-my-option`)
+    python app.py --fixture vol_crush --no-llm   # offline, zero LLM calls
+    streamlit run app.py                         # UI
 """
 
 from __future__ import annotations
@@ -30,16 +17,43 @@ load_dotenv()
 from .agent_graph import run_pipeline
 from .pipeline.book_schema import load_book_json
 from .pipeline.portfolio_graph import run_book_pipeline
-from .report_generator import contract_id, scale_greeks, scale_pnl
+from .report.formatting import contract_id
+
+
+def _emit(parser: argparse.ArgumentParser, report: str, output: str | None) -> None:
+    if not output:
+        print("\n" + report)
+        return
+    from .paths import ReportPathError, resolve_report_output_path
+
+    try:
+        out = resolve_report_output_path(output)
+    except ReportPathError as exc:
+        parser.error(str(exc))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report, encoding="utf-8")
+    print(f"Wrote report to {out}", file=sys.stderr)
+
+
+def _no_llm_report(*, ticker: str, option_type: str, args: argparse.Namespace) -> str:
+    """Quant path only: fetch, price, attribute, and the rule-based narrative."""
+    from .graph.deps import FixtureMarketLoader, OfficialFdmPnlSource, YFinanceMarketLoader
+    from .report.facts import build_position_facts
+    from .report.synthesis import fallback_synthesis
+    from .report.template import render_position_report
+
+    loader = FixtureMarketLoader(args.fixture) if args.fixture else YFinanceMarketLoader()
+    loaded = loader.load(ticker=ticker, option_type=option_type, strike=args.strike, expiry=args.expiry)
+    loaded.snapshot.quantity = args.quantity
+    loaded.snapshot.multiplier = args.multiplier
+    pricing = OfficialFdmPnlSource().attribute(loaded.snapshot, loaded.surface, loaded.surface_prev)
+    facts = build_position_facts(loaded.snapshot, pricing)
+    return render_position_report(facts, fallback_synthesis(facts, llm_unavailable=True))
 
 
 def run_cli() -> None:
-    parser = argparse.ArgumentParser(description="Explain My Option (MVP)")
-    parser.add_argument(
-        "--ticker",
-        default=None,
-        help="e.g. AAPL (required unless --fixture)",
-    )
+    parser = argparse.ArgumentParser(description="Explain why an option's price moved since yesterday.")
+    parser.add_argument("--ticker", default=None, help="e.g. AAPL (required unless --fixture)")
     parser.add_argument(
         "--type",
         default=None,
@@ -61,119 +75,63 @@ def run_cli() -> None:
         metavar="NAME",
         help="synthetic fixture (no network; skips live news). e.g. vol_crush",
     )
-    parser.add_argument(
-        "--book",
-        default=None,
-        metavar="PATH",
-        help="JSON book file for multi-leg run (unified graph path).",
-    )
+    parser.add_argument("--book", default=None, metavar="PATH", help="JSON book file for a multi-leg run.")
     parser.add_argument(
         "--output",
         "-o",
         default=None,
         metavar="PATH",
-        help="write report Markdown to PATH (default: stdout). Eval suites use tests/live_book/output/ and tests/historical/output/<case>/.",
+        help="write the report Markdown to PATH (default: stdout).",
     )
     parser.add_argument(
         "--no-llm",
         action="store_true",
         help=(
-            "B4: run the quant path only (data fetch, pricing, PnL attribution) — "
-            "zero LLM calls, no OPENAI_API_KEY needed. The report's narrative "
-            "section is the same deterministic fallback used when no key is "
-            "configured (report.synthesis.fallback_synthesis)."
+            "quant path only (data fetch, pricing, PnL attribution): zero LLM calls, "
+            "no OPENAI_API_KEY needed; the narrative is the rule-based fallback."
         ),
     )
     args = parser.parse_args()
 
     if args.no_llm and args.book:
         parser.error("--no-llm does not support --book yet (single-leg/fixture only)")
-
-    deps = None
     if args.book and (args.ticker or args.fixture):
         parser.error("--book cannot be combined with --ticker or --fixture")
     if args.book:
         try:
-            book = load_book_json(args.book)
-            state = run_book_pipeline(book)
+            state = run_book_pipeline(load_book_json(args.book))
         except RuntimeError as exc:
             parser.error(str(exc))
-        report = state.get("report", "") + "\n"
-        if args.output:
-            from .paths import ReportPathError, resolve_report_output_path
-
-            try:
-                out = resolve_report_output_path(args.output)
-            except ReportPathError as exc:
-                parser.error(str(exc))
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(report, encoding="utf-8")
-            print(f"Wrote report to {out}", file=sys.stderr)
-        else:
-            print("\n" + report)
+        _emit(parser, state.get("report", "") + "\n", args.output)
         return
 
-    ticker = args.ticker
-    option_type = args.type
+    ticker, option_type = args.ticker, args.type
     if args.fixture:
         from .data.synthetic import list_fixtures, load_fixture
-        from .graph.deps import fixture_deps
 
         names = list_fixtures()
         if args.fixture not in names:
-            parser.error(
-                f"unknown fixture {args.fixture!r}; choose one of: {', '.join(names)}"
-            )
+            parser.error(f"unknown fixture {args.fixture!r}; choose one of: {', '.join(names)}")
         snap, _ = load_fixture(args.fixture)
         ticker = ticker or snap.ticker
-        option_type = args.type or snap.option_type
-        deps = fixture_deps(args.fixture)
+        option_type = option_type or snap.option_type
     elif not ticker:
         parser.error("--ticker is required unless --fixture is set")
-    else:
-        option_type = args.type or "call"
+    option_type = option_type or "call"
 
     if args.no_llm:
-        from .graph.deps import OfficialFdmPnlSource, YFinanceMarketLoader
-        from .report.facts import build_position_facts
-        from .report.synthesis import fallback_synthesis
-        from .report.template import render_position_report
-
-        loader = deps.market if deps is not None else YFinanceMarketLoader()
-        loaded = loader.load(
-            ticker=ticker, option_type=option_type, strike=args.strike, expiry=args.expiry
-        )
-        loaded.snapshot.quantity = args.quantity
-        loaded.snapshot.multiplier = args.multiplier
-        pricing = OfficialFdmPnlSource().attribute(
-            loaded.snapshot, loaded.surface, loaded.surface_prev
-        )
-        facts = build_position_facts(loaded.snapshot, pricing)
-        synthesis = fallback_synthesis(facts, llm_unavailable=True, news=loaded.news)
-        report = render_position_report(facts, synthesis, news=loaded.news) + "\n"
+        report = _no_llm_report(ticker=ticker, option_type=option_type, args=args)
     else:
-        result = run_pipeline(
+        report = run_pipeline(
             ticker=ticker,
             option_type=option_type,
             strike=args.strike,
             expiry=args.expiry,
             quantity=args.quantity,
             multiplier=args.multiplier,
-            deps=deps,
-        )
-        report = result["report"] + "\n"
-    if args.output:
-        from .paths import ReportPathError, resolve_report_output_path
-
-        try:
-            out = resolve_report_output_path(args.output)
-        except ReportPathError as exc:
-            parser.error(str(exc))
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(report, encoding="utf-8")
-        print(f"Wrote report to {out}", file=sys.stderr)
-    else:
-        print("\n" + report)
+            fixture=args.fixture,
+        )["report"]
+    _emit(parser, report + "\n", args.output)
 
 
 def _render_mermaid(code: str, *, height: int = 420) -> None:
@@ -263,8 +221,8 @@ def run_streamlit() -> None:
         snap = result["snapshot"]
         pricing = result["pricing"]
         scale = snap.position_scale()
-        pos_pnl = scale_pnl(pricing.pnl, scale)
-        pos_greeks = scale_greeks(pricing.greeks_prev, scale)
+        pos_pnl = pricing.pnl.scaled(scale)
+        pos_greeks = pricing.greeks_prev.scaled(scale)
 
         st.subheader(contract_id(snap))
         st.caption(

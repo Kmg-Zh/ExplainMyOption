@@ -49,11 +49,6 @@ def _connect(path: Optional[Path] = None) -> sqlite3.Connection:
     return conn
 
 
-def _snapshot_to_dict(snap: MarketSnapshot) -> dict:
-    d = asdict(snap)
-    return d
-
-
 def _snapshot_from_dict(d: dict) -> MarketSnapshot:
     divs = [
         DiscreteDividend(ex_date=x["ex_date"], amount=float(x["amount"]))
@@ -103,7 +98,7 @@ def upsert_snapshot(
                 float(snap.strike),
                 snap.option_type,
                 as_of,
-                json.dumps(_snapshot_to_dict(snap)),
+                json.dumps(asdict(snap)),
                 surf_json,
             ),
         )
@@ -155,21 +150,3 @@ def count_snapshots(*, path: Optional[Path] = None) -> int:
     with _connect(path) as conn:
         row = conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()
     return int(row[0]) if row else 0
-
-
-def list_snapshots_for_as_of(
-    as_of: str,
-    *,
-    path: Optional[Path] = None,
-) -> list[tuple[str, str, float, str]]:
-    """Return ``(ticker, expiry, strike, option_type)`` rows for one day."""
-    with _connect(path) as conn:
-        rows = conn.execute(
-            """
-            SELECT ticker, expiry, strike, option_type FROM snapshots
-            WHERE as_of = ?
-            ORDER BY ticker, option_type, strike
-            """,
-            (as_of,),
-        ).fetchall()
-    return [(r[0], r[1], float(r[2]), r[3]) for r in rows]

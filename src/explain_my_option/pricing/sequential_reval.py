@@ -2,48 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date
 
 from .config import EngineConfig
 from .registry import get_engine
 from .types import EngineId, MarketSnapshot, PricingSpec, SequentialRevalResult, SequentialRevalStep, VolSurfaceData
 
 _ORDER = ["time", "spot", "vol", "rate"]
-
-
-def _eval_date(snapshot: MarketSnapshot) -> date:
-    if snapshot.as_of:
-        return datetime.strptime(snapshot.as_of, "%Y-%m-%d").date()
-    return date.today()
-
-
-def _prev_eval_date(snapshot: MarketSnapshot) -> date:
-    if snapshot.prev_as_of:
-        return datetime.strptime(snapshot.prev_as_of, "%Y-%m-%d").date()
-    return _eval_date(snapshot) - timedelta(days=1)
-
-
-def _spec(
-    snapshot: MarketSnapshot,
-    *,
-    spot: float,
-    vol: float,
-    rate: float,
-    eval_date: date,
-) -> PricingSpec:
-    return PricingSpec(
-        spot=spot,
-        strike=snapshot.strike,
-        rate=rate,
-        dividend_yield=snapshot.dividend_yield,
-        vol=vol,
-        expiry=snapshot.expiry,
-        eval_date=eval_date,
-        option_type=snapshot.option_type,  # type: ignore[arg-type]
-        exercise_style=snapshot.exercise_style,
-        discrete_dividends=snapshot.discrete_dividends,
-        surface=None,
-    )
 
 
 def _npv(
@@ -70,8 +35,8 @@ def sequential_full_revaluation(
     """Reprice official FDM along t → S → σ → r; step sum telescopes to model ΔP."""
     cfg = config or EngineConfig.from_env()
     limitations: list[str] = []
-    as_of = _eval_date(snapshot)
-    prev_date = _prev_eval_date(snapshot)
+    as_of = snapshot.as_of_date()
+    prev_date = snapshot.prev_date()
     rate_prev = snapshot.risk_free_rate_prev
     if rate_prev is None:
         rate_prev = snapshot.risk_free_rate
@@ -87,7 +52,7 @@ def sequential_full_revaluation(
     eval_d = prev_date
 
     p_start = _npv(
-        _spec(snapshot, spot=spot, vol=vol, rate=rate, eval_date=eval_d),
+        snapshot.spec(spot=spot, vol=vol, rate=rate, eval_date=eval_d),
         config=cfg,
         engine_id=engine_id,
     )
@@ -95,22 +60,13 @@ def sequential_full_revaluation(
     steps: list[SequentialRevalStep] = []
 
     def _step_spec(spot_v: float, vol_v: float, rate_v: float, eval_v: date) -> PricingSpec:
-        spec = _spec(snapshot, spot=spot_v, vol=vol_v, rate=rate_v, eval_date=eval_v)
-        if engine_id == "fdm_local_vol":
-            spec = PricingSpec(
-                spot=spec.spot,
-                strike=spec.strike,
-                rate=spec.rate,
-                dividend_yield=spec.dividend_yield,
-                vol=spec.vol,
-                expiry=spec.expiry,
-                eval_date=spec.eval_date,
-                option_type=spec.option_type,
-                exercise_style=spec.exercise_style,
-                discrete_dividends=spec.discrete_dividends,
-                surface=surface,
-            )
-        return spec
+        return snapshot.spec(
+            spot=spot_v,
+            vol=vol_v,
+            rate=rate_v,
+            eval_date=eval_v,
+            surface=surface if engine_id == "fdm_local_vol" else None,
+        )
 
     # 1. time
     eval_d = as_of

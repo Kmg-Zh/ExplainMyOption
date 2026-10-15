@@ -18,18 +18,12 @@ from scipy.optimize import brentq
 
 from .config import EngineConfig
 from .engines.fdm import price_fdm_no_vega
-from .types import PricingSpec
+from .types import PricingSpec, intrinsic_value
 
 _VOL_LO = 1.0e-4
 _VOL_HI = 5.0
 _PRICE_TOL = 1.0e-4  # absolute $ match after solve
 _MAX_BRACKET_EXPAND = 6
-
-
-def _intrinsic(spec: PricingSpec) -> float:
-    if spec.option_type == "call":
-        return max(float(spec.spot) - float(spec.strike), 0.0)
-    return max(float(spec.strike) - float(spec.spot), 0.0)
 
 
 def implied_vol_flat(
@@ -50,7 +44,7 @@ def implied_vol_flat(
     if not (target == target) or target <= 0.0:
         return None, limitations
 
-    floor = _intrinsic(spec)
+    floor = intrinsic_value(spec.option_type, spec.spot, spec.strike)
     if target < floor - 1.0e-8:
         limitations.append("iv_calibration_failed_below_intrinsic")
         return None, limitations

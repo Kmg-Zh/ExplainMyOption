@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Protocol
 
-from explain_my_option.data.synthetic import load_fixture
-from explain_my_option.data_loader import LoadedData, load_market_data
-from explain_my_option.graph.prompts import extra_from_env
-from explain_my_option.intel.planner import QueryPlanner, default_planner
-from explain_my_option.intel.sources import IntelRegistry, StubIntelSource, default_registry
-from explain_my_option.pricing import price_and_attribute
-from explain_my_option.pricing.config import EngineConfig
-from explain_my_option.pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
+from ..data.synthetic import load_fixture
+from ..data_loader import LoadedData, load_market_data
+from ..intel.planner import QueryPlanner, default_planner
+from ..intel.sources import IntelRegistry, StubIntelSource, default_registry
+from ..pricing import price_and_attribute
+from ..pricing.config import EngineConfig
+from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
+from .prompts import extra_from_env
 
 
 class MarketLoader(Protocol):
@@ -55,7 +55,7 @@ class YFinanceMarketLoader:
 
 
 class FixtureMarketLoader:
-    """Synthetic snapshot from ``tests/ci/fixtures/{name}.json``. No network."""
+    """Synthetic snapshot from a committed fixture. No network."""
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -94,7 +94,7 @@ def fixture_deps(name: str) -> GraphDeps:
 
 @dataclass
 class OfficialFdmPnlSource:
-    """Official American FDM PnL. Pass ``config`` in tests via ``tests.shared.engine_config``."""
+    """Official American FDM PnL; ``config`` overrides grid sizes (tests use smaller grids)."""
 
     config: Optional[EngineConfig] = None
 
@@ -120,7 +120,8 @@ class GraphDeps:
     pnl: PnlSource = field(default_factory=OfficialFdmPnlSource)
     planner: QueryPlanner = field(default_factory=default_planner)
     intel: IntelRegistry = field(default_factory=default_registry)
-    # None → STRUCTURED_DIAGNOSE_SYSTEM_PROMPT in src/explain_my_option/graph/prompts.py. Extra is author-local eval only.
+    # None means STRUCTURED_DIAGNOSE_SYSTEM_PROMPT. The extra is an optional
+    # author-local addendum for evals.
     diagnose_system_prompt: Optional[str] = None
     diagnose_system_extra: str = ""
 

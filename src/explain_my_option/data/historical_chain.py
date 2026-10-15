@@ -1,4 +1,4 @@
-"""Real historical option-chain adapter (Task A4).
+"""Real historical option-chain adapter.
 
 Source: DoltHub `post-no-preference/options`, queried over its free HTTP SQL
 API -- no `dolt` CLI, no auth, no bulk download. Schema, licence
@@ -11,13 +11,8 @@ know which source they are on. Unlike those two, a historical case needs an
 explicit ``as_of`` (there is no "today" for a past date), so
 ``HistoricalChainMarketLoader`` takes ``as_of``/``prev_as_of`` at
 construction, the same way ``FixtureMarketLoader`` takes a fixture name.
-Set ``EMO_MARKET_SOURCE=historical`` to document that a run is on this path;
-nothing reads that env var automatically because building the loader always
-needs the two dates, which no generic env toggle can supply.
 
-Known split/rename hazards for the symbols this source is actually used
-with -- A3.5 itself asks for "a short cited comment block in the data
-adapter (not a registry module)":
+Known split/rename hazards for the symbols this source is used with:
 
 - **GME**: yfinance's historical ``Close`` is *always* split-adjusted, even
   with ``auto_adjust=False`` (that flag only toggles dividend adjustment,
@@ -30,13 +25,12 @@ adapter (not a registry module)":
   constant. Verified: 19.1975 * 4 = 76.79, matching the independently
   confirmed as-traded close for 2021-01-25.
 - **Meta/FB**: the 2022 chain here is stored under ticker ``FB``, but
-  yfinance spot only resolves under ``META`` post-rename. Neither of the
-  two verified cases (A4.5) touches this name; noted so a future case on
-  it does not get silently mis-based.
+  yfinance spot only resolves under ``META`` post-rename. No committed case
+  uses it yet; noted so a future one is not silently mis-based.
 
-A3.5's basis-consistency guard (``data.observation.check_basis_consistency``)
-still runs on every case built here regardless of the above -- it is the
-safety net for anything this comment block does not already know about.
+The basis-consistency guard (``data.observation.check_basis_consistency``)
+still runs on every case built here: the safety net for hazards this list
+does not know about.
 """
 
 from __future__ import annotations
@@ -52,7 +46,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..data_loader import LoadedData
-from ..paths import CI_DIR as _CI_DIR
+from ..paths import HISTORICAL_FIXTURES_DIR
 from ..pricing.config import EngineConfig
 from ..pricing.calibrate import implied_vol_flat
 from ..pricing.types import DiscreteDividend, MarketSnapshot, PricingSpec
@@ -65,7 +59,7 @@ from .observation import (
 from .rates import fetch_irx_rate_as_of
 
 _API_BASE = "https://www.dolthub.com/api/v1alpha1/post-no-preference/options/master"
-_REFERENCE_BASKET = ("SPY", "AAPL")  # + the case symbol itself, per A3.1
+_REFERENCE_BASKET = ("SPY", "AAPL")  # plus the case symbol itself
 _HTTP_TIMEOUT_S = 75.0  # DoltHub's SQL API can take 50s+ for a full day's chain
 
 _IV_CACHE_PATH = Path(".cache/explain-my-option/historical_iv.json")
@@ -123,7 +117,7 @@ def row_count(ticker: str, on_date: str) -> int:
 def classify_day(
     ticker: str, on_date: str, *, contract_rows: Optional[int] = None
 ) -> ObservationStatus:
-    """A3.1: classify one date via a real reference-basket query against this source."""
+    """Classify one date via a reference-basket row count against this source."""
     ticker_u = ticker.upper()
     basket = {
         sym: row_count(sym, on_date) for sym in _REFERENCE_BASKET if sym != ticker_u
@@ -200,21 +194,21 @@ def _historical_dividends(
 class HygieneResult:
     kept: list[dict]
     rejected: list[tuple[dict, str]]
-    # DoltHub's option_chain has no volume/open_interest columns at all (its
-    # "vol" column is implied volatility) -- A4.2's volume/OI check cannot
-    # be evaluated against this source. Recorded, not silently skipped.
+    # DoltHub's option_chain has no volume/open_interest columns (its "vol"
+    # column is implied volatility), so a volume/OI check cannot run against
+    # this source. Recorded, not silently skipped.
     volume_oi_check_applicable: bool = False
 
 
 def tier_for_spread(rel_spread: float) -> str:
-    """A4.2/A6.2 shared tier bands: tight <=5%, normal <=15%, else wide."""
+    """Quote tier by relative spread: tight <=5%, normal <=15%, else wide."""
     return "tight" if rel_spread <= 0.05 else "normal" if rel_spread <= 0.15 else "wide"
 
 
 def quote_hygiene(
     rows: list[dict], *, as_of: date, min_dte: int = 7, max_dte: int = 180
 ) -> HygieneResult:
-    """A4.2: reject with a logged reason code; tier the survivors."""
+    """Reject unusable quotes with a reason code; tier the survivors."""
     kept: list[dict] = []
     rejected: list[tuple[dict, str]] = []
     for raw in rows:
@@ -281,7 +275,7 @@ def imply_borrow_rate(
     as_of: date,
     fallback_dividend_yield: float = 0.0,
 ) -> BorrowResult:
-    """A4.3: imply the borrow rate from put-call parity, BEFORE any arbitrage
+    """Imply the borrow rate from put-call parity, before any arbitrage
     filter (a static filter with q=0 misreads an omitted borrow cost as bad
     data on a hard-to-borrow name).
 
@@ -370,13 +364,9 @@ def invert_iv_cached(
     target_price: float,
     config: Optional[EngineConfig] = None,
 ) -> tuple[Optional[float], list[str]]:
-    """A4.4: invert ``mid`` with the shipped American FDM engine via Brent,
-    disk-cached by ``(ticker, date, expiry, strike, right)`` -- the
-    expensive step; a bad cache key dominates runtime.
-
-    Reuses ``pricing.calibrate.implied_vol_flat`` (the same Brent-on-FDM
-    solver the product already ships for mark-to-model calibration) rather
-    than a second, parallel implementation.
+    """Invert ``mid`` with the official American FDM engine (Brent, via
+    ``pricing.calibrate.implied_vol_flat``), disk-cached by
+    ``(ticker, date, expiry, strike, right)`` because it is the slow step.
     """
     key = f"{ticker.upper()}|{on_date}|{expiry}|{strike}|{option_type}"
     cache = _load_iv_cache()
@@ -392,14 +382,7 @@ def invert_iv_cached(
 
 @dataclass
 class HistoricalChainMarketLoader:
-    """A4.1: the historical-chain ``MarketLoader``.
-
-    Constructed with the two dates a case needs (there is no "today" for a
-    past contract) -- the same pattern ``FixtureMarketLoader`` uses for its
-    fixture name. ``.load()`` still matches the shared ``MarketLoader``
-    protocol so the pricing layer, blotter and graph don't know which
-    source they're on.
-    """
+    """``MarketLoader`` for a past date pair, built from real chain quotes."""
 
     as_of: str
     prev_as_of: str
@@ -478,14 +461,11 @@ class HistoricalChainMarketLoader:
         c_prev = dict(contract_t1)
         mid_now = 0.5 * (float(c_now["bid"]) + float(c_now["ask"]))
         mid_prev = 0.5 * (float(c_prev["bid"]) + float(c_prev["ask"]))
-        # A6.2: per-date quote tier for the target contract itself (not the
-        # whole chain -- that's what quote_hygiene()/hyg_t above already
-        # tiered for the borrow calc's survivors).
+        # Quote tier of the target contract itself on each date.
         tier_now = tier_for_spread((float(c_now["ask"]) - float(c_now["bid"])) / mid_now)
         tier_prev = tier_for_spread((float(c_prev["ask"]) - float(c_prev["bid"])) / mid_prev)
 
-        # A3.5 runs on both dates -- a mis-based day is not guaranteed to be
-        # t rather than t-1.
+        # Check the basis on both dates: a mis-based day may be either one.
         T_now = max((expiry_d - as_of_d).days, 1) / 365.0
         T_prev = max((expiry_d - prev_d).days, 1) / 365.0
         for label, spot_i, rate_i, mid_i, T_i in (
@@ -578,10 +558,7 @@ class HistoricalChainMarketLoader:
             quote_tier_now=tier_now,
             quote_tier_prev=tier_prev,
         )
-        return LoadedData(snapshot=snapshot, news=[], surface=None, surface_prev=None)
-
-
-_HISTORICAL_CASE_DIR = _CI_DIR / "fixtures" / "historical"
+        return LoadedData(snapshot=snapshot, surface=None, surface_prev=None)
 
 
 def load_historical_case(name: str, *, cases_root: Optional[Path] = None) -> MarketSnapshot:
@@ -592,7 +569,7 @@ def load_historical_case(name: str, *, cases_root: Optional[Path] = None) -> Mar
     JSON says -- these are real snapshots, not synthetic fixtures, and
     should keep reading as ``data_source="historical"``.
     """
-    root = cases_root or _HISTORICAL_CASE_DIR
+    root = cases_root or HISTORICAL_FIXTURES_DIR
     path = root / f"{name}.json"
     if not path.exists():
         raise FileNotFoundError(

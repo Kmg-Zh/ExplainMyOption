@@ -7,7 +7,7 @@ from typing import Optional
 from .config import EngineConfig
 from .engines.crr import CrrEngine
 from .engines.fdm import FdmFlatEngine, FdmLocalVolEngine
-from .types import EngineId, PricingSpec, VolSurfaceData
+from .types import EngineId, VolSurfaceData
 
 
 def get_engine(name: EngineId, config: Optional[EngineConfig] = None):
@@ -34,22 +34,3 @@ def resolve_official_engine(
         return "fdm_local_vol"
     return "fdm_flat"
 
-
-def spec_from_snapshot_now(snapshot, surface: Optional[VolSurfaceData] = None) -> PricingSpec:
-    from datetime import date, datetime
-
-    as_of = snapshot.as_of or date.today().isoformat()
-    eval_date = datetime.strptime(as_of, "%Y-%m-%d").date()
-    return PricingSpec(
-        spot=snapshot.spot_now,
-        strike=snapshot.strike,
-        rate=snapshot.risk_free_rate,
-        dividend_yield=snapshot.dividend_yield,
-        vol=snapshot.iv_now,
-        expiry=snapshot.expiry,
-        eval_date=eval_date,
-        option_type=snapshot.option_type,  # type: ignore[arg-type]
-        exercise_style=snapshot.exercise_style,
-        discrete_dividends=snapshot.discrete_dividends,
-        surface=surface,
-    )
