@@ -138,7 +138,7 @@ Seven modules under `tests/`, offline and keyless (credentials are blanked for e
 ./scripts/run-tests.sh
 ```
 
-The suite never calls a live LLM. Historical `run.py` is a separate, keyed eval. For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`.
+The suite never calls a live LLM. Historical `run.py` is a separate, keyed eval. For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`. For the same agent on three OpenAI models under a $5 cap, with real reports side by side, see [docs/studies/model_comparison.md](docs/studies/model_comparison.md) (`scripts/compare_models.py`).
 
 ## Try it
 
