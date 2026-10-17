@@ -37,18 +37,21 @@ def _narrative_texts(synthesis: DiagnosticSynthesis) -> list[str]:
     ]
 
 
+def narrative_text_errors(text: str) -> list[str]:
+    """What validate_synthesis rejects in one narrative field."""
+    errors: list[str] = []
+    if _DOLLAR.search(text):
+        errors.append("LLM prose must not contain dollar amounts.")
+    if _PERCENT.search(text):
+        errors.append("LLM prose must not contain percentage literals.")
+    if _PNL_CLAIM.search(text):
+        errors.append("LLM prose must not embed numeric PnL claims.")
+    return errors
+
+
 def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
     """Return validation errors; empty list means safe to render."""
-    errors: list[str] = []
-    for text in _narrative_texts(synthesis):
-        if not text:
-            continue
-        if _DOLLAR.search(text):
-            errors.append("LLM prose must not contain dollar amounts.")
-        if _PERCENT.search(text):
-            errors.append("LLM prose must not contain percentage literals.")
-        if _PNL_CLAIM.search(text):
-            errors.append("LLM prose must not embed numeric PnL claims.")
+    errors = [e for text in _narrative_texts(synthesis) if text for e in narrative_text_errors(text)]
     return list(dict.fromkeys(errors))
 
 

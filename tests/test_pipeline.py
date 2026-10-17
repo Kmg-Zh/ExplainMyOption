@@ -154,6 +154,20 @@ def test_a_required_catalyst_from_the_critic_reaches_the_narrative():
     assert SQUEEZE.title in out["report"]
 
 
+DIVIDEND = NewsItem(title="Stock trades ex-dividend tomorrow with a $0.24 quarterly dividend", publisher="Wire", published="2026-08-14")
+
+
+def test_a_headline_figure_the_digester_quotes_is_not_an_invented_number():
+    """Digest facts become evidence after the narrator's check, so code applies the same rule there."""
+    fact = "Trades ex-dividend tomorrow for a $0.24 dividend."
+    digester = ScriptedRole({"relevant": [{"title": DIVIDEND.title, "mechanisms": [], "one_line_fact": fact}]})
+    out = run_leg(fixture="vol_crush", news=[DIVIDEND], llm=roles(digester=digester))
+    evidence = out["diagnostic_synthesis"]["evidence"]
+    assert [e["headline"] for e in evidence] == [DIVIDEND.title]  # the headline keeps its figure
+    assert fact not in evidence[0]["relevance"]
+    assert out["diagnostic_findings"].get("verifier_status") != "FAIL"
+
+
 def test_an_unreliable_quote_skips_search_and_strips_invented_evidence():
     narrator = ScriptedRole(
         {

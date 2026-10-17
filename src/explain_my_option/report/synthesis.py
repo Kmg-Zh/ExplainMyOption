@@ -14,7 +14,7 @@ from .catalysts import MICROSTRUCTURE_TAGS, tags_from_headlines, tags_from_news,
 from .desk_packet import format_desk_packet
 from .facts import PositionFacts, build_position_facts
 from .schema import DiagnosticSynthesis, EvidenceItem
-from .validate import validate_synthesis
+from .validate import narrative_text_errors, validate_synthesis
 
 if TYPE_CHECKING:
     from ..graph.deps import GraphDeps
@@ -277,8 +277,11 @@ def _digest_to_evidence(digest: IntelDigest, driver: str) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
     for row in digest.relevant[:3]:
         source = row.publisher or "News"
+        # The digester may quote a headline's figures, but evidence.relevance is
+        # narrative and attached after the narrator's check, so the same rule
+        # applies here; the headline itself keeps its figures.
         relevance = (row.one_line_fact or "").strip()
-        if not relevance:
+        if not relevance or narrative_text_errors(relevance):
             relevance = f"Possible context for {driver}; verify against the quant driver."
         items.append(
             EvidenceItem(
