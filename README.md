@@ -18,6 +18,18 @@ This is a personal project, in progress — not a production desk system. LangGr
 4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
 5. **Escalate, don't invent.** A terminal break has two triggers: (a) the costly tool slot is spent and the residual or mark gap is still above 15% (flagged for human review), or (b) a verifier hard FAIL that code confirms (the leg ends there). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
 
+## Where to look
+
+| You are here for | Start with |
+|------------------|------------|
+| The AI agent: what each LLM role may do, and the code that holds it to that | [tests/agent/README.md](tests/agent/README.md): every rule, what the LLM tries, what code does, and the test behind it |
+| Those rules acting on a full report, with no key | [examples/governance/](examples/governance/README.md): five offline scripts where an LLM role misbehaves on purpose |
+| How a real model actually behaves | [evals/README.md](evals/README.md): the red team, historical events, the live book and a model comparison, with the latest results |
+| The engineering: pricing, market data, the report, the graph as software | [tests/engineering/](tests/README.md) and [docs/knowledge/](docs/knowledge/README.md) |
+| Running the agent on your own PnL system | [docs/INTEGRATION.md](docs/INTEGRATION.md) |
+
+Tests are deterministic and run on every push (the LLM roles are scripted); evals call a real model and are scored.
+
 ## Sample output
 
 Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) — see that README for the exact command, model, data source, and real-vs-synthetic status of each. Suite `output/` stays gitignored.
@@ -165,6 +177,7 @@ Copy `.env.example` → `.env`. Default runtime requires `OPENAI_API_KEY` (entry
 
 ```bash
 explain-my-option --fixture vol_crush --no-llm   # offline, zero LLM calls
+python examples/governance/01_invented_number.py # offline: code rejects a narrator's invented figure
 python app.py --ticker AAPL --type call
 python app.py --ticker TSLA --type put --strike 250 --expiry 2026-01-16
 python app.py --fixture vol_crush
