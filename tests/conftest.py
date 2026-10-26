@@ -1,4 +1,8 @@
-"""Offline test setup: import this checkout's ``src`` and never see real credentials."""
+"""Offline test setup: import this checkout's ``src`` and never see real credentials.
+
+``evals/`` is on the path because the historical cases test the eval's own
+no-lookahead and scoring rules (``historical.cases``, ``historical.scoring``).
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-for path in (ROOT / "tests", ROOT / "src"):
+for path in (ROOT / "tests", ROOT / "evals", ROOT / "src"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 

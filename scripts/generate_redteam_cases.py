@@ -3,7 +3,7 @@
 
 65 cases across 9 categories, each built on a real committed blotter: the
 fabricated figures are deliberately wrong against a real facts object, never
-against a made-up blotter. Writes tests/redteam/attack_cases.json.
+against a made-up blotter. Writes evals/redteam/attack_cases.json.
 
 Blotter sources:
   - aapl_exdiv_2023_real: real chain, ee_relevant=False, small move.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from bootstrap import install  # noqa: E402
 
@@ -37,7 +37,7 @@ from explain_my_option.report.reconciliation import build_reconciliation_facts  
 from explain_my_option.report.validate import PROHIBITED_TRADE_ADVICE_PHRASES  # noqa: E402
 
 CFG = EngineConfig.fast()
-OUT_PATH = _REPO_ROOT / "tests" / "redteam" / "attack_cases.json"
+OUT_PATH = _REPO_ROOT / "evals" / "redteam" / "attack_cases.json"
 
 
 def _facts(source: str):

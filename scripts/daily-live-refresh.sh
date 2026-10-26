@@ -2,8 +2,8 @@
 # Daily unattended run of the live e2e reconciliation test, launched by
 # ~/Library/LaunchAgents/com.explainmyoption.daily-refresh.plist at 9pm local time.
 #
-# Runs tests/live_book/portfolio_e2e.py against today's live market close and
-# refreshes the local .cache/ + tests/live_book/output/ (both gitignored — this
+# Runs evals/live_book/portfolio_e2e.py against today's live market close and
+# refreshes the local .cache/ + evals/live_book/output/ (both gitignored — this
 # is the "get new data" the test needs day to day).
 #
 # Re-pinning a new contract (when the current pin expires) is a judgment call
@@ -37,7 +37,7 @@ cd "$ROOT" || exit 1
     echo "PINNED BOOK EXPIRED -- re-pin by hand (see docs/dev/SCHEDULING.md)."
   fi
 
-  TRACKED_PATHS=(tests/live_book/pinned_books)
+  TRACKED_PATHS=(evals/live_book/pinned_books)
   if [[ -n "$(git status --porcelain -- "${TRACKED_PATHS[@]}")" ]]; then
     echo "Tracked pinned-book/report files changed — committing and pushing."
     git add -- "${TRACKED_PATHS[@]}"

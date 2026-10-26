@@ -3,7 +3,7 @@
 Generated 2026-10-17T04:23:11+00:00 by `scripts/compare_models.py`, prompt `v3.2`. Each model played all four roles (digester, catalyst critic, narrator, verifier) through the production `OpenAiRole`, as setting `EMO_LLM_MODEL` would, on the same cases. Every case comes from data the repo had already accumulated:
 
 - **Red team**: 65 constructed attacks on real blotters, verifier only, one run per case.
-- **Historical**: 5 events with frozen as-of news, the full graph with the verifier on, scored with the desk rubric in `tests/historical/scoring.py`.
+- **Historical**: 5 events with frozen as-of news, the full graph with the verifier on, scored with the desk rubric in `evals/historical/scoring.py`.
 - **Archive**: 20 archived live-book legs (2026-09-07, 2026-10-15) replayed with their frozen market and news.
 
 ## Summary

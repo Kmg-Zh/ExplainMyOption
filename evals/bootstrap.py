@@ -1,12 +1,12 @@
-"""Put repo root and ``tests/`` on ``sys.path`` for ``python tests/...`` invocations."""
+"""Put repo root, ``evals/`` and ``src/`` on ``sys.path`` for ``python evals/...`` and ``scripts/`` invocations."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-TESTS_DIR = Path(__file__).resolve().parent
-REPO_ROOT = TESTS_DIR.parent
+EVALS_DIR = Path(__file__).resolve().parent
+REPO_ROOT = EVALS_DIR.parent
 SRC_DIR = REPO_ROOT / "src"
 
 
@@ -17,7 +17,7 @@ def _is_repo_root(path: Path) -> bool:
 def find_repo_root(start: Path | None = None) -> Path:
     """Walk up from ``start`` (default: cwd) to the package root.
 
-    Notebooks and ``python tests/...`` scripts should call this instead of
+    Notebooks and ``python evals/...`` scripts should call this instead of
     probing for the removed ``src/agent_graph.py`` path.
     """
     here = (start or Path.cwd()).resolve()
@@ -36,9 +36,9 @@ def find_repo_root(start: Path | None = None) -> Path:
 
 def install(start: Path | None = None) -> Path:
     root = find_repo_root(start)
-    tests = root / "tests"
+    evals = root / "evals"
     src = root / "src"
-    for path in (root, tests, src):
+    for path in (root, evals, src):
         s = str(path)
         if s not in sys.path:
             sys.path.insert(0, s)

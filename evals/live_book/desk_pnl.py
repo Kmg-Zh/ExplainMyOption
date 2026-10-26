@@ -1,6 +1,6 @@
 """Desk-quality verification of live portfolio e2e runs (test-only).
 
-Reads archived leg JSON under tests/live_book/output/<as_of>/<run>/legs/.
+Reads archived leg JSON under evals/live_book/output/<as_of>/<run>/legs/.
 Reconciliation math lives in ``src.report.reconciliation`` (shared with product).
 """
 
@@ -14,9 +14,9 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-_TESTS_DIR = Path(__file__).resolve().parents[1]
-if str(_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TESTS_DIR))
+_EVALS_DIR = Path(__file__).resolve().parents[1]
+if str(_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVALS_DIR))
 
 from bootstrap import install
 

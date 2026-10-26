@@ -1,6 +1,6 @@
 # Red-team results
 
-Generated 2026-10-05T04:49:23+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-10-05T04:49:23+00:00 by `scripts/run_redteam.py` against `evals/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
 **Model**: `gpt-5.4-mini` (temperature 0.0, seed 0) as the LLM verifier on every case `pipeline.verifier.deterministic_precheck` does not intercept. **Runs per case**: 3. **LLM calls**: 99. **Cost**: $0.1590 (138138 in / 12314 out tokens). The deterministic-only floor for the same cases is in [redteam_results_deterministic_only.md](redteam_results_deterministic_only.md).
 

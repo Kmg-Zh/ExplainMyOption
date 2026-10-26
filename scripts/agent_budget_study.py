@@ -24,7 +24,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from bootstrap import install  # noqa: E402
 
@@ -257,7 +257,7 @@ def main() -> int:
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} by "
         "`scripts/agent_budget_study.py`, run through the real leg graph "
         "(`agent_graph.run_pipeline`) for the 10 offline synthetic legs "
-        "(`tests/live_book/portfolio_book.py::OFFLINE_LEGS`) and the 2 "
+        "(`evals/live_book/portfolio_book.py::OFFLINE_LEGS`) and the 2 "
         "verified real historical cases (real DoltHub chains). Every "
         f"number below is produced by this run, `n={len(runs)}` "
         f"({len(ok_runs)} completed, {len(failed_runs)} failed).",

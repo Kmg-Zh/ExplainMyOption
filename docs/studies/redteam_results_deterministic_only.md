@@ -1,6 +1,6 @@
 # Red-team results
 
-Generated 2026-10-15T13:47:38+00:00 by `scripts/run_redteam.py` against `tests/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
+Generated 2026-10-26T12:32:45+00:00 by `scripts/run_redteam.py` against `evals/redteam/attack_cases.json` (65 cases, `scripts/generate_redteam_cases.py`).
 
 **Model**: none -- deterministic layer only. Every case ran through `pipeline.verifier.deterministic_precheck` first; cases it does not intercept fell through to a fixed baseline mock role that always returns PASS (`_BaselineRole` in `scripts/run_redteam.py`). This measures the **deterministic layer's own detection rate**, `v3.2`, not a real model's, and is the floor the live run ([redteam_results.md](redteam_results.md)) is compared against. **Runs per case**: 3. **Cost**: $0.
 

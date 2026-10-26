@@ -14,9 +14,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_TESTS_DIR = Path(__file__).resolve().parents[1]
-if str(_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TESTS_DIR))
+_EVALS_DIR = Path(__file__).resolve().parents[1]
+if str(_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVALS_DIR))
 
 from bootstrap import install
 
@@ -58,7 +58,7 @@ GOLDEN_SUMMARY = HISTORICAL_SUMMARY_PATH
 
 
 def _report_path_relative(test_id: str) -> str:
-    return f"tests/historical/output/{test_id}/report.md"
+    return f"evals/historical/output/{test_id}/report.md"
 
 
 def _require_openai_api_key() -> None:
@@ -257,7 +257,7 @@ def _main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--pin",
         action="store_true",
-        help="Also write a local gitignored snapshot at tests/historical/historical_benchmark_summary.json.",
+        help="Also write a local gitignored snapshot at evals/historical/historical_benchmark_summary.json.",
     )
     args = parser.parse_args(argv)
 

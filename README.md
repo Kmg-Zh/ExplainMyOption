@@ -148,7 +148,7 @@ Two suites under `tests/`, both offline and keyless (credentials are blanked for
 pytest tests/agent              # one suite (or: pytest -m agent)
 ```
 
-The suite never calls a live LLM. Historical `run.py` is a separate, keyed eval. For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`. For the same agent on three OpenAI models under a $5 cap, with real reports side by side, see [docs/studies/model_comparison.md](docs/studies/model_comparison.md) (`scripts/compare_models.py`).
+The suite never calls a live LLM. Runs with real LLM roles are evals, in [`evals/`](evals/README.md). For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`. For the same agent on three OpenAI models under a $5 cap, with real reports side by side, see [docs/studies/model_comparison.md](docs/studies/model_comparison.md) (`scripts/compare_models.py`).
 
 ## Try it
 
@@ -178,10 +178,10 @@ streamlit run app.py
 | Suite | What | Command |
 |-------|------|---------|
 | `tests/engineering/`, `tests/agent/` | Engine, graph, report; the agent's rules (offline) | `./scripts/run-tests.sh` |
-| `tests/historical/` | Event fixtures with frozen as-of news | `python tests/historical/run.py` |
-| `tests/live_book/` | Recent book / archive replay | `python tests/live_book/portfolio_e2e.py --offline` |
+| `evals/historical/` | Event fixtures with frozen as-of news (real LLM, keyed) | `python evals/historical/run.py` |
+| `evals/live_book/` | Recent book / archive replay | `python evals/live_book/portfolio_e2e.py --offline` |
 
-Layout and notebooks: [tests/README.md](tests/README.md) · [notebooks/README.md](notebooks/README.md).
+Layout and notebooks: [tests/README.md](tests/README.md) · [evals/README.md](evals/README.md) · [notebooks/README.md](notebooks/README.md).
 
 ## Historical cases
 

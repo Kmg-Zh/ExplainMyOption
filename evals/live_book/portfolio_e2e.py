@@ -1,10 +1,10 @@
 """Test-only portfolio e2e: fetch → quant → blotter → search → diagnose.
 
 Not a product API. Default live mode uses a **pinned** contract book so
-day-over-day marks stay comparable. Archives under ``tests/live_book/output/``.
+day-over-day marks stay comparable. Archives under ``evals/live_book/output/``.
 
-    python tests/live_book/portfolio_e2e.py --offline
-    python tests/live_book/portfolio_e2e.py --live --compare-to-baseline
+    python evals/live_book/portfolio_e2e.py --offline
+    python evals/live_book/portfolio_e2e.py --live --compare-to-baseline
     ./scripts/run-portfolio-e2e.sh
 """
 
@@ -19,9 +19,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
-_TESTS_DIR = Path(__file__).resolve().parents[1]
-if str(_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TESTS_DIR))
+_EVALS_DIR = Path(__file__).resolve().parents[1]
+if str(_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVALS_DIR))
 
 from bootstrap import install
 
@@ -72,7 +72,7 @@ from explain_my_option.report.schema import DiagnosticSynthesis
 from explain_my_option.report.synthesis import fallback_synthesis, synthesize_diagnosis
 from explain_my_option.report.template import render_portfolio_report
 
-# Test artifacts only (gitignored via tests/live_book/output/).
+# Eval artifacts only (gitignored via evals/live_book/output/).
 RUNS_ROOT = LIVE_BOOK_OUTPUT_DIR
 
 
@@ -643,6 +643,7 @@ def main(argv: list[str] | None = None) -> int:
         # Prefer the earliest archive on the baseline day (pin discovery), never this run.
         search_roots = [
             RUNS_ROOT,
+            TESTS_DIR / "live_book" / "output",  # pre-2026-10-26 layout
             TESTS_DIR / "output" / "live_book",  # pre-2026-09-03 layout
             TESTS_DIR / "output" / "portfolio_runs",  # pre-2026-09-02 name
             Path(".cache/explain-my-option/runs"),

@@ -1,10 +1,10 @@
 """Replay archived live-book days through the current graph.
 
 Uses frozen snapshots + archived news (no live Yahoo). LLM digest / challenge /
-synthesize / verify still run. Writes under tests/live_book/output/<as_of>/replay_*.
+synthesize / verify still run. Writes under evals/live_book/output/<as_of>/replay_*.
 
-    python tests/live_book/replay_archives.py
-    python tests/live_book/replay_archives.py --days 2026-09-01,2026-09-02
+    python evals/live_book/replay_archives.py
+    python evals/live_book/replay_archives.py --days 2026-09-01,2026-09-02
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-_TESTS_DIR = Path(__file__).resolve().parents[1]
-if str(_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TESTS_DIR))
+_EVALS_DIR = Path(__file__).resolve().parents[1]
+if str(_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVALS_DIR))
 
 from bootstrap import install
 
@@ -38,10 +38,13 @@ from explain_my_option.pricing.types import DiscreteDividend, MarketSnapshot, Vo
 from explain_my_option.report.schema import DiagnosticSynthesis
 from live_book.portfolio_e2e import _persist_run
 from explain_my_option.report.facts import PositionBundle
+from explain_my_option.paths import LIVE_BOOK_OUTPUT_DIR, TESTS_DIR
 
+# Later roots win for the same day, so the current layout comes last.
 ARCHIVE_ROOTS = (
-    _TESTS_DIR / "output" / "live_book",
-    _TESTS_DIR / "live_book" / "output",
+    TESTS_DIR / "output" / "live_book",  # pre-2026-09-03 layout
+    TESTS_DIR / "live_book" / "output",  # pre-2026-10-26 layout
+    LIVE_BOOK_OUTPUT_DIR,
 )
 
 

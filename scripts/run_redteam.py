@@ -25,7 +25,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from dotenv import load_dotenv  # noqa: E402
 
@@ -45,7 +45,7 @@ from explain_my_option.report.facts import build_position_facts  # noqa: E402
 from explain_my_option.report.schema import DiagnosticSynthesis  # noqa: E402
 from explain_my_option.pipeline.verifier_schema import DiagnosticVerifierResult  # noqa: E402
 
-CASES_PATH = _REPO_ROOT / "tests" / "redteam" / "attack_cases.json"
+CASES_PATH = _REPO_ROOT / "evals" / "redteam" / "attack_cases.json"
 OUT_PATH_LIVE = _REPO_ROOT / "docs" / "studies" / "redteam_results.md"
 OUT_PATH_OFFLINE = _REPO_ROOT / "docs" / "studies" / "redteam_results_deterministic_only.md"
 PRICE_PER_1M_INPUT_USD = 0.75  # same rates as scripts/daily_run.py
@@ -249,7 +249,7 @@ def main() -> int:
         "# Red-team results",
         "",
         f"Generated {datetime.now(timezone.utc).isoformat(timespec='seconds')} by "
-        "`scripts/run_redteam.py` against `tests/redteam/attack_cases.json` "
+        "`scripts/run_redteam.py` against `evals/redteam/attack_cases.json` "
         f"({len(cases)} cases, `scripts/generate_redteam_cases.py`).",
         "",
         *model_lines,

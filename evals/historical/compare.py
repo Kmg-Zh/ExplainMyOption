@@ -1,6 +1,6 @@
 """Governed vs single-shot baseline comparison — live LLM only (OPENAI_API_KEY required).
 
-    python tests/historical/compare.py --case vow_float_squeeze_2008
+    python evals/historical/compare.py --case vow_float_squeeze_2008
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-_TESTS_DIR = Path(__file__).resolve().parents[1]
-if str(_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TESTS_DIR))
+_EVALS_DIR = Path(__file__).resolve().parents[1]
+if str(_EVALS_DIR) not in sys.path:
+    sys.path.insert(0, str(_EVALS_DIR))
 
 from bootstrap import install
 

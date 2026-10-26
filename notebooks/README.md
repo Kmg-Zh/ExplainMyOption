@@ -21,7 +21,7 @@ python -m ipykernel install --user --name explain-my-option
 jupyter lab notebooks/getting_started.ipynb
 ```
 
-Or open a notebook in your editor and pick the `.venv` kernel. Cwd may be the repo root or `notebooks/` — `tests/bootstrap.py` finds `src/explain_my_option/`.
+Or open a notebook in your editor and pick the `.venv` kernel. Cwd may be the repo root or `notebooks/` — `evals/bootstrap.py` finds `src/explain_my_option/`.
 
 **PNG cells** in the architecture notebook call LangGraph `draw_mermaid_png()` (often via mermaid.ink). If the network fails, the notebook falls back to printing Mermaid source — same as Streamlit's topology tab in `app.py`.
 

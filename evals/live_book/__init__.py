@@ -1,4 +1,4 @@
-"""Test-only portfolio books and e2e runners — not part of the product ``src/`` package."""
+"""Eval-only portfolio books and e2e runners — not part of the product ``src/`` package."""
 
 from live_book.portfolio_book import LIVE_LEGS, OFFLINE_AS_OF, OFFLINE_LEGS
 

@@ -7,7 +7,7 @@ tree; each pushes `origin <current branch>`.
 
 | Job | Time (local) | Script | What it does |
 |-----|--------------|--------|--------------|
-| `com.explainmyoption.daily-refresh` | 21:00 | `scripts/daily-live-refresh.sh` | Runs the pinned 10-leg live e2e reconciliation (`tests/live_book/`) and refreshes the local t-1 cache. Auto-commits only `tests/live_book/pinned_books/`. |
+| `com.explainmyoption.daily-refresh` | 21:00 | `scripts/daily-live-refresh.sh` | Runs the pinned 10-leg live e2e reconciliation (`evals/live_book/`) and refreshes the local t-1 cache. Auto-commits only `evals/live_book/pinned_books/`. |
 | `com.explainmyoption.daily-runlog` | 21:15 | `scripts/daily-runlog-run.sh` | Runs `scripts/daily_run.py` on `docs/runlog/book.json` (8 real legs) through the real graph, writes `docs/runlog/YYYY-MM-DD/` and appends one row to `docs/runlog/metrics.jsonl`. |
 
 ## Install
@@ -36,10 +36,10 @@ Repeat for `daily-refresh`. Logs: `.cache/daily-runlog-logs/YYYY-MM-DD.log` and
 ## Re-pinning the refresh book
 
 1. Discover contracts with a minimum DTE, e.g.
-   `python tests/live_book/portfolio_e2e.py --resolve-moneyness` (the
+   `python evals/live_book/portfolio_e2e.py --resolve-moneyness` (the
    `min_days` argument of `resolve_live_contract` selects far-dated monthlies).
-2. Write `tests/live_book/pinned_books/book_<date>.json` and point
-   `DEFAULT_PINNED_BOOK` in `tests/live_book/portfolio_book.py` at it.
+2. Write `evals/live_book/pinned_books/book_<date>.json` and point
+   `DEFAULT_PINNED_BOOK` in `evals/live_book/portfolio_book.py` at it.
 3. The first day on new contracts has no cached t-1, so IV change falls back to
    the HV20 proxy; read that day's output with that in mind.
 

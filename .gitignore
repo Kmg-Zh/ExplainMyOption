@@ -29,7 +29,12 @@ build/
 docs/references/raw/**
 !docs/references/raw/.gitkeep
 
-# Test run output
+# Eval run output (archives the scheduled jobs read; never commit)
+evals/live_book/output/
+evals/historical/output/
+evals/historical/historical_benchmark_summary.json
+evals/output/
+# Pre-2026-10-26 layout, kept ignored until a checkout's local archives are moved
 tests/live_book/output/
 tests/historical/output/
 tests/historical/historical_benchmark_summary.json

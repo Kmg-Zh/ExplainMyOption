@@ -5,7 +5,7 @@ The baseline receives the **same desk blotter** the governed workflow uses
 in one LLM call. Quant sections in the final report still come from the engine
 via ``render_position_report`` — only the narrative layer differs.
 
-    python tests/historical/compare.py --case vow_float_squeeze_2008
+    python evals/historical/compare.py --case vow_float_squeeze_2008
 """
 
 from __future__ import annotations

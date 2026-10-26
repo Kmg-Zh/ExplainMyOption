@@ -7,8 +7,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 TESTS_DIR = REPO_ROOT / "tests"
-LIVE_BOOK_DIR = TESTS_DIR / "live_book"
-HISTORICAL_DIR = TESTS_DIR / "historical"
+# Eval harnesses: the agent with real LLM roles, scored; not part of pytest.
+EVALS_DIR = REPO_ROOT / "evals"
+LIVE_BOOK_DIR = EVALS_DIR / "live_book"
+HISTORICAL_DIR = EVALS_DIR / "historical"
 
 # Synthetic market snapshots (the CLI's --fixture names live here).
 FIXTURES_DIR = TESTS_DIR / "fixtures"

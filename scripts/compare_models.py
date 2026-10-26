@@ -5,15 +5,15 @@ Every model answers the same cases, all read from data the repo has already
 accumulated (nothing is fetched and nothing is written back):
 
   redteam     the constructed attacks on real blotters: verifier detection,
-              misses and false alarms (tests/redteam/attack_cases.json)
+              misses and false alarms (evals/redteam/attack_cases.json)
   historical  the five historical events with frozen as-of news, scored with
-              the desk rubric (tests/historical)
+              the desk rubric (evals/historical)
   archive     archived live-book days replayed with their frozen market and
               news: verdict mix, overruled FAILs, narrator fallbacks
 
 The model under test plays all four roles through the production OpenAiRole,
 exactly as setting EMO_LLM_MODEL would. Every API response is cached under
-tests/output/model_comparison/ (gitignored), so a rerun, or a run stopped by
+evals/output/model_comparison/ (gitignored), so a rerun, or a run stopped by
 --max-usd, pays only for calls it has not made yet. Each case runs on every
 model before the next case starts, so a stopped run still compares the models
 on the same cases.
@@ -40,9 +40,9 @@ from typing import Any, Callable
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
-OUT = _REPO_ROOT / "tests" / "output" / "model_comparison"
+OUT = _REPO_ROOT / "evals" / "output" / "model_comparison"
 CACHE = OUT / "cache"
 DOC = _REPO_ROOT / "docs" / "studies" / "model_comparison.md"
 SAMPLES = _REPO_ROOT / "docs" / "studies" / "model_comparison"
@@ -534,7 +534,7 @@ def _study_markdown(generated, prompt_version, models, summary, results, samples
         "",
         f"- **Red team**: {n['redteam']} constructed attacks on real blotters, verifier only, one run per case.",
         f"- **Historical**: {n['historical']} events with frozen as-of news, the full graph with the verifier on, "
-        "scored with the desk rubric in `tests/historical/scoring.py`.",
+        "scored with the desk rubric in `evals/historical/scoring.py`.",
         f"- **Archive**: {n['archive']} archived live-book legs ({', '.join(args.days)}) replayed with their frozen "
         "market and news.",
         "",
@@ -654,7 +654,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", default="gpt-5.4-mini", help="comma-separated model ids (see PRICES)")
     parser.add_argument("--suites", default=",".join(SUITES), help="comma-separated subset of " + ", ".join(SUITES))
     parser.add_argument("--days", default=",".join(DEFAULT_DAYS), help="archived live-book days to replay")
-    parser.add_argument("--archive-root", type=Path, default=_REPO_ROOT / "tests" / "live_book" / "output")
+    parser.add_argument("--archive-root", type=Path, default=_REPO_ROOT / "evals" / "live_book" / "output")
     parser.add_argument("--limit", type=int, default=0, help="first N cases per suite (0 = all)")
     parser.add_argument("--max-usd", type=float, default=5.0, help="hard cap on what this run may spend")
     parser.add_argument("--env-file", type=Path, default=_REPO_ROOT / ".env", help="where OPENAI_API_KEY lives")

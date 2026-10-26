@@ -19,7 +19,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from bootstrap import install  # noqa: E402
 

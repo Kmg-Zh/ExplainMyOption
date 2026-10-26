@@ -21,15 +21,16 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from bootstrap import install  # noqa: E402
 
 install()
 
 from explain_my_option.data.historical_chain import HistoricalChainMarketLoader  # noqa: E402
+from explain_my_option.paths import HISTORICAL_FIXTURES_DIR  # noqa: E402
 
-OUT_DIR = _REPO_ROOT / "tests" / "ci" / "fixtures" / "historical"
+OUT_DIR = HISTORICAL_FIXTURES_DIR
 
 # The only two confirmed convertible cases -- do not add others here
 # without independently re-verifying convertibility per docs/dev/DATA_SOURCES.md.

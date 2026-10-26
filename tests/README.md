@@ -50,17 +50,9 @@ intended blotter change with `EMO_UPDATE_GOLDEN=1 ./scripts/run-tests.sh -k gold
 | `fixtures/books/` | A demo multi-leg book |
 | `fixtures/golden/` | Expected blotter Markdown |
 
-## Evaluation harnesses (not part of pytest)
+## Tests vs evals
 
-These run the product against live or archived data and need network and,
-for the LLM roles, `OPENAI_API_KEY`. Their `output/` folders are gitignored.
-
-| Folder | What | Command |
-|--------|------|---------|
-| `historical/` | The historical events with frozen as-of news, scored against a rubric | `python tests/historical/run.py` |
-| `live_book/` | The pinned live book; the 21:00 scheduled job runs it daily | `python tests/live_book/portfolio_e2e.py --offline` |
-| `redteam/` | The constructed attack set behind `docs/studies/redteam_results.md` | `python scripts/run_redteam.py` |
-
-Agent-visible headlines in the historical eval are published on or before
-`as_of`; later articles, papers and the case's `input_text` are ground truth
-for scoring only and are never fed to the graph.
+Everything here is deterministic: scripted LLM roles, committed fixtures, no
+network, run on every push. Running the agent with real LLM roles and scoring
+what it does (the red team, the historical events, the live book) is an eval:
+see [`evals/`](../evals/README.md).
