@@ -133,7 +133,7 @@ Two suites under `tests/`, both offline and keyless (credentials are blanked for
 | `test_market_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, news sources |
 | `test_workflow.py` | The LangGraph workflow as software: an end-to-end leg, input guards, book fan-out, CLI, graph topology, a desk's own PnL source with the engine deleted |
 
-`tests/agent/`: the agent's rules, enforced by code, with scripted LLM roles.
+`tests/agent/`: the agent's rules, enforced by code, with scripted LLM roles. Each rule, what the LLM tries and what code does: [tests/agent/README.md](tests/agent/README.md).
 
 | Module | What it pins |
 |--------|--------------|

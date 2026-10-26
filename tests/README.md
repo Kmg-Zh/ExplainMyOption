@@ -15,7 +15,8 @@ protects, not on whether an LLM appears in it:
 - `engineering/`: the code computes and wires correctly.
 - `agent/`: the agent's rules: what an LLM role may say, which tools it may
   spend, when the run must stop and hand over to a person. The LLM roles are
-  scripted, so each rule is checked deterministically.
+  scripted, so each rule is checked deterministically. Rule by rule, with the
+  test behind each: [agent/README.md](agent/README.md).
 
 ```bash
 pytest tests/agent              # one suite (or: pytest -m agent)
