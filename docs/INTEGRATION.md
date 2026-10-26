@@ -97,6 +97,8 @@ The planner's queries name `yfinance_news`, `tavily` or `sec_8k`. Register your 
 
 `PipelineConfig(require_openai=False)` lifts the entry gate. A role without credentials then falls back to code-only output, and the verifier returns PARTIAL with the flag `verifier_unavailable`.
 
+To test your adapters before paying for a model, pass scripted roles from `explain_my_option.testing`: `scripted_roles(ScriptedNarrator(verdict=...), ScriptedVerifier("FAIL", ("numeric_hallucination",)))`, `no_llm_roles()` (any LLM call raises), and `frozen_intel(news)` for fixed headlines. It needs none of the reference engine's dependencies. [`examples/governance/`](../examples/governance/README.md) uses them to make each role misbehave on purpose.
+
 ## What stays fixed
 
 The workflow, the diagnostic thresholds, the code checks and the report template are the governance. The adapters above are the only seams you should need. If you edit any LLM-facing text, bump `PROMPT_VERSION` in `graph/prompts.py`; run-log rows and red-team results are only comparable within one version.

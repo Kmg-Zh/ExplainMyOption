@@ -10,14 +10,17 @@ these things, and how much the verifier catches, is measured in
 [`evals/`](../../evals/README.md) (the red team).
 
 ```bash
-pytest tests/agent        # 98 tests, about 20 s
+pytest tests/agent        # 104 tests, about 25 s
 ```
 
 Test files: [`test_guardrails.py`](test_guardrails.py) (G) ·
 [`test_governed_runs.py`](test_governed_runs.py) (R, full legs through the graph) ·
 [`test_tool_budget.py`](test_tool_budget.py) (B) ·
 [`test_search_policy.py`](test_search_policy.py) (S) ·
-[`test_historical_cases.py`](test_historical_cases.py) (H).
+[`test_historical_cases.py`](test_historical_cases.py) (H) ·
+[`test_examples.py`](test_examples.py) (runs the five
+[governance examples](../../examples/governance/README.md), where you can watch
+several of these rules act on a full report).
 
 ## What the narrator may say
 
@@ -71,7 +74,7 @@ LLM roles get to see, and when a person must take over.
 |------|-------|---------|------|
 | A bounded tool budget | Every synthetic fixture | Free tools always run; at most one costly tool plus one follow-up revaluation | B `test_free_tools_always_run_and_the_budget_holds` |
 | The costly slot goes where it matters | Residual above 10% of the move · an in-the-money ex-dividend window | Full revaluation · early-exercise check | B `test_severity_above_ten_percent_spends_the_slot_on_a_full_revaluation` · `test_an_in_the_money_ex_div_window_spends_the_slot_on_the_exercise_check` |
-| A large residual after the slot is handed to a person | VW 2008 float squeeze | Terminal break, not a story | B `test_a_large_residual_left_after_the_slot_is_spent_is_a_terminal_break` · H `test_vw_2008_float_squeeze_escalates_instead_of_inventing_a_story` |
+| A large residual after the slot is handed to a person | VW 2008 float squeeze | Terminal break: the report marks the factor story not reliable and asks for human review (see the known gap below) | B `test_a_large_residual_left_after_the_slot_is_spent_is_a_terminal_break` · H `test_vw_2008_float_squeeze_escalates_instead_of_inventing_a_story` |
 | A moderate residual is re-checked, never escalated | Residual about 8% | Follow-up revaluation, no break | B `test_a_moderate_residual_gets_a_follow_up_revaluation_that_never_escalates` |
 | Reconciled marks skip the deep diagnostics, not the audit | GME 2021: marks calibrated, residual about 18% | Deep diagnostics skipped; the full revaluation still runs | B `test_reconciled_marks_skip_deep_diagnostics_but_a_large_residual_is_still_audited` |
 | Every skipped tool is reported once, with its reason | AAPL ex-dividend 2023 | No duplicates in the skipped list | B `test_skipped_tools_are_listed_once_with_the_reason` |
@@ -94,6 +97,17 @@ Each case pins the desk lesson it exists to teach
 | GME, 2021-01-25 (real chain) | A squeeze with extreme implied borrow, marks reconciled; the tape's squeeze must be named | `test_gme_2021_real_chain_is_a_squeeze_with_extreme_implied_borrow` · `test_gme_squeeze_tape_mechanisms_must_appear_in_the_narrative` |
 | AAPL ex-dividend, 2023-11-09 (real chain) | A carry case, not an early-exercise case; the overlay splits dividend from early exercise | `test_aapl_2023_real_ex_div_is_a_carry_case_not_an_early_exercise_case` · `test_aapl_ex_div_overlay_splits_dividend_and_early_exercise` |
 | META earnings gap, 2022 | Too large for Taylor; the as-of IV-crush headline reaches the report | `test_meta_2022_earnings_gap_is_too_large_for_taylor` |
-| VW float squeeze, 2008 | Escalates instead of inventing a story | `test_vw_2008_float_squeeze_escalates_instead_of_inventing_a_story` |
+| VW float squeeze, 2008 | A residual the full revaluation cannot close goes to a person (terminal break) | `test_vw_2008_float_squeeze_escalates_instead_of_inventing_a_story` |
 | VMW hard-to-borrow, 2008 | A small residual, because borrow is not modelled | `test_vmw_2008_hard_to_borrow_leaves_a_small_residual_because_borrow_is_not_modelled` |
 | The eval itself | Agent-visible news never looks ahead; scoring uses the contemporaneous bar and flags hindsight | `test_agent_visible_news_never_looks_ahead` · `test_scoring_uses_the_contemporaneous_bar_and_flags_hindsight` |
+
+## Known gap
+
+A terminal break from the diagnostic pass (VW 2008) is enforced by code in the
+report body, which says the factor story is not reliable and needs human review.
+The **headline verdict** is held to it only by the prompt: the narrator is told
+about the break, but code does not check that its verdict says so. A narrator
+that ignores the instruction gets its story into the Headline, with the break
+flagged further down. The rule-based fallback leads its takeaways with the
+break. A verifier hard FAIL that code confirms does rewrite the verdict (see the
+verifier table above).

@@ -145,6 +145,7 @@ for name in ("QuantLib", "yfinance", "pandas", "scipy", "numpy"):
 sys.path.insert(0, {str(tmp_path)!r})
 import explain_my_option
 assert explain_my_option.__file__.startswith({str(tmp_path)!r}), explain_my_option.__file__
+import explain_my_option.testing  # the scripted roles need no engine either
 assert "## 7. Risk Watchlist" in runpy.run_path({str(EXAMPLE)!r})["main"]()
 """
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
