@@ -31,4 +31,4 @@ dropped: the continuity gate correctly caught that contract as
 `CONTRACT_MISSING` on the prior date -- a real data-coverage gap, not a
 bug -- and was substituted with `quiet_spy_2023-04-24` instead.)
 
-Exercised by `tests/test_historical_cases.py`.
+Exercised by `tests/agent/test_historical_cases.py`.

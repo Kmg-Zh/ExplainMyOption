@@ -21,6 +21,8 @@ FAST = EngineConfig.fast()
 
 QUIET_DAYS = ("quiet_aapl_2023-04-24", "quiet_spy_2023-03-06", "quiet_spy_2023-04-24")
 
+LEG = BookLegSpec(leg_id="t", ticker="TEST", strike=100.0, expiry="2026-12-18")
+
 
 @dataclass
 class ScriptedNarrator:
@@ -71,6 +73,13 @@ class NoLlm:
 
 def no_llm_roles() -> LlmRoleRegistry:
     return LlmRoleRegistry(narrator=NoLlm(), verifier=NoLlm(), challenger=NoLlm(), digester=NoLlm())
+
+
+class NeverPrice:
+    """A PnL source whose use fails the test: the leg must stop before pricing."""
+
+    def attribute(self, snapshot, surface_data=None, surface_prev=None):
+        raise AssertionError("the leg must stop before pricing")
 
 
 def roles(narrator=None, verifier=None, *, digester=None, challenger=None) -> LlmRoleRegistry:

@@ -19,10 +19,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install
+        id: install
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-      # Offline suite: committed fixtures and scripted LLM roles. No secrets,
-      # no network.
-      - name: Test
-        run: pytest -q
+      # Offline suites: committed fixtures and scripted LLM roles. No secrets,
+      # no network. Separate steps so each suite reports on its own; the agent
+      # step still runs when the engineering step fails.
+      - name: Engineering tests
+        run: pytest -q tests/engineering
+      - name: Agent governance tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pytest -q tests/agent

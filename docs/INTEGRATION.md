@@ -27,7 +27,7 @@ Copy `src/explain_my_option/`. With both adapters your own, you can delete the r
 | `data_loader.py`, `data/cache.py`, `data/dividends.py`, `data/historical_chain.py`, `data/rates.py`, `data/realized.py` | the yfinance and historical-chain loaders, the T-1 cache |
 | `cli.py` | the CLI and Streamlit UI |
 
-What remains needs `langgraph`, `langchain-core`, `langchain-openai` and `pydantic` (plus `tavily-python` for the Tavily news source). It does not need QuantLib, numpy, scipy, pandas or yfinance. `test_the_agent_runs_with_the_reference_engine_deleted` in [`tests/test_pipeline.py`](../tests/test_pipeline.py) deletes exactly these files and runs the example.
+What remains needs `langgraph`, `langchain-core`, `langchain-openai` and `pydantic` (plus `tavily-python` for the Tavily news source). It does not need QuantLib, numpy, scipy, pandas or yfinance. `test_the_agent_runs_with_the_reference_engine_deleted` in [`tests/engineering/test_workflow.py`](../tests/engineering/test_workflow.py) deletes exactly these files and runs the example.
 
 ## Conventions
 

@@ -29,3 +29,17 @@ _CREDENTIALS = (
 def offline(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in _CREDENTIALS:
         monkeypatch.setenv(name, "")
+
+
+# Two suites, one per folder: `pytest tests/agent` or `pytest -m agent` (and the
+# same for engineering). CI runs them as separate steps, so a test outside both
+# folders would silently drop out of CI; refuse it instead.
+SUITES = ("engineering", "agent")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        suite = item.path.relative_to(ROOT / "tests").parts[0]
+        if suite not in SUITES:
+            raise pytest.UsageError(f"{item.nodeid}: put tests under tests/engineering/ or tests/agent/")
+        item.add_marker(suite)

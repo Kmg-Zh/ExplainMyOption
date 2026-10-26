@@ -14,7 +14,7 @@ live adapter on 2026-09-16: `19.1975 * 4 = 76.79000091552734` for
 both dates. `gme_squeeze_2021_real` and `aapl_exdiv_2023_real` are both
 committed as frozen slices under `tests/fixtures/historical/`
 (`scripts/fetch_chains.py`), exercised offline by
-`tests/test_historical_cases.py`.
+`tests/agent/test_historical_cases.py`.
 
 The split-basis analysis below is kept as the record of *why* the split
 mismatch exists and how it was diagnosed. It was written when the GME check

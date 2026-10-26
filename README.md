@@ -81,7 +81,7 @@ When the leftover residual is large, a diagnostic pass may also run **sequential
 
 ## Validation
 
-The pricing layer is checked against arbitrage and numerical invariants, not only golden outputs (`tests/test_pricing.py`):
+The pricing layer is checked against arbitrage and numerical invariants, not only golden outputs (`tests/engineering/test_pricing.py`):
 
 | Property | Asserted |
 |---|---|
@@ -122,20 +122,30 @@ Every real and realistic case sits at least an order of magnitude below `0.35`; 
 
 ## What the offline suite covers
 
-Seven modules under `tests/`, offline and keyless (credentials are blanked for every test, so a local `.env` cannot leak into a run):
+Two suites under `tests/`, both offline and keyless (credentials are blanked for every test, so a local `.env` cannot leak into a run).
+
+`tests/engineering/`: the code computes and wires correctly.
 
 | Module | What it pins |
 |--------|--------------|
 | `test_pricing.py` | Arbitrage and numerical invariants of the official engine (table above), mark calibration, analysis tools |
 | `test_report.py` | Signed % shares and the gross-movement basis, residual drill at position size, reconciliation, the blotter goldens |
-| `test_diagnostics.py` | Tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
+| `test_market_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, news sources |
+| `test_workflow.py` | The LangGraph workflow as software: an end-to-end leg, input guards, book fan-out, CLI, graph topology, a desk's own PnL source with the engine deleted |
+
+`tests/agent/`: the agent's rules, enforced by code, with scripted LLM roles.
+
+| Module | What it pins |
+|--------|--------------|
 | `test_guardrails.py` | Code checks before the verifier, code confirmation of LLM hard flags, untrusted-text containment, digest and critic contracts |
-| `test_pipeline.py` | The LangGraph workflow end to end with scripted LLM roles: routing, quiet days, coverage gaps, book fan-out, CLI, a desk's own PnL source with the engine deleted |
-| `test_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, search planning, news sources |
+| `test_governed_runs.py` | Full legs through the graph: verifier outcomes, invented figures, required catalysts, coverage gaps |
+| `test_tool_budget.py` | Tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
+| `test_search_policy.py` | Search only material, reliably observed moves, with a bounded query plan |
 | `test_historical_cases.py` | The historical events below, each pinned to its desk lesson, plus the eval's no-lookahead rule |
 
 ```bash
-./scripts/run-tests.sh
+./scripts/run-tests.sh          # both suites
+pytest tests/agent              # one suite (or: pytest -m agent)
 ```
 
 The suite never calls a live LLM. Historical `run.py` is a separate, keyed eval. For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`. For the same agent on three OpenAI models under a $5 cap, with real reports side by side, see [docs/studies/model_comparison.md](docs/studies/model_comparison.md) (`scripts/compare_models.py`).
@@ -167,7 +177,7 @@ streamlit run app.py
 
 | Suite | What | Command |
 |-------|------|---------|
-| `tests/test_*.py` | Engine, graph, report (offline) | `./scripts/run-tests.sh` |
+| `tests/engineering/`, `tests/agent/` | Engine, graph, report; the agent's rules (offline) | `./scripts/run-tests.sh` |
 | `tests/historical/` | Event fixtures with frozen as-of news | `python tests/historical/run.py` |
 | `tests/live_book/` | Recent book / archive replay | `python tests/live_book/portfolio_e2e.py --offline` |
 
