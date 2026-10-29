@@ -1,0 +1,293 @@
+{
+  "aapl_vertical_long": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Vega contraction",
+      "verdict": "Reflect (PARTIAL): The model move is dominated by an implied-volatility decline, with spot higher and theta a smaller drag. However, the observation is locked and the desk flags the Vega narrative as suppressed, so the cleanest read is a model revaluation led by the volatility reset rather than a news-driven catalyst story. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Vega story not falsifiable from quote Gaps: Vega narrative suppressed by quote noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "Confidence is limited by the unreliable observation flag, the high residual share, and the fact that the surface diagnostics show a failed American FD surface under Heston. There are no retrieved headlines and the digest explicitly says not to invent a squeeze, borrow, or IV-crush narrative from outside the blotter, so the attribution should stay at the model-repricing level.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Vega story not falsifiable from quote Gaps: Vega narrative suppressed by quote noise band",
+        "Watch whether the high residual reflects higher-order truncation or surface-repricing effects rather than a clean one-factor decomposition.",
+        "Verify the dividend and ex-div setup, but treat this as a carry and theta case rather than an early-exercise case."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Vega contraction",
+          "verdict": "The model move is dominated by an implied-volatility decline, with spot higher and theta a smaller drag. However, the observation is locked and the desk flags the Vega narrative as suppressed, so the cleanest read is a model revaluation led by the volatility reset rather than a news-driven catalyst story.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is limited by the unreliable observation flag, the high residual share, and the fact that the surface diagnostics show a failed American FD surface under Heston. There are no retrieved headlines and the digest explicitly says not to invent a squeeze, borrow, or IV-crush narrative from outside the blotter, so the attribution should stay at the model-repricing level.",
+          "evidence": [],
+          "takeaways": [
+            "Watch whether the high residual reflects higher-order truncation or surface-repricing effects rather than a clean one-factor decomposition.",
+            "Verify the dividend and ex-div setup, but treat this as a carry and theta case rather than an early-exercise case."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Vega narrative suppressed by quote noise band"
+          ],
+          "policy_flags": [
+            "suppress_vega_narrative"
+          ],
+          "rationale": "Vega story not falsifiable from quote"
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "aapl_vertical_short": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Vega contraction",
+      "verdict": "The move is dominated by a modeled volatility reprice: the option benefited from a lower implied-volatility input even as the underlying drifted higher, while delta and gamma were secondary offsets and theta helped slightly. The residual is minimal, so the Greek decomposition is tight and the headline story stays on the full revaluation rather than any larger hidden effect. The only Apple-specific headline is an option-chain reference, which supports a surface-driven read but does not supply a separate event catalyst.",
+      "confidence_level": "medium",
+      "confidence_rationale": "Confidence is medium because the attribution is clean and observation quality is reliable, but the news set is thin and does not provide a distinct issuer catalyst. The dominant driver is clear from the blotter, though the role of the headline is only contextual rather than causal.",
+      "evidence": [
+        {
+          "headline": "Apple (AAPL) Option Chain | Market Chameleon",
+          "source": "Market Chameleon",
+          "relevance": "An option-chain page for Apple; it is directly about the target name but contains no standalone news catalyst in the headline."
+        }
+      ],
+      "takeaways": [
+        "Check whether the next reprice is still dominated by surface movement or whether spot sensitivity starts to outweigh the volatility effect.",
+        "Verify that the Apple-specific options tape remains the relevant context, since the broader headlines are sector background rather than an issuer event."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Vega contraction",
+          "verdict": "The move is dominated by a modeled volatility reprice: the option benefited from a lower implied-volatility input even as the underlying drifted higher, while delta and gamma were secondary offsets and theta helped slightly. The residual is minimal, so the Greek decomposition is tight and the headline story stays on the full revaluation rather than any larger hidden effect. The only Apple-specific headline is an option-chain reference, which supports a surface-driven read but does not supply a separate event catalyst.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is medium because the attribution is clean and observation quality is reliable, but the news set is thin and does not provide a distinct issuer catalyst. The dominant driver is clear from the blotter, though the role of the headline is only contextual rather than causal.",
+          "evidence": [
+            {
+              "headline": "Apple (AAPL) Option Chain | Market Chameleon",
+              "source": "Market Chameleon",
+              "relevance": "An option-chain page for Apple; it is directly about the target name but contains no standalone news catalyst in the headline."
+            }
+          ],
+          "takeaways": [
+            "Check whether the next reprice is still dominated by surface movement or whether spot sensitivity starts to outweigh the volatility effect.",
+            "Verify that the Apple-specific options tape remains the relevant context, since the broader headlines are sector background rather than an issuer event."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "Layer A matches the supplied dominant driver: the narrative says the move is dominated by a modeled volatility reprice / lower implied-volatility input, which is consistent with Vega contraction. The residual is described in model terms ('full revaluation', 'minimal residual') and is not attributed to an external cause, so there is no method_residual_blamed issue. Layer B is not required here because the only headline is an option-chain reference and the evidence metadata says no headline mechanisms are present; there is no issuer catalyst to cover. No prohibited trade-advice phrases appear, and the run is not a quiet-day no_escalation case.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "spy_reversal_put": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "The position\u2019s move was driven primarily by the underlying spot drift, with the modeled delta term dominating the day\u2019s revaluation. Gamma offset some of that move, while the smaller volatility change and residual only added minor adjustment noise to the full reprice.",
+      "confidence_level": "medium",
+      "confidence_rationale": "Confidence is supported by a high coverage attribution and a reliable observation set, but the run still carries a medium residual band and the surface diagnostics note an American surface limitation. There were no relevant headlines or named microstructure mechanisms to add a catalyst layer, and the early-exercise premium is negligible.",
+      "evidence": [],
+      "takeaways": [
+        "Watch for Taylor truncation and any path-dependent full-reprice effects if spot movement becomes larger or the surface remains unstable.",
+        "No catalyst layer was identified from the digest; there is no borrow, squeeze, or implied-volatility headline to verify."
+      ],
+      "american_commentary": "Immediate exercise is sub-optimal at current marks; the dividend does not cover the remaining time value.",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The position\u2019s move was driven primarily by the underlying spot drift, with the modeled delta term dominating the day\u2019s revaluation. Gamma offset some of that move, while the smaller volatility change and residual only added minor adjustment noise to the full reprice.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is supported by a high coverage attribution and a reliable observation set, but the run still carries a medium residual band and the surface diagnostics note an American surface limitation. There were no relevant headlines or named microstructure mechanisms to add a catalyst layer, and the early-exercise premium is negligible.",
+          "evidence": [],
+          "takeaways": [
+            "Watch for Taylor truncation and any path-dependent full-reprice effects if spot movement becomes larger or the surface remains unstable.",
+            "No catalyst layer was identified from the digest; there is no borrow, squeeze, or implied-volatility headline to verify."
+          ],
+          "american_commentary": "Immediate exercise is sub-optimal at current marks; the dividend does not cover the remaining time value.",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "Layer A matches the code\u2019s dominant driver: delta / spot move. Observation is reliable, and the candidate\u2019s wording stays within model/math vocabulary for the residual, without blaming it on any external event. Layer B is not required here because no headline mechanisms are present. The note that no catalyst layer was identified is consistent with the empty digest on a quiet/no-news setup. No prohibited trade-advice language appears.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "spy_reversal_call": {
+    "terminal_state": "completed",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Delta / spot move",
+      "verdict": "The position\u2019s move was driven primarily by the favorable spot shift, with gamma adding some convexity support while vega and theta offset part of the gain. The remaining gap versus the modeled revaluation is consistent with Taylor truncation and higher-order effects rather than a separate catalyst, and there are no retrieved headlines to add a Layer B story.",
+      "confidence_level": "medium",
+      "confidence_rationale": "Confidence is medium because the dominant modeled driver is clear, but the residual share is elevated and the surface diagnostics show the simpler approximation leaves meaningful unexplained move. Observation is reliable and the IV source is a complete chain mark, yet there are no relevant headlines or microstructure tokens to support an auxiliary event-based explanation.",
+      "evidence": [],
+      "takeaways": [
+        "Higher-order convexity and truncation can still distort the Greek-based attribution when the residual remains elevated, so the full revaluation is the cleaner reference.",
+        "No relevant catalyst, borrow, squeeze, or IV-crush signal was retrieved, so there is nothing event-driven to verify in the tape."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Delta / spot move",
+          "verdict": "The position\u2019s move was driven primarily by the favorable spot shift, with gamma adding some convexity support while vega and theta offset part of the gain. The remaining gap versus the modeled revaluation is consistent with Taylor truncation and higher-order effects rather than a separate catalyst, and there are no retrieved headlines to add a Layer B story.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is medium because the dominant modeled driver is clear, but the residual share is elevated and the surface diagnostics show the simpler approximation leaves meaningful unexplained move. Observation is reliable and the IV source is a complete chain mark, yet there are no relevant headlines or microstructure tokens to support an auxiliary event-based explanation.",
+          "evidence": [],
+          "takeaways": [
+            "Higher-order convexity and truncation can still distort the Greek-based attribution when the residual remains elevated, so the full revaluation is the cleaner reference.",
+            "No relevant catalyst, borrow, squeeze, or IV-crush signal was retrieved, so there is nothing event-driven to verify in the tape."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PASS",
+          "missing_evidence": [],
+          "policy_flags": [],
+          "rationale": "Layer A matches the supplied code driver: delta / spot move is the dominant explanation, and the candidate keeps the emphasis on spot with secondary Greek effects. Layer B is not required here because no headlines were retrieved and the critic did not require any named catalyst. The residual is described in model terms (Taylor truncation / higher-order effects), not as a news or event reaction, so there is no method_residual_blamed issue. No prohibited trade-advice language appears, and this is not a quiet-day confabulation because the run is not a no_escalation case.",
+          "llm_verdict": null,
+          "llm_policy_flags": []
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "vz_div_call": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Vega contraction",
+      "verdict": "Reflect (PARTIAL): The model repricing is dominated by a volatility reset on the call: the spot move helped, but it was outweighed by the drop in implied volatility, with second-order spot effects and decay playing smaller supporting roles. Because the observation is locked and no relevant headlines were retrieved, there is no separate catalyst layer to add beyond the blotter\u2019s own volatility-driven explanation. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Vega story not falsifiable from quote Gaps: Vega narrative suppressed by quote noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "Confidence is capped because observation quality is flagged as unreliable and the residual is not trivial, so the Taylor breakdown is only a reference view. The code also suppresses a Vega narrative, and there are no retrieved headlines to validate an external catalyst, so the explanation must stay anchored to the model repricing rather than a news claim.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Vega story not falsifiable from quote Gaps: Vega narrative suppressed by quote noise band",
+        "Check whether higher-order convexity and surface curvature are still distorting the Taylor split relative to the full revaluation.",
+        "Verify the vol reset against the next surface mark; there is no verified borrow, squeeze, or IV-crush headline context to add here."
+      ],
+      "american_commentary": "",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Vega contraction",
+          "verdict": "The model repricing is dominated by a volatility reset on the call: the spot move helped, but it was outweighed by the drop in implied volatility, with second-order spot effects and decay playing smaller supporting roles. Because the observation is locked and no relevant headlines were retrieved, there is no separate catalyst layer to add beyond the blotter\u2019s own volatility-driven explanation.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is capped because observation quality is flagged as unreliable and the residual is not trivial, so the Taylor breakdown is only a reference view. The code also suppresses a Vega narrative, and there are no retrieved headlines to validate an external catalyst, so the explanation must stay anchored to the model repricing rather than a news claim.",
+          "evidence": [],
+          "takeaways": [
+            "Check whether higher-order convexity and surface curvature are still distorting the Taylor split relative to the full revaluation.",
+            "Verify the vol reset against the next surface mark; there is no verified borrow, squeeze, or IV-crush headline context to add here."
+          ],
+          "american_commentary": "",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Vega narrative suppressed by quote noise band"
+          ],
+          "policy_flags": [
+            "suppress_vega_narrative"
+          ],
+          "rationale": "Vega story not falsifiable from quote"
+        }
+      ]
+    },
+    "verifier_trace": []
+  },
+  "plug_deep_otm": {
+    "terminal_state": "PARTIAL",
+    "terminal_cause": null,
+    "final_synthesis": {
+      "primary_driver": "Vega revaluation",
+      "verdict": "Reflect (PARTIAL): The move was dominated by a revaluation of implied volatility in the option model, with spot contributing a smaller secondary lift and theta a modest drag. The remaining gap is consistent with higher-order effects and Taylor truncation around a large volatility move, while the American early-exercise feature was not a meaningful factor at these marks. Caveats: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV noise band",
+      "confidence_level": "low",
+      "confidence_rationale": "Confidence is capped by the unreliable observation flag and the high residual share, so the Greek split should be treated as a reference view rather than a complete explanation. There are no retrieved headlines or named microstructure mechanisms to add a separate catalyst layer, and the early-exercise premium is negligible.",
+      "evidence": [],
+      "takeaways": [
+        "**Verifier reflect**: Quote/IV observation lock limits how strongly we can attribute this move to a single Greek. Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative. Gaps: Observation lock \u2014 quote tier or IV nois",
+        "Model attribution can still be distorted by truncation and full-surface repricing when volatility moves are extreme.",
+        "No headline-backed borrow, squeeze, or IV-crush mechanism was retrieved, so there is no independent catalyst layer to verify from the tape."
+      ],
+      "american_commentary": "Immediate exercise was sub-optimal; the dividend does not cover the remaining time value, and the American feature is not contributing a material premium.",
+      "injection_observed": false
+    },
+    "verifier_audit": {
+      "candidates": [
+        {
+          "primary_driver": "Vega revaluation",
+          "verdict": "The move was dominated by a revaluation of implied volatility in the option model, with spot contributing a smaller secondary lift and theta a modest drag. The remaining gap is consistent with higher-order effects and Taylor truncation around a large volatility move, while the American early-exercise feature was not a meaningful factor at these marks.",
+          "confidence_level": "medium",
+          "confidence_rationale": "Confidence is capped by the unreliable observation flag and the high residual share, so the Greek split should be treated as a reference view rather than a complete explanation. There are no retrieved headlines or named microstructure mechanisms to add a separate catalyst layer, and the early-exercise premium is negligible.",
+          "evidence": [],
+          "takeaways": [
+            "Model attribution can still be distorted by truncation and full-surface repricing when volatility moves are extreme.",
+            "No headline-backed borrow, squeeze, or IV-crush mechanism was retrieved, so there is no independent catalyst layer to verify from the tape."
+          ],
+          "american_commentary": "Immediate exercise was sub-optimal; the dividend does not cover the remaining time value, and the American feature is not contributing a material premium.",
+          "injection_observed": false
+        }
+      ],
+      "trace": [
+        {
+          "verdict": "PARTIAL",
+          "missing_evidence": [
+            "Observation lock \u2014 quote tier or IV noise band"
+          ],
+          "policy_flags": [
+            "observation_soft_lock"
+          ],
+          "rationale": "Direction may be OK, but quote quality limits falsifiability; treat factor attribution as indicative."
+        }
+      ]
+    },
+    "verifier_trace": []
+  }
+}
