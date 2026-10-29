@@ -120,9 +120,15 @@ Each case pins the desk lesson it exists to teach
 
 A terminal break from the diagnostic pass (VW 2008) is enforced by code in the
 report body, which says the factor story is not reliable and needs human review.
-The **headline verdict** is held to it only by the prompt: the narrator is told
-about the break, but code does not check that its verdict says so. A narrator
-that ignores the instruction gets its story into the Headline, with the break
-flagged further down. The rule-based fallback leads its takeaways with the
-break. A verifier hard FAIL that code confirms does rewrite the verdict (see the
-verifier table above).
+The **headline verdict** is the narrator's. Since `v3.3` the `terminal-break`
+playbook record tells the narrator what the verdict must say, but code does not
+check that it does: one special case is not a reason for code to rewrite the
+narrator. A verifier hard FAIL that code confirms does rewrite the verdict (see
+the verifier table above), and the rule-based fallback leads its takeaways with
+the break.
+
+How often a real narrator follows the record is an eval, not a test. Replaying
+the 35 archived live-run terminal breaks, the verdict said the move is not
+explained or needs human review in 0 of 35 with the playbook off and in 35 of 35
+with it on (`gpt-5.4-mini`, one run per leg, verifier off):
+[playbook_replay.md](../../docs/studies/playbook_replay.md).

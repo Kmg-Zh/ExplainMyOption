@@ -28,6 +28,7 @@ Copied from the committed study reports; each line names the run behind it.
 
 - **Red team, live verifier** (`gpt-5.4-mini`, 3 runs per case, 2026-10-05): detection 87.2% (41/47 violations), false alarms 0% (0/10 clean controls). The code layer alone catches 66.0% (31/47) at $0. [Live](../docs/studies/redteam_results.md) · [code only](../docs/studies/redteam_results_deterministic_only.md)
 - **Model comparison** (one run per case, 2026-10-17): `gpt-5.4-mini`, `gpt-6-sol` and `gpt-5.5` all met the desk bar on 5/5 historical events, with no post-event knowledge in any narrative. Red-team detection was 85%, 77% and 81%, at $0.18, $0.54 and $1.92. [model_comparison.md](../docs/studies/model_comparison.md)
+- **Playbook replay** (`gpt-5.4-mini`, one run per leg, verifier off, 2026-10-29): of 35 archived live-run terminal breaks, the narrator's verdict said the move is not explained or needs human review in 0 with the playbook off and 35 with it on, for at most $0.32 of API calls. [playbook_replay.md](../docs/studies/playbook_replay.md)
 - **Cost and latency** (`gpt-5.4-mini`, 12 legs, 2026-09-17): median 5.56 s wall-clock per leg, $0.0667 for all 12. [agent_budget.md](../docs/studies/agent_budget.md)
 - **Run log**: since 2026-09-17, a report and a metrics row for each trading day the job ran; a missed day stays a gap, never a backfill. [docs/runlog/](../docs/runlog/README.md)
 

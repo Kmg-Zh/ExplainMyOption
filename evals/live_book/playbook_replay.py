@@ -39,6 +39,10 @@ _FLAGS_BREAK = re.compile(
     r"|human review|not reliable|unreliable|needs review|manual review",
     re.IGNORECASE,
 )
+# Stricter: the verdict says the move is not explained or needs a person. The
+# broad match above also counts "the observation is unreliable" and "the small
+# unexplained break is consistent with higher-order effects".
+_SAYS_UNEXPLAINED = re.compile(r"human review|(?:does|do|did) not (?:fully |cleanly )?explain", re.IGNORECASE)
 
 
 def _compare_models():
@@ -118,6 +122,7 @@ def replay(payload: dict, narrator, *, playbook, require_openai: bool = True) ->
         "verdict": synthesis.get("verdict", ""),
         "confidence_rationale": synthesis.get("confidence_rationale", ""),
         "verdict_flags_break": bool(_FLAGS_BREAK.search(synthesis.get("verdict", ""))),
+        "verdict_says_unexplained": bool(_SAYS_UNEXPLAINED.search(synthesis.get("verdict", ""))),
         "rationale_flags_break": bool(_FLAGS_BREAK.search(synthesis.get("confidence_rationale", ""))),
         "playbook_records": [r["id"] for r in findings.get("playbook_records") or []],
     }
@@ -179,12 +184,14 @@ def _markdown(rows: list[dict], args, prompt_version: str, ledger) -> str:
         return f"{n}/{len(scored)}"
 
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    paid = sum(c.cost_usd for c in ledger.calls if c.source == "api")
+    # Cached calls keep the cost they were bought at; a prompt repeated across
+    # legs is counted each time, so this is an upper bound.
+    paid = sum(c.cost_usd for c in ledger.calls)
     lines = [
         "# Playbook replay: the terminal-break record",
         "",
         f"Generated {generated} by `evals/live_book/playbook_replay.py`, prompt `{prompt_version}`, "
-        f"narrator `{args.model}`, cost ${paid:.2f}.",
+        f"narrator `{args.model}`, API cost at most ${paid:.2f}.",
         "",
         f"Every archived live-run leg whose diagnostic pass ended in a terminal break ({len(rows)} legs) "
         "was replayed twice on the same code: playbook off and on. Only the narrator is a real model; "
@@ -192,14 +199,29 @@ def _markdown(rows: list[dict], args, prompt_version: str, ledger) -> str:
         "differ by the record alone. "
         f"{len(scored)} legs are still terminal breaks under the current code and are scored.",
         "",
-        "A verdict \"flags the break\" if it says, in any wording, that the move is unexplained, "
-        "or that it needs human review or is not reliable.",
+        "A verdict \"flags the break\" if it uses any of the words *unexplained*, *not explain*, "
+        "*unattributed*, *human review* or *not reliable*. That broad match also counts a verdict that "
+        "names the break only to play it down (\"the small unexplained break is consistent with "
+        "higher-order effects\") or that calls the quote unreliable. The strict row counts only "
+        "\"does not explain\" (or \"does not fully explain\") and \"human review\".",
         "",
         "| | Playbook off | Playbook on |",
         "|---|---|---|",
-        f"| Verdict flags the break | {count('off', 'verdict_flags_break')} | {count('on', 'verdict_flags_break')} |",
+        f"| Verdict flags the break (broad) | {count('off', 'verdict_flags_break')} | {count('on', 'verdict_flags_break')} |",
+        f"| Verdict says the move is not explained or needs human review (strict) | {count('off', 'verdict_says_unexplained')} | {count('on', 'verdict_says_unexplained')} |",
         f"| Confidence rationale flags the break | {count('off', 'rationale_flags_break')} | {count('on', 'rationale_flags_break')} |",
         f"| Narrator fell back to the rule-based summary | {count('off', 'fallback')} | {count('on', 'fallback')} |",
+        "",
+        "## What this does not show",
+        "",
+        "- The verifier is off, so this is the narrator's verdict after the deterministic reconcile step. "
+        "With the verifier on, a PARTIAL adds a caveat to the verdict and a FAIL that code confirms "
+        "replaces it.",
+        "- One model, one run per leg.",
+        "- Whether the record crowds out a catalyst. Only one of these legs had headline mechanisms, "
+        "under an observation lock that tells the narrator not to force a catalyst, and neither arm "
+        "named it. The offline test on VW 2008 (`tests/agent/test_playbook.py`) checks the prompt, not "
+        "a real model.",
         "",
         "## Verdicts, leg by leg",
         "",
