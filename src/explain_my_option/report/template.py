@@ -310,6 +310,12 @@ def _diagnostic_summary_section(findings: dict[str, Any] | None) -> str:
         for item in skipped:
             if isinstance(item, dict):
                 lines.append(f"  * `{item.get('name', '?')}` — {item.get('reason', '')}")
+    records = findings.get("playbook_records") or []
+    if records:
+        lines.append(
+            "* **Playbook records** (selected by code for the narrator): "
+            + ", ".join(f"`{r.get('id', '?')}` (`{r.get('when', '?')}`)" for r in records)
+        )
     return "\n".join(lines)
 
 

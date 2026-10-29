@@ -10,7 +10,7 @@ these things, and how much the verifier catches, is measured in
 [`evals/`](../../evals/README.md) (the red team).
 
 ```bash
-pytest tests/agent        # 104 tests, about 25 s
+pytest tests/agent        # 117 tests, about 27 s
 ```
 
 Test files: [`test_guardrails.py`](test_guardrails.py) (G) ·
@@ -18,6 +18,7 @@ Test files: [`test_guardrails.py`](test_guardrails.py) (G) ·
 [`test_tool_budget.py`](test_tool_budget.py) (B) ·
 [`test_search_policy.py`](test_search_policy.py) (S) ·
 [`test_historical_cases.py`](test_historical_cases.py) (H) ·
+[`test_playbook.py`](test_playbook.py) (P) ·
 [`test_examples.py`](test_examples.py) (runs the five
 [governance examples](../../examples/governance/README.md), where you can watch
 several of these rules act on a full report).
@@ -64,6 +65,20 @@ several of these rules act on a full report).
 | A catalyst in the headlines must appear in the narrative | Leaves out the IV-crush headline, or GME's squeeze ("Delta drove the loss.") | Partial (`missing_catalyst_layer`) | G `test_precheck_catches_rule_breaks_without_an_llm` · H `test_gme_squeeze_tape_mechanisms_must_appear_in_the_narrative` |
 | The critic's required mechanism goes into the narrative | The critic requires "squeeze, borrow" | Reconcile writes it into the verdict and the first takeaway | G `test_reconcile_puts_a_required_mechanism_into_the_narrative` · R `test_a_required_catalyst_from_the_critic_reaches_the_narrative` |
 | The critic runs only on reliable quotes with a relevant catalyst | | Otherwise it is skipped, with the reason | G `test_the_catalyst_critic_skips_without_reliable_quotes_or_relevant_catalysts` |
+
+## Playbook records: code picks, the narrator follows
+
+A playbook record is fixed narrator guidance for a special case code has
+detected ([`graph/playbook.py`](../../src/explain_my_option/graph/playbook.py)).
+The first one covers a diagnostic-pass terminal break. A desk can add its own
+through `GraphDeps(playbook=...)`.
+
+| Rule | Input | Code does | Test |
+|------|-------|-----------|------|
+| Code picks the record from a diagnostic finding | VW 2008, a terminal break · `vol_crush`, none | Selects `terminal-break` from `terminal_unexplained_break`, puts it in the narrator's prompt and lists it in the report; no record otherwise | P `test_code_selects_a_record_when_its_finding_is_true` · `test_a_terminal_break_gives_the_narrator_the_record_and_the_report_lists_it` · `test_a_leg_without_the_finding_gets_no_record` |
+| A record is text for the narrator, nothing more | The same leg with the playbook on and off | Identical search plan, tools and news; the prompts differ by the record's lines only | P `test_a_record_changes_the_narrator_prompt_and_nothing_else` |
+| A record follows the narrator's own rules | A desk record with a figure, "cheap", a re-hedge, an engine name, an unknown finding or a taken id | Refused when `GraphDeps` is built; a clean desk record is accepted | P `test_a_desk_record_that_breaks_a_rule_is_refused` · `test_a_desk_can_add_its_own_record` · `test_the_bundled_records_pass_the_record_rules` |
+| A record cannot pass an eval on the narrator's behalf | | No bundled record uses a historical case's rubric terms, hindsight markers or ground-truth titles | P `test_no_bundled_record_says_what_a_historical_eval_rewards` |
 
 ## Tools, search, and when to stop (no LLM involved)
 

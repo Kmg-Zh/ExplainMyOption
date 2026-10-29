@@ -142,6 +142,14 @@ def find_prohibited_synonyms(synthesis: DiagnosticSynthesis) -> list[str]:
     return list(dict.fromkeys(hits))
 
 
+def advice_wording_hits(text: str) -> list[str]:
+    """Every trade or hedge term in one text: the literal list, its synonyms and
+    hedge directives. For code-authored text such as playbook records."""
+    hits = [m.group(1).lower() for rx in (_PROHIBITED_PHRASE_RE, _SYNONYM_RE) for m in rx.finditer(text)]
+    hits.extend(m.group(0).lower() for m in _HEDGE_DIRECTIVE_RE.finditer(text))
+    return list(dict.fromkeys(hits))
+
+
 _BARE_FIGURE_RE = re.compile(
     r"(?<![\w.])\d+\.\d+(?![\w.])"
     r"|\b\d+(?:,\d{3})*\s*(?:vol(?:atility)?\s+points?|points?|bps|basis\s+points?|shares|contracts)\b",

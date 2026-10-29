@@ -92,6 +92,9 @@ Optional attributes on the source itself, used when present:
 | `GraphDeps.intel` | `IntelRegistry({source_id: source})`; a source has `search(query, *, ticker) -> list[NewsItem]` | Yahoo news, Tavily (with `TAVILY_API_KEY`), SEC 8-K (with `EMO_SEC_USER_AGENT`) |
 | `GraphDeps.planner` | `plan(snapshot, pricing, *, observation_reliable) -> SearchPlan` | the rule planner, which skips search below materiality or under the observation lock |
 | `ExplainMyOption(roles=...)` | `LlmRoleRegistry(narrator=, verifier=, challenger=, digester=)`; a role has `structured_invoke(*, system, human, schema)` | OpenAI through `langchain-openai`; model `EMO_LLM_MODEL`, default `gpt-5.4-mini` |
+| `GraphDeps.playbook` | a tuple of `PlaybookRecord(record_id, when, title, guidance)`; `when` names a boolean diagnostic finding, such as `terminal_unexplained_break` or `suppress_vega_narrative` | `DEFAULT_PLAYBOOK`, one record for a terminal break. Add yours with `playbook=(*DEFAULT_PLAYBOOK, record)` |
+
+A playbook record is fixed narrator guidance for a case the diagnostic pass has detected. Code selects it when its finding is true, it goes into that leg's narrator prompt, and the report lists it. It never changes the search, the tools or the routing. Building `GraphDeps` refuses a record with digits, trade or hedge wording, an engine name, an unknown finding or a duplicate id. A record is LLM-facing text, so compare run-log rows only between runs with the same playbook.
 
 The planner's queries name `yfinance_news`, `tavily` or `sec_8k`. Register your feed under one of those ids, or pass `IntelRegistry({})` for no news. Fill `NewsItem.published` so the as-of check can run.
 

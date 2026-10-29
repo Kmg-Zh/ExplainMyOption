@@ -18,6 +18,7 @@ from langgraph.graph import END, START, StateGraph
 from ..data.observation import NoComparableObservationError, check_basis_consistency
 from ..graph.deps import FixtureMarketLoader, GraphDeps, default_deps, fixture_deps
 from ..graph.diagnostic_controller import run_diagnostic_pass
+from ..graph.playbook import select_records
 from ..graph.state import OptionState
 from ..intel.types import SearchPlan
 from ..report import PositionBundle, render_portfolio_report, synthesize_diagnosis
@@ -242,17 +243,26 @@ def build_leg_diagnosis_subgraph(
 
     def synthesize_node(state: LegState) -> LegState:
         ports = _resolve_ports(state["leg"], deps)
+        findings = state.get("diagnostic_findings") or {}
+        records = select_records(findings, ports.playbook)
         synthesis = synthesize_diagnosis(
             state["snapshot"],
             state["pricing"],
             state.get("news", []),
             plan=state.get("search_plan"),
             ports=ports,
-            diagnostic_findings=state.get("diagnostic_findings"),
+            diagnostic_findings=findings,
             role=roles.narrator,
+            playbook=records,
         )
         synthesis = _apply_observation_lock(synthesis, observation_reliable=_observation_reliable(state))
-        return {"diagnostic_synthesis": synthesis.model_dump(), "llm_calls": int(state.get("llm_calls", 0)) + 1}
+        out: LegState = {"diagnostic_synthesis": synthesis.model_dump(), "llm_calls": int(state.get("llm_calls", 0)) + 1}
+        if records:
+            out["diagnostic_findings"] = {
+                **findings,
+                "playbook_records": [{"id": r.record_id, "when": r.when} for r in records],
+            }
+        return out
 
     def reconcile_debate_node(state: LegState) -> LegState:
         synthesis = DiagnosticSynthesis.model_validate(state.get("diagnostic_synthesis") or {})

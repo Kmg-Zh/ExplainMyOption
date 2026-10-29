@@ -57,6 +57,12 @@ a costly follow-up revaluation. (4) `verifier_downgraded` is now counted from
 returned, so every row logged 0. The 2026-10-05 to 10-14 audit files record
 3 downgrades in 58 verifier verdicts.
 
+`v3.3` (2026-10-29) adds playbook records: fixed narrator guidance that code
+selects from the diagnostic findings (`graph/playbook.py`). The first one tells
+the narrator that a diagnostic-pass terminal break must show in the verdict.
+The verdict logic is unchanged. The report and `audit.json` list the records a
+leg got (`playbook_records`).
+
 Days before the relevant fix landed keep their real outcome, including any
 escalation that fix would have prevented; the incident write-ups are in
 [`docs/archive/WORK_ORDER_REPORT.md`](../archive/WORK_ORDER_REPORT.md).

@@ -11,6 +11,7 @@ from explain_my_option.data.historical_chain import load_historical_case
 from explain_my_option.data.synthetic import load_fixture
 from explain_my_option.data_loader import LoadedData
 from explain_my_option.graph.deps import GraphDeps, OfficialFdmPnlSource
+from explain_my_option.graph.playbook import DEFAULT_PLAYBOOK
 from explain_my_option.pipeline.book_schema import BookLegSpec
 from explain_my_option.pipeline.config import PipelineConfig
 from explain_my_option.pipeline.leg_graph import build_leg_diagnosis_subgraph
@@ -53,14 +54,14 @@ class CaseLoader:
         return LoadedData(snapshot=load_historical_case(self.name))
 
 
-def invoke_leg(leg: BookLegSpec, *, market=None, pnl=None, news=(), llm: LlmRoleRegistry | None = None, verify: bool = True) -> dict:
+def invoke_leg(leg: BookLegSpec, *, market=None, pnl=None, news=(), llm: LlmRoleRegistry | None = None, verify: bool = True, playbook=DEFAULT_PLAYBOOK) -> dict:
     """Run one leg through the real subgraph with offline ports."""
-    deps = GraphDeps(market=market, pnl=pnl or OfficialFdmPnlSource(config=FAST), intel=frozen_intel(news))
+    deps = GraphDeps(market=market, pnl=pnl or OfficialFdmPnlSource(config=FAST), intel=frozen_intel(news), playbook=playbook)
     app = build_leg_diagnosis_subgraph(config=PipelineConfig(verify=verify), deps=deps, roles=llm or roles())
     return app.invoke({"leg": leg, "ticker": leg.ticker, "strike": leg.strike, "expiry": leg.expiry})
 
 
-def run_leg(*, fixture: str | None = None, case: str | None = None, news=(), llm: LlmRoleRegistry | None = None, verify: bool = True) -> dict:
+def run_leg(*, fixture: str | None = None, case: str | None = None, news=(), llm: LlmRoleRegistry | None = None, verify: bool = True, playbook=DEFAULT_PLAYBOOK) -> dict:
     """Run a committed synthetic fixture or real-chain case as one leg."""
     market = None
     if case is not None:
@@ -78,7 +79,7 @@ def run_leg(*, fixture: str | None = None, case: str | None = None, news=(), llm
         quantity=snap.quantity,
         multiplier=snap.multiplier,
     )
-    return invoke_leg(leg, market=market, news=news, llm=llm, verify=verify)
+    return invoke_leg(leg, market=market, news=news, llm=llm, verify=verify, playbook=playbook)
 
 
 def synthesis(**overrides) -> DiagnosticSynthesis:

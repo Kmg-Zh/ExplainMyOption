@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
+from ..graph.playbook import PlaybookRecord, playbook_prompt_lines
 from ..graph.prompts import GENERIC_METHODOLOGY, compose_diagnose_system_prompt
 from ..intel.types import NewsItem, SearchPlan
 from ..intel.untrusted import format_untrusted_source
@@ -302,9 +303,11 @@ def synthesize_diagnosis(
     ports: GraphDeps | None = None,
     diagnostic_findings: dict | None = None,
     role: LlmRole | None = None,
+    playbook: Sequence[PlaybookRecord] = (),
 ) -> DiagnosticSynthesis:
     """Narrator synthesis. Falls back to the rule-based summary when there is no
-    role or credentials, the call fails, or the prose carries figures."""
+    role or credentials, the call fails, or the prose carries figures.
+    ``playbook`` holds the records code selected for this leg."""
     facts = build_position_facts(snap, pricing, news_count=len(news))
     findings = diagnostic_findings or {}
     digest = _digest_from_findings(findings)
@@ -331,7 +334,7 @@ def synthesize_diagnosis(
             extra=ports.diagnose_system_extra if ports is not None else None,
             methodology=getattr(ports.pnl, "methodology", GENERIC_METHODOLOGY) if ports is not None else None,
         )
-        human = _human_prompt(snap, pricing, facts, layer_b_news, plan, findings)
+        human = _human_prompt(snap, pricing, facts, layer_b_news, plan, findings, playbook)
         result = role.structured_invoke(system=system, human=human, schema=DiagnosticSynthesis)
         if not isinstance(result, DiagnosticSynthesis):
             result = DiagnosticSynthesis.model_validate(result)
@@ -393,6 +396,7 @@ def _human_prompt(
     news: list[NewsItem],
     plan: SearchPlan | None,
     diagnostic_findings: dict | None = None,
+    playbook: Sequence[PlaybookRecord] = (),
 ) -> str:
     findings = diagnostic_findings or {}
     digest = _digest_from_findings(findings)
@@ -509,6 +513,7 @@ def _human_prompt(
         )
     if findings.get("terminal_unexplained_break"):
         lines.append("Terminal unexplained break (code): true — escalate in watchlist.")
+    lines.extend(playbook_prompt_lines(playbook))
     if plan is not None:
         lines.append("")
         lines.append("### Search plan notes")

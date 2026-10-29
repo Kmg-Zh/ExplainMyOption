@@ -21,6 +21,7 @@ from ..pricing.types import (
     SequentialRevalResult,
     VolSurfaceData,
 )
+from .playbook import DEFAULT_PLAYBOOK, PlaybookRecord, check_playbook
 from .prompts import QUANTLIB_METHODOLOGY, extra_from_env
 
 
@@ -155,6 +156,13 @@ class GraphDeps:
     # author-local addendum for evals.
     diagnose_system_prompt: Optional[str] = None
     diagnose_system_extra: str = ""
+    # Narrator guidance for special cases, selected by code from the diagnostic
+    # findings. A desk may append its own records; see graph/playbook.py.
+    playbook: tuple[PlaybookRecord, ...] = DEFAULT_PLAYBOOK
+
+    def __post_init__(self) -> None:
+        self.playbook = tuple(self.playbook)
+        check_playbook(self.playbook)
 
 
 def default_deps() -> GraphDeps:

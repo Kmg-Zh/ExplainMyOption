@@ -15,6 +15,7 @@ or CI.
 | [`live_book/`](live_book/) | Does the agent hold up day over day on a pinned real book? | 10 pinned contracts | `python evals/live_book/portfolio_e2e.py --live --compare-to-baseline` |
 | Run log | The same, as a public record: a committed report for each trading day it runs | 8 real legs ([`docs/runlog/book.json`](../docs/runlog/book.json)) | `python scripts/daily_run.py` |
 | Model comparison | Does a larger model buy better governance? | The red team, the historical events and 20 archived live-book legs | `python scripts/compare_models.py` |
+| Playbook replay | Does the terminal-break playbook record reach the Headline verdict? | The 36 archived live-run legs whose diagnostic pass ended in a terminal break, playbook off and on | `python evals/live_book/playbook_replay.py` |
 
 `live_book/` and the run log are the two scheduled jobs (21:00 and 21:15 on
 weekdays, [SCHEDULING.md](../docs/dev/SCHEDULING.md)). `portfolio_e2e.py

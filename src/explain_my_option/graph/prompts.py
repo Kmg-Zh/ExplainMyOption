@@ -16,7 +16,7 @@ from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION
 # Bump whenever an LLM-facing prompt (narrator, verifier, critic, digester),
 # the desk packet, or the verifier's decision logic changes. Red-team results
 # and run-log rows are only comparable within one version.
-PROMPT_VERSION = "v3.2"
+PROMPT_VERSION = "v3.3"
 
 # How the reference engine computes the official PnL. A PnL source describes its
 # own method through its ``methodology`` attribute.
@@ -112,6 +112,11 @@ it, say why in confidence_rationale (still no numbers).
 The code may list **headline mechanisms** (a scan of *relevant* titles only, not peer
 background). If that list is non-empty, those tags MUST appear in verdict and in at least one
 takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush story.
+
+### Playbook records
+The code may attach **playbook records**: fixed desk guidance for a special case it has
+detected (for example, a terminal break). Follow every attached record. A record refines the
+guidance above for that case; the output rules below still apply.
 
 ### Field contract
 - primary_driver: Layer A modeled-factor label only (e.g. "Delta / spot move"). Overlay mechanisms go in verdict, not as a replacement driver.
