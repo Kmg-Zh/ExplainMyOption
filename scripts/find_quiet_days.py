@@ -31,7 +31,7 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "src"))
-sys.path.insert(0, str(_REPO_ROOT / "tests"))
+sys.path.insert(0, str(_REPO_ROOT / "evals"))
 
 from bootstrap import install  # noqa: E402
 
@@ -66,7 +66,7 @@ MACRO_EVENT_DATES = {
 }
 
 DEFAULT_TICKERS = ["AAPL", "MSFT", "SPY"]
-OUT_DIR = _REPO_ROOT / "tests" / "ci" / "fixtures" / "quiet_days"
+OUT_DIR = _REPO_ROOT / "tests" / "fixtures" / "quiet_days"
 
 
 def _no_macro_event_that_week(day: date) -> bool:

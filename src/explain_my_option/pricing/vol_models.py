@@ -5,24 +5,9 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from .ql_engine import _parse_iso, _require_ql
 from .surface import build_black_variance_surface
 from .types import MarketSnapshot, SurfaceDiagnostics, VolSurfaceData
-
-
-def _require_ql():
-    try:
-        import QuantLib as ql
-    except ImportError as exc:  # pragma: no cover
-        raise ImportError(
-            "QuantLib is required for pricing. Install with: pip install QuantLib"
-        ) from exc
-    return ql
-
-
-def _parse_iso(d: str):
-    ql = _require_ql()
-    y, m, day = (int(x) for x in d.split("-"))
-    return ql.Date(day, m, y)
 
 
 def _eval_date(snapshot: MarketSnapshot, surface: VolSurfaceData):

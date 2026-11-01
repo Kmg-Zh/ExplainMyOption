@@ -1,23 +1,7 @@
-"""Explain My Option — entrypoint.
+"""Explain My Option from a checkout: ``python app.py ...`` or ``streamlit run app.py``.
 
-Two ways to run:
-
-    # CLI
-    python app.py --ticker AAPL --type call
-    python app.py --fixture vol_crush
-
-    # Streamlit UI
-    streamlit run app.py
-
-D1: the actual CLI/Streamlit implementation lives in
-``src/explain_my_option/cli.py`` so the installed console script
-(``explain-my-option``, ``pyproject.toml``'s ``[project.scripts]``) can
-import it — ``pip install .`` only packages ``src/``
-(``[tool.setuptools.packages.find]``), so an entry point pointing at this
-root-level file (``app:run_cli``) used to raise ``ModuleNotFoundError:
-No module named 'app'`` after a real install, since this file is never
-installed. This file stays only as the thing `python app.py` and
-`streamlit run app.py` invoke directly from a checkout.
+The implementation lives in ``explain_my_option.cli`` so the installed
+``explain-my-option`` console script works too.
 """
 
 from __future__ import annotations

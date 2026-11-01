@@ -13,10 +13,10 @@ def attribute_pnl(
     d_vol: float,
     dt_days: float = 1.0,
 ) -> PnLAttribution:
-    """Attribute a 1-day option price change to Delta, Vega and Theta.
+    """Attribute a 1-day option price change to Delta, Gamma, Vega and Theta.
 
     Uses yesterday's Greeks as the sensitivities:
-        dP ~= Delta * dS + Vega * (dVol / 0.01) + Theta * dt
+        dP ~= Delta * dS + 1/2 Gamma * dS^2 + Vega * (dVol / 0.01) + Theta * dt
 
     Args:
         greeks_prev: Greeks at the previous day's market state.

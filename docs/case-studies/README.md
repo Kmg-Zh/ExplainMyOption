@@ -5,7 +5,7 @@ quotes both days via `src/explain_my_option/data/historical_chain.py`
 (DoltHub `post-no-preference/options`); the rest stay **synthetic**
 (spot/IV tuned for residual behavior) with **frozen as-of news** drawn from
 cited public sources — not live headlines mixed with a historical `as_of`.
-See `tests/ci/stress_fixtures/README.md` for why each synthetic case can't
+See `tests/fixtures/stress/README.md` for why each synthetic case can't
 be (or, for GME/AAPL, no longer needs to be) converted.
 
 Walkthroughs explain the **mechanism** (Taylor vs residual, what search is allowed
@@ -19,8 +19,8 @@ to add). They are not a scoreboard.
 | `ground_truth` | Later recaps, papers, pedagogy | No — eval key only |
 | `input_text` | Human scenario note | No |
 
-Manifest: `tests/historical/historical_test_cases.json`  
-Offline check: `python tests/historical/test_news_lineage.py`
+Manifest: `evals/historical/historical_test_cases.json`  
+Offline check: `pytest tests/agent/test_historical_cases.py -k looks_ahead`
 
 **Historical cases (real chains):**
 
@@ -40,8 +40,8 @@ Offline check: `python tests/historical/test_news_lineage.py`
 | VMW (2008-01-28) | Same-day earnings reaction | Borrow is not modeled → low residual is expected | — |
 
 ```bash
-python tests/historical/run.py --case vow_float_squeeze_2008
-python tests/historical/run.py --case aapl_exdiv_2023
+python evals/historical/run.py --case vow_float_squeeze_2008
+python evals/historical/run.py --case aapl_exdiv_2023
 ```
 
 Frozen product reports (not the gitignored `output/` archives): [docs/samples/](../samples/README.md).

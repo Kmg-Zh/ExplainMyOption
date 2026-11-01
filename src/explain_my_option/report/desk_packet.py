@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from ..data_loader import NewsItem, format_untrusted_news_item
+from ..intel.types import NewsItem
+from ..intel.untrusted import format_untrusted_news_item
 from ..pricing.types import MarketSnapshot, PricingResult
-from ..report_generator import build_quant_section
+from .blotter import build_quant_section
 from .facts import build_position_facts
 
 
@@ -38,9 +39,12 @@ def format_desk_packet(
         f"- Theta: {facts.greeks_theta:.6f}",
         "",
         "### Factor PnL (Greek-based Taylor, position-scaled)",
+        "Shares are of "
+        + ("the gross movement Σ|component| (components largely offset)" if facts.shares_of_gross else "|model ΔP|")
+        + "; a share carries the sign of its dollar amount.",
     ]
     for row in facts.attribution:
-        lines.append(f"- {row.label}: {row.usd:+.4f} ({row.pct_of_total:+.1f}% of total)")
+        lines.append(f"- {row.label}: {row.usd:+.4f} ({row.share_pct:+.1f}% share)")
     lines.extend(
         [
             "",

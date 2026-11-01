@@ -1,6 +1,6 @@
 # Agent cost, latency, and terminal-state study
 
-Generated 2026-09-17T04:36:00+00:00 by `scripts/agent_budget_study.py`, run through the real leg graph (`agent_graph.run_pipeline`) for the 10 offline synthetic legs (`tests/live_book/portfolio_book.py::OFFLINE_LEGS`) and the 2 verified real historical cases (real DoltHub chains). Every number below is produced by this run, `n=12` (12 completed, 0 failed).
+Generated 2026-09-17T04:36:00+00:00 by `scripts/agent_budget_study.py`, run through the real leg graph (`agent_graph.run_pipeline`) for the 10 offline synthetic legs (`evals/live_book/portfolio_book.py::OFFLINE_LEGS`) and the 2 verified real historical cases (real DoltHub chains). Every number below is produced by this run, `n=12` (12 completed, 0 failed).
 
 **Model**: `gpt-5.4-mini`, `temperature=0.0`, fixed `seed=0` (`pipeline.llm_roles.OpenAiRole`).
 

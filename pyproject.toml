@@ -33,3 +33,10 @@ explain-my-option = "explain_my_option.cli:run_cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "engineering: the code computes and wires correctly (tests/engineering/)",
+    "agent: the agent's rules are enforced by code, scripted LLM roles (tests/agent/)",
+]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION, format_untrusted_source
 from ..report.catalysts import external_cause_terms, missing_catalyst_tags, tags_from_headlines
 from ..report.facts import PositionFacts
 from ..report.schema import DiagnosticSynthesis
@@ -17,7 +17,7 @@ from ..report.validate import (
     find_prohibited_synonyms,
     validate_synthesis,
 )
-from .llm_roles import LlmRole
+from .llm_roles import LlmRole, LlmUnavailable
 from .verifier_schema import DiagnosticVerifierResult, GuardedVerifierResult
 
 VERIFIER_SYSTEM_PROMPT = """You are an independent diagnostic verifier for an options PnL explain report.
@@ -30,7 +30,7 @@ The narrator must cover TWO layers when evidence exists:
   replace Layer B. An independent catalyst critic may have required Layer B mechanisms;
   omitting those is PARTIAL, not FAIL.
 
-Two residuals (Task A6.4): the method residual is the part of the model's own price change not
+Two residuals: the method residual is the part of the model's own price change not
 captured by the chosen Greek decomposition -- arithmetic, not news. Only the model residual --
 the gap between the market's price change and the model's -- may be discussed in terms of
 events. A synthesis that attributes the method residual to any external cause (a headline, an
@@ -47,15 +47,15 @@ headline, a news event, an earnings print, "the market reacted to...", a named c
 cited cause is the model's own arithmetic, curvature, or numerical behavior, that is not
 method_residual_blamed no matter how the sentence is phrased.
 
-Quiet days (Task A7.5), the symmetric rule: on a run whose terminal state is no_escalation
+Quiet days, the symmetric rule: on a run whose terminal state is no_escalation
 ("nothing to explain" -- carry and a small spot move only, no search was performed), a
 synthesis that names a catalyst, an event, or any external cause is a hard FAIL, flagged
 "quiet_day_confabulation". There is no news evidence on a no_escalation run by construction, so
 any such claim is fabricated by definition, not merely unsupported.
 
-Trade-advice language (Task A9.4): the implied-borrow field (A9.3) makes "opportunity",
-"mispricing" and "arbitrage" newly tempting -- an elevated/extreme q_implied is a cost now
-inside the model, not a tradeable edge. Any of these words, or "free money", "riskless",
+Trade-advice language: the implied-borrow field makes "opportunity", "mispricing" and
+"arbitrage" tempting -- an elevated/extreme q_implied is a cost now inside the model, not a
+tradeable edge. Any of these words, or "free money", "riskless",
 "cheap", "rich", "should have" (as in "should have exercised"), anywhere in narrative fields is
 a hard FAIL, flagged "prohibited_phrase" -- this product explains a price move, it never
 advises a trade, regardless of how well-evidenced the rest of the synthesis is.
@@ -98,9 +98,8 @@ HARD_FAIL_POLICY_FLAGS = frozenset(
 
 
 def _quiet_day_catalyst_tags(synthesis: DiagnosticSynthesis) -> list[str]:
-    """A7.5: catalyst/event language in a synthesis, reusing the same
-    headline-mechanism vocabulary the narrator/verifier already use for
-    news -- applied here to the synthesis's own text instead."""
+    """Catalyst/event language in the synthesis's own text, using the same
+    mechanism vocabulary as the headline scan."""
     narrative = [synthesis.verdict, synthesis.confidence_rationale, *synthesis.takeaways]
     return tags_from_headlines(narrative)
 
@@ -141,6 +140,9 @@ def _evidence_provenance_rationale() -> str:
     )
 
 
+_VERIFIER_UNAVAILABLE_RATIONALE = "No LLM verifier is configured; the code checks passed."
+
+
 def _hedge_advice_rationale() -> str:
     return (
         "Hedge, rebalance or profit-taking directive in the narrative -- this "
@@ -148,12 +150,9 @@ def _hedge_advice_rationale() -> str:
     )
 
 
-# A9.1: the fixed set of rationale strings deterministic_precheck can return
-# -- code-authored sentences, never the LLM's own prose. Lets a caller with
-# only the returned DiagnosticVerifierResult (not a bool from this module)
-# tell a deterministic precheck apart from an actual LLM verdict, e.g. to
-# count llm_calls accurately without changing verify_synthesis's return
-# type for its two call sites.
+# Every rationale deterministic_precheck can return: fixed, code-authored
+# sentences, never LLM prose. Lets a caller tell a precheck verdict from an
+# LLM verdict (e.g. to count LLM calls) from the result alone.
 DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
     {
         "validate_synthesis failed",
@@ -164,6 +163,7 @@ DETERMINISTIC_PRECHECK_RATIONALES = frozenset(
         "Vega story not falsifiable from quote",
         _observation_lock_rationale(),
         _missing_catalyst_rationale(),
+        _VERIFIER_UNAVAILABLE_RATIONALE,
     }
 )
 
@@ -465,10 +465,15 @@ def verify_synthesis(
         f"Independent critic Layer B required: {(catalyst_challenge or {}).get('layer_b_required')}\n"
         f"Independent critic mechanisms: {(catalyst_challenge or {}).get('mechanisms') or 'none'}\n"
     )
-    raw = role.structured_invoke(
-        system=VERIFIER_SYSTEM_PROMPT,
-        human=human,
-        schema=DiagnosticVerifierResult,
-    )
+    try:
+        raw = role.structured_invoke(
+            system=VERIFIER_SYSTEM_PROMPT,
+            human=human,
+            schema=DiagnosticVerifierResult,
+        )
+    except LlmUnavailable:
+        return DiagnosticVerifierResult(
+            verdict="PARTIAL", policy_flags=["verifier_unavailable"], rationale=_VERIFIER_UNAVAILABLE_RATIONALE
+        )
     result = GuardedVerifierResult.model_validate(raw.model_dump())
     return _confirm_hard_flags(result, synthesis, no_escalation=no_escalation)

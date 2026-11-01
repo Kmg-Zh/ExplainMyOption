@@ -9,7 +9,7 @@ under its own license.
 ## Data
 
 - **Historical option chains** — the real-chain fixtures under
-  `tests/ci/fixtures/historical/` are small slices of the DoltHub database
+  `tests/fixtures/historical/` are small slices of the DoltHub database
   [`post-no-preference/options`](https://www.dolthub.com/repositories/post-no-preference/options),
   licensed **CC BY-SA 4.0**
   (<https://creativecommons.org/licenses/by-sa/4.0/>). **Changes made:** rows

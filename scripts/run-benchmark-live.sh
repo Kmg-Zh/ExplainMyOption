@@ -20,11 +20,11 @@ fi
 export EMO_BENCHMARK_LIVE=1
 
 echo "=== historical (5 cases) ==="
-python tests/historical/run.py "$@"
+python evals/historical/run.py "$@"
 
 echo ""
 echo "=== historical compare (governed vs baseline) ==="
-python tests/historical/compare.py "$@"
+python evals/historical/compare.py "$@"
 
 echo ""
-echo "OK — live benchmark artifacts under tests/historical/output/<case>/"
+echo "OK — live benchmark artifacts under evals/historical/output/<case>/"

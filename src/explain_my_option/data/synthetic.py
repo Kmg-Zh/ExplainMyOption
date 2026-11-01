@@ -102,9 +102,8 @@ def load_fixture(
 ) -> tuple[MarketSnapshot, Optional[VolSurfaceData]]:
     """Load ``{name}.json`` → ``(MarketSnapshot, VolSurfaceData | None)``.
 
-    Checks ``fixtures_root`` (default ``FIXTURES_DIR``) first, then
-    ``STRESS_FIXTURES_DIR`` -- the five relabeled "case" fixtures (A4.6)
-    live there, but every existing caller still just names them by stem.
+    Checks ``fixtures_root`` (default ``FIXTURES_DIR``), then the stress
+    fixtures, so callers name either kind by stem.
     """
     root = fixtures_root or _FIXTURES_DIR
     path = root / f"{name}.json"

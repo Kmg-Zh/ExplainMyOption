@@ -1,6 +1,6 @@
 {
   "baseline_as_of": "2026-09-17",
-  "purpose": "Task C3.1: the 30-day live-book run log. All legs opened at >=35 DTE so none expires inside the 30-day window -- no roll policy needed. Real, live-quoted contracts discovered this session (yfinance), not invented.",
+  "purpose": "The 30-day live-book run log. All legs opened at >=35 DTE so none expires inside the 30-day window -- no roll policy needed. Real, live-quoted contracts discovered this session (yfinance), not invented.",
   "sizing_rule": "1 contract (multiplier 100) per leg, uniformly, across all 8 legs. Underlyings range from $2 (PLUG) to $754 (SPY), so this is not equal notional exposure -- it is the simplest defensible rule (no leg is deliberately over- or under-sized relative to the others by contract count) and matches how a small paper book is naturally sized. Per-leg PnL, not book-level notional-weighted PnL, is the reported unit throughout.",
   "legs": [
     {

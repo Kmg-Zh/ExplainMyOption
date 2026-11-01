@@ -2,7 +2,7 @@
 
 # Explain My Option
 
-**Explain My Option** explains why an equity option's price moved from yesterday to today. It refuses when it cannot explain the move, and stays silent when there is nothing to explain. QuantLib computes the attribution with no LLM involved. An LLM writes the diagnosis against that blotter, cannot introduce a figure that is not in it, and is cut off when the unexplained portion stays large. The numbers that decide whether to escalate, abstain, or stay quiet are computed without the model that would benefit from a different answer.
+**Explain My Option** explains why an equity option's price moved from yesterday to today. It refuses when it cannot explain the move, and stays silent when there is nothing to explain. QuantLib computes the attribution with no LLM involved. An LLM writes the diagnosis against that blotter and cannot introduce a figure that is not in it; when the unexplained portion stays large, the report escalates for human review. The numbers that decide whether to escalate, abstain, or stay quiet are computed without the model that would benefit from a different answer.
 
 A **governed diagnostic agent**: QuantLib produces the blotter; the LLM only writes a diagnosis against it. Explain, don't predict. The LLM does not own PnL.
 
@@ -12,11 +12,23 @@ This is a personal project, in progress — not a production desk system. LangGr
 
 ## Design (what to look at)
 
-1. **Numbers first.** Official 1-day PnL comes from QuantLib American FDM. The LLM cannot introduce a dollar figure.
-2. **Policy before LLM.** A **rules** controller may run at most 1 *costly* diagnostic tool (a full reprice or similar) plus a few *free* arithmetic ones that do not use that budget, inside a bounded loop, and logs every skip reason. This is not free-form ReAct; the agent does not pick engines.
-3. **Three roles.** Narrator / catalyst critic (headline whitelist) / verifier. FAIL on invented dollars; PARTIAL if a named catalyst is missing or the narrative gives hedge/sizing directives. An LLM hard FAIL only stands if a deterministic code check reproduces the violation; otherwise it is downgraded to PARTIAL and the disagreement is logged. [Case studies](docs/case-studies/README.md)
+1. **Numbers first.** Official 1-day PnL comes from QuantLib American FDM. The LLM cannot introduce a dollar figure: narrator prose carrying one is replaced by the rule-based summary before anyone reads it.
+2. **Policy before LLM.** A **rules** controller runs a few *free* arithmetic tools, at most one *costly* one (a full revaluation or an early-exercise check), and one budget-free follow-up revaluation when a moderate residual is left; it logs every skip reason. This is not free-form ReAct; the agent does not pick engines.
+3. **Four roles, code has the last word.** Headline digester / catalyst critic / narrator / verifier. Code checks every narrative before the verifier LLM sees it: invented figures, trade-advice language, or a catalyst claim on a quiet day are a hard FAIL; a missing named catalyst or a hedge/sizing directive is PARTIAL. An LLM hard FAIL only stands if code reproduces the violation; otherwise it is downgraded to PARTIAL and the disagreement is logged. [Case studies](docs/case-studies/README.md)
 4. **Gated search.** Rules planner (no LLM by default). Extra Tavily / 8-K only on blotter cues; quiet or locked observations skip news.
-5. **Escalate, don't invent.** `terminal_unexplained_break` has two real triggers: (a) the single costly tool slot is spent and the residual / mark gap is still above 15%, or (b) the verifier raises a hard FAIL that code confirms once the verify budget is used up. Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
+5. **Escalate, don't invent.** A terminal break has two triggers: (a) the costly tool slot is spent and the residual or mark gap is still above 15% (flagged for human review), or (b) a verifier hard FAIL that code confirms (the leg ends there). Layer A is the modeled Taylor / Greek ranking from code; Layer B is a named catalyst / unmodeled gap. Residual truncation does **not** replace Layer B.
+
+## Where to look
+
+| You are here for | Start with |
+|------------------|------------|
+| The AI agent: what each LLM role may do, and the code that holds it to that | [tests/agent/README.md](tests/agent/README.md): every rule, what the LLM tries, what code does, and the test behind it |
+| Those rules acting on a full report, with no key | [examples/governance/](examples/governance/README.md): five offline scripts where an LLM role misbehaves on purpose |
+| How a real model actually behaves | [evals/README.md](evals/README.md): the red team, historical events, the live book and a model comparison, with the latest results |
+| The engineering: pricing, market data, the report, the graph as software | [tests/engineering/](tests/README.md) and [docs/knowledge/](docs/knowledge/README.md) |
+| Running the agent on your own PnL system | [docs/INTEGRATION.md](docs/INTEGRATION.md) |
+
+Tests are deterministic and run on every push (the LLM roles are scripted); evals call a real model and are scored.
 
 ## Sample output
 
@@ -24,13 +36,13 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 
 | Capture | File |
 |---------|------|
-| **Abstain** (constructed demo) — budget exhausted, terminal break | [sample_abstain.md](docs/samples/sample_abstain.md) |
+| **Abstain** (constructed demo) — code-confirmed verifier FAIL, terminal break | [sample_abstain.md](docs/samples/sample_abstain.md) |
 | **Quiet day** — nothing to explain, no search performed | [sample_quiet_day.md](docs/samples/sample_quiet_day.md) |
 | Real ex-div chain, market ΔP + mark reconciliation | [sample_real_chain.md](docs/samples/sample_real_chain.md) |
 | `--no-llm`, zero LLM calls, live quote | [sample_no_llm.md](docs/samples/sample_no_llm.md) |
 | Prompt injection contained | [sample_injection_contained.md](docs/samples/sample_injection_contained.md) |
 
-`sample_abstain.md` is a **constructed demonstration of the abstain mechanism**, not a captured natural failure: the market data, Greeks and routing are real, but the narrator is a scripted role that deliberately claims a dollar figure absent from the blotter (a real narrator on this same case produced a well-explained PARTIAL; see [docs/samples/README.md](docs/samples/README.md)). For how the verifier behaves against real and adversarial narrations, see the red-team study ([docs/studies/redteam_results.md](docs/studies/redteam_results.md)). Truncated (sections 1, 4, 5). Numbers are QuantLib; the LLM's own text is the `verdict`/`Confidence` lines only:
+`sample_abstain.md` is a **constructed demonstration of the abstain mechanism**, not a captured natural failure: the market data, Greeks and routing are real, but the narrator is a scripted role that deliberately uses trade-advice language ("cheap"), which code catches before any LLM verdict (a real narrator on this same case produced a well-explained PARTIAL; see [docs/samples/README.md](docs/samples/README.md)). For how the verifier behaves against real and adversarial narrations, see the red-team study ([docs/studies/redteam_results.md](docs/studies/redteam_results.md)). Truncated (sections 1, 4, 5). Numbers are QuantLib; the narrator's own text is the `Confidence` rationale only:
 
 ```markdown
 # Option Price Movement Diagnostic Report
@@ -42,26 +54,27 @@ Five reports from real runs live in [`docs/samples/`](docs/samples/README.md) �
 
 * **Mark MTM PnL**: `+$1.6000` (+12.1%)
 * **Model ΔP**: `+$1.6000`
-* **Primary drivers**: **Vega PnL** (53%) and **Delta PnL** (31%) and **Theta decay** (9%).
-* **Verifier**: FAIL — hard policy violation (numeric_hallucination); the factor story is not reliable. The narrative states a number the code did not produce.
-* **Verdict**: Verifier FAIL — terminal break escalation (numeric_hallucination). The narrative states a number the code did not produce.
+* **Primary drivers**: **Vega PnL** (+52.9%) and **Delta PnL** (-31.1%) and **Theta decay** (-8.7%).
+* **Verifier**: FAIL — hard policy violation (prohibited_phrase); the factor story is not reliable. Trade-advice-adjacent language (arbitrage/mispricing/opportunity/riskless/cheap/rich/'should have') is out of scope regardless of context -- this product explains a price move, it does not advise a trade.
 * **Confidence**: **Medium** — Vega dominated the Taylor decomposition.
 
 ## 4. Quantitative PnL Attribution
 
+Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (the components largely offset, so % Share is of the gross movement Σ|component|):
+
 | Attribution Component | Value ($) | % Share |
 | :--- | ---: | ---: |
-| **Delta PnL (ΔS · Delta)** | `-$3.3487` | +31.1% |
+| **Delta PnL (ΔS · Delta)** | `-$3.3487` | -31.1% |
 | **Gamma PnL (½(ΔS)² · Gamma)** | `+$0.4858` | +4.5% |
 | **Vega PnL (Δσ · Vega)** | `+$5.6937` | +52.9% |
-| **Theta decay (Δt · Theta)** | `-$0.9358` | +8.7% |
-| **Unexplained residual (ε)** | `-$0.2948` | +2.7% |
-| **Total Model PnL** | **+$1.6000** | **100.0%** |
+| **Theta decay (Δt · Theta)** | `-$0.9358` | -8.7% |
+| **Unexplained residual (ε)** | `-$0.2948` | -2.7% |
+| **Total Model PnL** | **+$1.6000** | **+14.9%** |
 
 ## 5. Residual Drill
 
 * **Taylor residual**: `-$0.2948` (18.4% of |model|)
-* **Terminal break**: diagnostic budget exhausted with large unexplained residual/gap; the factor story is not reliable and needs human review.
+* **Terminal break**: the verifier's hard failure was confirmed by code (see Headline); the narrative is not reliable and needs human review.
 
 * **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
 ```
@@ -80,7 +93,7 @@ When the leftover residual is large, a diagnostic pass may also run **sequential
 
 ## Validation
 
-The pricing layer is checked against arbitrage and numerical invariants, not only golden outputs (`tests/ci/test_pricing_invariants.py`):
+The pricing layer is checked against arbitrage and numerical invariants, not only golden outputs (`tests/engineering/test_pricing.py`):
 
 | Property | Asserted |
 |---|---|
@@ -121,19 +134,33 @@ Every real and realistic case sits at least an order of magnitude below `0.35`; 
 
 ## What the offline suite covers
 
-| Gate | Where |
-|------|--------|
-| No invented dollars / observation lock / missing catalyst / unexplained break | `tests/ci/test_governance_scorecard.py` |
-| Ex-div FO overlay (not an edge claim) | `tests/ci/test_exdiv_attribution.py` · [walkthrough](docs/case-studies/aapl_exdiv_attribution.md) |
-| Residual is the hard bar; narrative is not a published score | [case-studies README](docs/case-studies/README.md) |
+Two suites under `tests/`, both offline and keyless (credentials are blanked for every test, so a local `.env` cannot leak into a run).
+
+`tests/engineering/`: the code computes and wires correctly.
+
+| Module | What it pins |
+|--------|--------------|
+| `test_pricing.py` | Arbitrage and numerical invariants of the official engine (table above), mark calibration, analysis tools |
+| `test_report.py` | Signed % shares and the gross-movement basis, residual drill at position size, reconciliation, the blotter goldens |
+| `test_market_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, news sources |
+| `test_workflow.py` | The LangGraph workflow as software: an end-to-end leg, input guards, book fan-out, CLI, graph topology, a desk's own PnL source with the engine deleted |
+
+`tests/agent/`: the agent's rules, enforced by code, with scripted LLM roles. Each rule, what the LLM tries and what code does: [tests/agent/README.md](tests/agent/README.md).
+
+| Module | What it pins |
+|--------|--------------|
+| `test_guardrails.py` | Code checks before the verifier, code confirmation of LLM hard flags, untrusted-text containment, digest and critic contracts |
+| `test_governed_runs.py` | Full legs through the graph: verifier outcomes, invented figures, required catalysts, coverage gaps |
+| `test_tool_budget.py` | Tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
+| `test_search_policy.py` | Search only material, reliably observed moves, with a bounded query plan |
+| `test_historical_cases.py` | The historical events below, each pinned to its desk lesson, plus the eval's no-lookahead rule |
 
 ```bash
-./scripts/run-tests.sh
+./scripts/run-tests.sh          # both suites
+pytest tests/agent              # one suite (or: pytest -m agent)
 ```
 
-The CI suite does not call a live LLM. Historical `run.py` is a separate, keyed eval.
-
-These are unit tests of the verifier's rules against fixed synthesis fixtures. For an end-to-end measurement — detection rate, miss rate, and false-alarm rate against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`.
+The suite never calls a live LLM. Runs with real LLM roles are evals, in [`evals/`](evals/README.md). For an end-to-end measurement of the verifier — detection, miss and false-alarm rates against a constructed attack set on real blotters — see `docs/studies/redteam_results.md`. For the same agent on three OpenAI models under a $5 cap, with real reports side by side, see [docs/studies/model_comparison.md](docs/studies/model_comparison.md) (`scripts/compare_models.py`).
 
 ## Try it
 
@@ -143,17 +170,18 @@ Python 3.11+.
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"        # exact Python 3.11 versions: requirements.lock
 
-pytest tests/ci -q             # offline, no keys or network needed
+pytest                         # offline, no keys or network needed
 ```
 
 Copy `.env.example` → `.env`. Default runtime requires `OPENAI_API_KEY` (entry gate). Optional keys and the chat model are listed there (`EMO_LLM_MODEL`, `TAVILY_API_KEY`, `EMO_SEC_USER_AGENT`, `LANGSMITH_API_KEY`). Never commit `.env`.
 
 ```bash
 explain-my-option --fixture vol_crush --no-llm   # offline, zero LLM calls
+python examples/governance/01_invented_number.py # offline: code rejects a narrator's invented figure
 python app.py --ticker AAPL --type call
 python app.py --ticker TSLA --type put --strike 250 --expiry 2026-01-16
 python app.py --fixture vol_crush
-python app.py --book tests/ci/fixtures/books/demo_book.json
+python app.py --book tests/fixtures/books/demo_book.json
 ```
 
 ```bash
@@ -162,11 +190,11 @@ streamlit run app.py
 
 | Suite | What | Command |
 |-------|------|---------|
-| `tests/ci/` | Engine, graph, report (offline) | `./scripts/run-tests.sh` |
-| `tests/historical/` | Event fixtures with frozen as-of news | `python tests/historical/run.py` |
-| `tests/live_book/` | Recent book / archive replay | `python tests/live_book/portfolio_e2e.py --offline` |
+| `tests/engineering/`, `tests/agent/` | Engine, graph, report; the agent's rules (offline) | `./scripts/run-tests.sh` |
+| `evals/historical/` | Event fixtures with frozen as-of news (real LLM, keyed) | `python evals/historical/run.py` |
+| `evals/live_book/` | Recent book / archive replay | `python evals/live_book/portfolio_e2e.py --offline` |
 
-Layout and notebooks: [tests/README.md](tests/README.md) · [notebooks/README.md](notebooks/README.md).
+Layout and notebooks: [tests/README.md](tests/README.md) · [evals/README.md](evals/README.md) · [notebooks/README.md](notebooks/README.md).
 
 ## Historical cases
 
@@ -180,7 +208,7 @@ Layout and notebooks: [tests/README.md](tests/README.md) · [notebooks/README.md
 
 **Stress fixtures (synthetic inputs)** — hand-chosen spot and implied vol to
 force specific residual regimes. Regression tests for the attribution code;
-not evidence about any real trading day (`tests/ci/stress_fixtures/README.md`).
+not evidence about any real trading day (`tests/fixtures/stress/README.md`).
 
 | Case | As-of | Desk lesson | Walkthrough |
 |------|-------|-------------|-------------|
@@ -199,7 +227,7 @@ Index: [docs/case-studies/README.md](docs/case-studies/README.md).
 ## Scope
 
 - Official PnL: American FDM (`FdBlackScholesVanillaEngine`). Local vol when Dupire is safe; otherwise flat IV.
-- Heston is diagnostic-only. LSM-BS / LSM-Merton are an analysis API, not the `quant` node.
+- Heston is diagnostic-only. LSM-BS / LSM-Merton are an analysis API, not the `quant` node (diagnostic tools use them only for cross-checks).
 - Real historical option chains (DoltHub, ~2019+, US-listed only) back the
   two real cases above; live `iv_prev` still resolves via SQLite t-1, else
   HV20 proxy. Coverage gaps, strike-window bias and licensing:
@@ -220,7 +248,7 @@ This is not trading advice and not a price forecast.
 
 ## Architecture
 
-Book-first parent graph. `Send` fans out **in parallel** — one compiled leg subgraph per position. Single-leg CLI/UI is the same graph with one leg. Users cannot pick a path; the loops below are budgeted graph edges, not ReAct. Live diagrams: [langgraph_architecture.ipynb](notebooks/langgraph_architecture.ipynb).
+Book-first parent graph. `Send` fans out **in parallel** — one compiled leg subgraph per position. Single-leg CLI/UI is the same graph with one leg. Users cannot pick a path; every branch below is a rule in code, not ReAct. Live diagrams: [langgraph_architecture.ipynb](notebooks/langgraph_architecture.ipynb).
 
 ```mermaid
 flowchart TB
@@ -235,45 +263,32 @@ flowchart TB
   LN --> AGG
 ```
 
-Each `leg_branch` is this subgraph (`fetch` / `quant` / `blotter` have **no LLM**):
+Each `leg_branch` is this subgraph (`fetch_market` / `quant` / `blotter` / `diagnostic_pass` have **no LLM**):
 
 ```mermaid
 flowchart TB
   subgraph compute["Compute — no LLM"]
     FM[fetch_market] -->|ok| Q[quant]
-    FM -->|error| FAIL[leg_failure_finalize]
+    FM -->|coverage gap or basis mismatch| FAIL[leg_failure_finalize]
     Q -->|ok| BL[blotter]
     Q -->|error| FAIL
     BL --> DP[diagnostic_pass]
   end
 
-  subgraph residual["Bounded residual loop"]
-    RP[react_plan] --> EX[react_tool_exec] --> BG{budget_gate}
-    BG -->|calls left| RG{residual_gate}
-    RG -->|next tool| RP
-    RG -->|done| DF[diag_finalize]
-    BG -->|exhausted| DF
-  end
-
-  DP -->|cue| RP
-  DP -->|skip| DF
-  DF -->|no_escalation: nothing to explain| FIN[finalize_leg_report]
-
-  DF --> PS[plan_search] --> SE[search] --> DG[digest_news]
+  DP -->|nothing to explain| FIN[finalize_leg_report]
+  DP --> PS[plan_search] --> SE[search] --> DG[digest_news]
   DG --> CH[challenge_catalyst] --> SY[synthesize] --> RC[reconcile_debate]
 
-  subgraph verify["Bounded verifier"]
-    VF{verify}
-    VF -->|PASS| FIN
-    VF -->|FAIL, budget left| REV[revise_synthesis]
-    VF -->|PARTIAL| REF[reflect_verifier]
-    VF -->|hard FAIL, budget spent| TUB[terminal_unexplained_break]
-  end
-
-  RC --> VF
-  REV --> RC
+  RC --> VF{verify}
+  VF -->|PASS| FIN
+  VF -->|PARTIAL, or a FAIL code cannot confirm| REF[reflect_verifier]
+  VF -->|hard FAIL confirmed by code| TUB[terminal_unexplained_break]
   REF --> FIN
   TUB --> FIN
   FAIL --> DONE([done])
   FIN --> DONE
 ```
+
+## Using it with your own PnL system
+
+`fetch_market` and `quant` are ports; the yfinance loader and the QuantLib engine are the bundled implementations. A desk that passes its own market loader and PnL source gets the same workflow, checks and report on its own numbers, without QuantLib or yfinance. The contract, what to copy and the other plug points are in [docs/INTEGRATION.md](docs/INTEGRATION.md); a runnable example is [examples/bring_your_own_pnl.py](examples/bring_your_own_pnl.py).

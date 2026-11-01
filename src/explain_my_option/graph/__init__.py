@@ -1,4 +1,5 @@
-"""Graph ports (swap market / PnL / intel without rewriting nodes)."""
+"""Graph ports (swap market, PnL, planner and intel without rewriting nodes),
+prompts, state, and the deterministic diagnostic pass."""
 
 from .deps import (
     FixtureMarketLoader,
@@ -10,16 +11,10 @@ from .deps import (
     default_deps,
     fixture_deps,
 )
-from .prompts import (
-    DEFAULT_DIAGNOSE_SYSTEM_PROMPT,
-    STRUCTURED_DIAGNOSE_SYSTEM_PROMPT,
-    compose_diagnose_system_prompt,
-    extra_from_env,
-)
+from .prompts import STRUCTURED_DIAGNOSE_SYSTEM_PROMPT, compose_diagnose_system_prompt, extra_from_env
 from .topology import book_mermaid, leg_mermaid, pipeline_mermaid
 
 __all__ = [
-    "DEFAULT_DIAGNOSE_SYSTEM_PROMPT",
     "STRUCTURED_DIAGNOSE_SYSTEM_PROMPT",
     "FixtureMarketLoader",
     "GraphDeps",

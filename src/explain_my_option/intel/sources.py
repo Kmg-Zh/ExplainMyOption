@@ -5,10 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any, Optional, Protocol
 
-from explain_my_option.data_loader import NewsItem, fetch_news
-
-from .types import IntelSourceId, IntelUnconfigured, SearchPlan, SearchQuery
 from .sec_edgar import SecEdgar8KSource
+from .types import IntelSourceId, IntelUnconfigured, NewsItem, SearchPlan, SearchQuery
 
 
 class IntelSource(Protocol):
@@ -25,6 +23,8 @@ class YFinanceNewsSource:
     source_id: IntelSourceId = "yfinance_news"
 
     def search(self, query: SearchQuery, *, ticker: str) -> list[NewsItem]:
+        from ..data_loader import fetch_news  # yfinance, only when this source runs
+
         return fetch_news(ticker, limit=query.limit)
 
 

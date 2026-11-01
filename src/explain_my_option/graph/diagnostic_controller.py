@@ -1,12 +1,10 @@
-"""Bounded tool Controller for ``diagnostic_pass`` — deterministic, max 1 costly call.
+"""Deterministic diagnostic pass: which tools run, and what the run escalates to.
 
-A7.1 widened ``FREE_TOOLS`` to include ``reconcile_mark_vs_model`` and
-``quote_quality_and_noise_band`` (both are pure arithmetic on
-already-computed facts, and a quiet day can only be recognized as quiet
-by running them, so A7.2's "zero costly tools" requirement needs them to
-not consume the budget). That leaves exactly one costly slot per pass --
-the single deep tool ``_pick_deep_tool`` selects -- so the budget shrank
-from 3 to 1 to match, not merely to relabel the same ceiling.
+Free tools are arithmetic on already-priced facts and always run when their
+inputs exist. One costly tool (a full revaluation or an early-exercise check)
+may run per pass. The two revaluation audits need the PnL source's optional
+``second_order`` / ``path_reprice`` hooks; without them they are skipped with
+the reason recorded. No LLM is involved.
 """
 
 from __future__ import annotations
@@ -14,52 +12,39 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-from ..pricing.config import EngineConfig
 from ..pricing.types import MarketSnapshot, PricingResult, VolSurfaceData
+from ..report.reconciliation import build_reconciliation_facts
 from . import diagnostic_tools as tools
+from .deps import PnlSource
 
 MAX_DIAGNOSTIC_TOOL_CALLS = 1
 
-# A5.1: pure arithmetic on already-computed Greeks/facts -- no repricing
-# path, no network, no LLM -- always runs when its precondition holds and
-# never competes with path_reprice/compare_to_official for the scarce
-# budget slot. (taylor_second_order does bump-and-revalue a handful of
-# small perturbations around the single already-priced t-1 point, which
-# is why it is cheap relative to path_reprice's full multi-factor
-# sequential reval -- "free" here means "does not consume the tool
-# budget", not "zero computation".)
-#
-# reconcile_mark_vs_model and quote_quality_and_noise_band fit the same
-# definition (both just read already-computed pricing/snapshot fields,
-# no repricing) and, unlike taylor_second_order, they are not optional --
-# every diagnostic pass needs them to even compute the severity/
-# escalation metric that decides whether anything else should run. A7.2
-# requires a quiet day to run *zero costly tools*; that is only
-# achievable if the tools that establish quietness are themselves free.
+# "Free" means the tool does not use the costly-tool budget, not that it does
+# no work: taylor_second_order bump-reprices around the already-priced T-1 point.
 FREE_TOOLS = frozenset(
     {"taylor_second_order", "reconcile_mark_vs_model", "quote_quality_and_noise_band"}
 )
 
-# A5.3: the Taylor expansion is local -- on a large move it does not
-# converge slowly, it diverges. Provisional threshold; see README "Regime
-# rule" (added once the case table backing it exists).
+# Above this severity (max of residual % and mark-gap %) the costly slot goes to
+# a full revaluation; at or below it a day can count as having nothing to explain.
+LOW_SEVERITY_THRESHOLD_PCT = 10.0
+# Unless the day has nothing to explain, a residual above this gets a
+# follow-up full revaluation when none ran yet. It audits the blotter and
+# never escalates.
+FOLLOW_UP_RESIDUAL_PCT = 5.0
+# The costly audit ran (or the PnL source cannot run it) and the residual or
+# mark gap is still above this: terminal break.
+TERMINAL_BREAK_PCT = 15.0
+_NO_REVALUATION = "the PnL source has no revaluation hook"
+# Taylor is local: past this ratio of second- to first-order terms it diverges
+# rather than converging slowly. Provisional; see the README "Regime rule".
 TAYLOR_REGIME_THRESHOLD = 0.35
 
-# A7.2: escalation_metric at or below this band means "nothing to
-# explain" -- the same cutoff _pick_deep_tool already uses to skip the
-# deep-tool slot entirely, reused here so "no deep tool ran" and
-# "no_escalation" agree by construction rather than by coincidence.
-LOW_SEVERITY_THRESHOLD_PCT = 10.0
-
-# A7.2, second half of the same gate: a small *ratio* is not sufficient on
-# its own -- it is also true of a large, dramatic move the Taylor
-# decomposition happens to explain well (e.g. a vol crush with residual
-# near zero), which is not "nothing to explain." A7.1's selection
-# criteria (|return| < 0.3%, no earnings/ex-div/macro that week) pick days
-# where the *absolute* move is tiny in the first place; the three
-# verified quiet-day cases (A7.1) show total_pnl of $0.03-$0.11 against
-# option_price_prev of $5-13 (0.4%-1.4% of premium). Provisional, like
-# TAYLOR_REGIME_THRESHOLD -- would benefit from a larger case table.
+# A small escalation ratio alone also fits a dramatic move the Greeks happen to
+# explain well (a vol crush with ~zero residual), so "nothing to explain"
+# also requires a small move: under 5% of the option mid, or $0.50 without one.
+# Provisional, calibrated on the committed quiet days ($0.03-$0.11 moves on
+# $5-$13 premiums).
 NO_ESCALATION_MATERIALITY_PCT_OF_MID = 0.05
 NO_ESCALATION_MATERIALITY_ABS_USD = 0.50
 
@@ -77,6 +62,7 @@ class DiagnosticFindings:
     tool_calls_used: int = 0
     skipped_tools: list[SkippedTool] = field(default_factory=list)
     terminal_unexplained_break: bool = False
+    terminal_cause: str | None = None
     suppress_vega_narrative: bool = False
     observation_reliable: bool = True
     ex_div_attribution: dict[str, Any] | None = None
@@ -84,6 +70,7 @@ class DiagnosticFindings:
     taylor_regime: str | None = None
     r_spot: float | None = None
     r_vol: float | None = None
+    no_escalation: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         payload = {
@@ -92,19 +79,22 @@ class DiagnosticFindings:
             "tool_calls_used": self.tool_calls_used,
             "skipped_tools": [{"name": s.name, "reason": s.reason} for s in self.skipped_tools],
             "terminal_unexplained_break": self.terminal_unexplained_break,
+            "terminal_cause": self.terminal_cause,
             "suppress_vega_narrative": self.suppress_vega_narrative,
             "observation_reliable": self.observation_reliable,
             "tool_costs": dict(self.tool_costs),
             "taylor_regime": self.taylor_regime,
             "r_spot": self.r_spot,
             "r_vol": self.r_vol,
+            "no_escalation": self.no_escalation,
         }
         if self.ex_div_attribution is not None:
             payload["ex_div_attribution"] = dict(self.ex_div_attribution)
         return payload
 
 
-def _residual_pct(pricing: PricingResult) -> float:
+def residual_pct(pricing: PricingResult) -> float:
+    """|Taylor residual| as a percentage of |model ΔP| (0 when ΔP is 0)."""
     total = pricing.pnl.total_pnl
     if abs(total) < 1e-12:
         return 0.0
@@ -119,14 +109,10 @@ def _gap_pct(rec: dict[str, Any]) -> float:
     return abs(100.0 * float(gap) / float(model))
 
 
-def _run_tool(
-    findings: DiagnosticFindings,
-    name: str,
-    fn: Callable[[], dict[str, Any]],
-) -> bool:
-    """Run one tool. Free tools (A5.1) always run; costly ones need budget."""
+def _run_tool(findings: DiagnosticFindings, name: str, fn: Callable[[], dict[str, Any]], *, budgeted: bool = True) -> bool:
+    """Run one tool. Free tools always run; a budgeted costly tool needs a slot."""
     cost = "free" if name in FREE_TOOLS else "costly"
-    if cost == "costly" and findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS:
+    if cost == "costly" and budgeted and findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS:
         return False
     findings.tools_run.append(name)
     findings.results[name] = fn()
@@ -142,36 +128,20 @@ def _skip(findings: DiagnosticFindings, name: str, reason: str) -> None:
 
 def _pick_deep_tool(
     *,
-    residual_pct: float,
-    gap_pct: float,
+    severity: float,
     flag_ex_div: bool,
 ) -> tuple[str | None, list[tuple[str, str]]]:
-    """Select one *costly* tool for the final budget slot.
-
-    taylor_second_order no longer competes here (A5.1: it is free and
-    already ran unconditionally before this is called) -- the old
-    10-20% band that reserved the slot for it ahead of a full reval is
-    gone, folded into the path_reprice threshold below.
-    """
-    severity = max(residual_pct, gap_pct)
-    skipped: list[tuple[str, str]] = []
-
-    if severity <= LOW_SEVERITY_THRESHOLD_PCT and not flag_ex_div:
-        return None, skipped
-
+    """Choose the one costly tool for the budget slot, with skip reasons."""
     if severity > LOW_SEVERITY_THRESHOLD_PCT:
-        skipped.append(("compare_to_official", "path_reprice selected for severity >10%"))
+        skipped = [("compare_to_official", "path_reprice selected for severity >10%")]
         if flag_ex_div:
-            skipped.append(
-                ("american_dividend_exercise_check", "path_reprice outranks ex-div window")
-            )
+            skipped.append(("american_dividend_exercise_check", "path_reprice outranks ex-div window"))
         return "path_reprice", skipped
-
     if flag_ex_div:
-        skipped.append(("compare_to_official", "american check outranks model-risk cross-check"))
-        return "american_dividend_exercise_check", skipped
-
-    return "compare_to_official", skipped
+        return "american_dividend_exercise_check", [
+            ("compare_to_official", "american check outranks model-risk cross-check")
+        ]
+    return None, []
 
 
 def run_diagnostic_pass(
@@ -179,97 +149,87 @@ def run_diagnostic_pass(
     pricing: PricingResult,
     surface: Optional[VolSurfaceData] = None,
     *,
-    config: Optional[EngineConfig] = None,
+    pnl: PnlSource,
 ) -> DiagnosticFindings:
+    """Run the deterministic tools; ``pnl`` is the PnL source that priced the leg."""
     findings = DiagnosticFindings()
-    residual_pct = _residual_pct(pricing)
+    res_pct = residual_pct(pricing)
+    can_second_order = hasattr(pnl, "second_order")
+    can_reprice = hasattr(pnl, "path_reprice")
 
     if snap.option_price_now > 0 and snap.option_price_prev > 0:
-        _run_tool(
-            findings,
-            "reconcile_mark_vs_model",
-            lambda: tools.reconcile_mark_vs_model(snap, pricing),
-        )
-
+        _run_tool(findings, "reconcile_mark_vs_model", lambda: tools.reconcile_mark_vs_model(snap, pricing))
     if snap.bid is not None and snap.ask is not None:
-        _run_tool(
-            findings,
-            "quote_quality_and_noise_band",
-            lambda: tools.quote_quality_and_noise_band(snap, pricing),
-        )
+        _run_tool(findings, "quote_quality_and_noise_band", lambda: tools.quote_quality_and_noise_band(snap, pricing))
+    quote = findings.results.get("quote_quality_and_noise_band")
+    if quote:
+        findings.suppress_vega_narrative = bool(quote.get("iv_move_within_noise"))
+        findings.observation_reliable = bool(quote.get("observation_reliable", True))
 
-    q = findings.results.get("quote_quality_and_noise_band")
-    if q:
-        if q.get("iv_move_within_noise"):
-            findings.suppress_vega_narrative = True
-        findings.observation_reliable = bool(q.get("observation_reliable", True))
-
-    # A5.1: free -- always runs, never competes for the budget slot below.
-    _run_tool(
-        findings,
-        "taylor_second_order",
-        lambda: tools.run_taylor_second_order(snap, pricing, config=config),
-    )
+    if can_second_order:
+        _run_tool(findings, "taylor_second_order", lambda: tools.run_taylor_second_order(pnl, snap, pricing))
+    else:
+        _skip(findings, "taylor_second_order", _NO_REVALUATION)
     second = findings.results.get("taylor_second_order") or {}
-    r_spot = abs(pricing.pnl.gamma_pnl) / max(abs(pricing.pnl.delta_pnl), 1e-12)
-    r_vol = abs(float(second.get("volga_pnl", 0.0))) / max(abs(pricing.pnl.vega_pnl), 1e-12)
-    findings.r_spot = r_spot
-    findings.r_vol = r_vol
-    findings.taylor_regime = "INVALID" if max(r_spot, r_vol) > TAYLOR_REGIME_THRESHOLD else "VALID"
+    findings.r_spot = abs(pricing.pnl.gamma_pnl) / max(abs(pricing.pnl.delta_pnl), 1e-12)
+    findings.r_vol = abs(float(second.get("volga_pnl", 0.0))) / max(abs(pricing.pnl.vega_pnl), 1e-12)
+    findings.taylor_regime = "INVALID" if max(findings.r_spot, findings.r_vol) > TAYLOR_REGIME_THRESHOLD else "VALID"
 
     rec = findings.results.get("reconcile_mark_vs_model", {})
     gap_pct = _gap_pct(rec)
     calibrated_ok = rec.get("mark_calibrated") and gap_pct < 2.0
 
-    am_preview = tools.american_dividend_exercise_check(snap, pricing)
-    if am_preview.get("flag_ex_div_window"):
+    am_check = tools.american_dividend_exercise_check(snap, pricing)
+    flag_ex_div = bool(am_check.get("flag_ex_div_window"))
+    if flag_ex_div:
         findings.ex_div_attribution = tools.ex_div_attribution_split(snap, pricing)
 
-    if findings.tool_calls_used < MAX_DIAGNOSTIC_TOOL_CALLS and not calibrated_ok:
-        deep, skip_list = _pick_deep_tool(
-            residual_pct=residual_pct,
-            gap_pct=gap_pct,
-            flag_ex_div=bool(am_preview.get("flag_ex_div_window")),
-        )
-        for name, reason in skip_list:
+    deep_unavailable = False
+    if calibrated_ok:
+        _skip(findings, "deep_diagnostics", "mark calibrated and gap small")
+    else:
+        deep, skipped = _pick_deep_tool(severity=max(res_pct, gap_pct), flag_ex_div=flag_ex_div)
+        for name, reason in skipped:
             _skip(findings, name, reason)
+        if deep == "path_reprice" and can_reprice:
+            _run_tool(findings, deep, lambda: tools.run_path_reprice(pnl, snap, pricing, surface))
+        elif deep == "path_reprice":
+            _skip(findings, deep, _NO_REVALUATION)
+            deep_unavailable = True
+        elif deep == "american_dividend_exercise_check":
+            _run_tool(findings, deep, lambda: am_check)
+    considered = {*findings.tools_run, *(s.name for s in findings.skipped_tools)}
+    if flag_ex_div and "american_dividend_exercise_check" not in considered:
+        _skip(findings, "american_dividend_exercise_check", "budget exhausted or lower priority")
 
-        if deep == "path_reprice":
+    slot_used = findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS or deep_unavailable
+    if slot_used and max(res_pct, gap_pct) > TERMINAL_BREAK_PCT:
+        findings.terminal_unexplained_break = True
+        findings.terminal_cause = "unexplained_residual"
+    findings.no_escalation = nothing_to_explain(snap, pricing, findings)
+
+    if not findings.no_escalation and res_pct > FOLLOW_UP_RESIDUAL_PCT and "path_reprice" not in findings.tools_run:
+        if can_reprice:
             _run_tool(
                 findings,
                 "path_reprice",
-                lambda: tools.run_path_reprice(snap, pricing, surface, config=config),
+                lambda: tools.run_path_reprice(pnl, snap, pricing, surface),
+                budgeted=False,
             )
-        elif deep == "american_dividend_exercise_check":
-            _run_tool(
-                findings,
-                "american_dividend_exercise_check",
-                lambda: am_preview,
-            )
-        elif deep == "compare_to_official":
-            _run_tool(
-                findings,
-                "compare_to_official",
-                lambda: tools.run_compare_to_official(
-                    snap, pricing, surface, config=config
-                ),
-            )
-    elif calibrated_ok:
-        _skip(findings, "deep_diagnostics", "mark calibrated and gap small")
-
-    if (
-        am_preview.get("flag_ex_div_window")
-        and "american_dividend_exercise_check" not in findings.tools_run
-    ):
-        _skip(
-            findings,
-            "american_dividend_exercise_check",
-            "budget exhausted or lower priority",
-        )
-
-    if findings.tool_calls_used >= MAX_DIAGNOSTIC_TOOL_CALLS and (
-        residual_pct > 15.0 or gap_pct > 15.0
-    ):
-        findings.terminal_unexplained_break = True
-
+        elif not deep_unavailable:
+            _skip(findings, "path_reprice", _NO_REVALUATION)
     return findings
+
+
+def nothing_to_explain(snap: MarketSnapshot, pricing: PricingResult, findings: DiagnosticFindings) -> bool:
+    """Quiet day: no terminal break, a small escalation metric, and a small move."""
+    if findings.terminal_unexplained_break:
+        return False
+    rec = build_reconciliation_facts(snap, pricing)
+    mid = snap.mid or snap.option_price_prev
+    if mid and mid > 0:
+        floor = NO_ESCALATION_MATERIALITY_PCT_OF_MID * mid
+    else:
+        floor = NO_ESCALATION_MATERIALITY_ABS_USD
+    floor *= snap.position_scale()  # rec.model_pnl_usd is position-scaled
+    return rec.escalation_metric_pct <= LOW_SEVERITY_THRESHOLD_PCT and abs(rec.model_pnl_usd) < floor

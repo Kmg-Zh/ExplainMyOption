@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test-only live portfolio e2e — pinned contracts (comparable day-over-day).
-# Archives under tests/live_book/output/; SQLite t-1 under .cache/.
+# Eval-only live portfolio e2e — pinned contracts (comparable day-over-day).
+# Archives under evals/live_book/output/; SQLite t-1 under .cache/.
 #
 # Usage (from repo root):
 #   ./scripts/run-portfolio-e2e.sh
@@ -17,6 +17,6 @@ if [[ -d .venv/bin ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  exec python tests/live_book/portfolio_e2e.py --live --compare-to-baseline
+  exec python evals/live_book/portfolio_e2e.py --live --compare-to-baseline
 fi
-exec python tests/live_book/portfolio_e2e.py "$@"
+exec python evals/live_book/portfolio_e2e.py "$@"

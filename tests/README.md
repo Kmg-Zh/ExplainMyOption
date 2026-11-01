@@ -1,66 +1,59 @@
-# Tests layout
-
-Three suites under `tests/`. Run the offline parts check with:
+# Tests
 
 ```bash
-./scripts/run-tests.sh
+./scripts/run-tests.sh          # same as: python -m pytest
 ```
 
-`bootstrap.py` at this level is only import glue (`python tests/.../foo.py`). Not a fourth suite.
+The suite is offline and keyless. `conftest.py` blanks every credential for
+each test, so a local `.env` can never turn a test into a paid API call.
+LLM roles are scripted (`support.py`); market data comes from committed
+fixtures.
 
-| Folder | What it is | Needs network / API key? |
-|--------|------------|--------------------------|
-| `ci/` | Parts check: engine, graph, report. Fake markets in `ci/fixtures/`, expected blotters in `ci/golden/` | No |
-| `live_book/` | Recent real-data book (full diagnosis). Archives in `live_book/output/` (not on GitHub) | Live run yes; `--offline` and archive replay use frozen snapshots; `test_determinism_llm.py` needs `OPENAI_API_KEY` |
-| `historical/` | Famous-event fixtures with frozen as-of news | `run.py` needs `OPENAI_API_KEY` |
+Two suites, one per folder. Which one a test belongs to depends on what it
+protects, not on whether an LLM appears in it:
 
-Retired names (`tests/experiments`, `tests/benchmark_compare`, `tests/historical_benchmark`) must not come back — `ci/test_repo_layout.py` guards that.
-
-## Parts check (`ci/`)
-
-| Module | Covers |
-|--------|--------|
-| `test_pricing_facade`, `test_lsm_merton`, `test_ladder_regression` | Engine / analysis API |
-| `test_data_pipeline`, `test_diagnostic_pass`, `test_report_*` | Data + blotter + 7-section report |
-| `test_planner`, `test_intel`, `test_agent_graph` | Materiality / cues, Tavily+SEC ports, graph compile |
-| `test_news_digest` | Headline labels (relevant / background / discarded) |
-| `test_meta_earnings_gap` | Offline fixture + frozen news (stays in `ci/`; historical suite is live-LLM scoring) |
-| `test_pipeline_*` | Book `Send`, residual loop, verifier, topology |
-| `test_governance_scorecard` | Offline A1 gates: numeric hallucination, observation/vega lock, missing catalyst, terminal unexplained break, skipped tools |
-| `test_exdiv_attribution` | Ex-div FO overlay (spot≈div, EE premium, vol, residual) + tool skip reasons |
-| `test_repo_layout` | Paths, no stray root reports |
-
-Governance scorecard fixtures (synthesis JSON, not market snapshots) live in
-`tests/ci/fixtures/governance/`. Run the scoreboard with:
+- `engineering/`: the code computes and wires correctly.
+- `agent/`: the agent's rules: what an LLM role may say, which tools it may
+  spend, when the run must stop and hand over to a person. The LLM roles are
+  scripted, so each rule is checked deterministically. Rule by rule, with the
+  test behind each: [agent/README.md](agent/README.md).
 
 ```bash
-python tests/ci/test_governance_scorecard.py
+pytest tests/agent              # one suite (or: pytest -m agent)
 ```
 
-## Historical events
+`conftest.py` marks each test by its folder and refuses a test outside both,
+since CI runs the two folders as separate steps.
 
-Agent-visible headlines must have `published <= as_of`. Later papers, explainers,
-and the JSON `input_text` scenario note are **eval ground truth only** — they are
-not fed to the graph.
+| Suite | Module | What it pins |
+|-------|--------|--------------|
+| engineering | `test_pricing.py` | Arbitrage and numerical invariants of the official American FDM engine, mark calibration, the analysis tools |
+| engineering | `test_report.py` | Attribution shares (signed, gross basis only when components offset), residual drill at position size, reconciliation, blotter goldens |
+| engineering | `test_market_data.py` | Market-data hygiene, real-chain quote rules, implied borrow, input guards, news sources |
+| engineering | `test_workflow.py` | The graph as software: an end-to-end leg, input guards, book fan-out, CLI, topology, the desk-PnL example with the engine deleted |
+| agent | `test_guardrails.py` | What the narrator may say: code checks before the verifier, code confirmation of LLM hard flags, untrusted-text containment, digest and critic |
+| agent | `test_governed_runs.py` | Full legs through the graph: verifier outcomes, invented figures, required catalysts, coverage gaps |
+| agent | `test_tool_budget.py` | The deterministic diagnostic pass: tool budget, deep-tool choice, follow-up revaluation, terminal break, regime rule |
+| agent | `test_search_policy.py` | Search only material, reliably observed moves, with a bounded query plan |
+| agent | `test_historical_cases.py` | The historical events, each pinned to its desk lesson, and the eval's no-lookahead rule |
 
-```bash
-./scripts/run-benchmark-live.sh
-python tests/historical/run.py
-python tests/historical/run.py --case vow_float_squeeze_2008
-```
+Blotter goldens live in `fixtures/golden/`; regenerate them after an
+intended blotter change with `EMO_UPDATE_GOLDEN=1 ./scripts/run-tests.sh -k golden`.
 
-Walkthroughs: [docs/case-studies/README.md](../docs/case-studies/README.md). Frozen product reports (not eval archives): [docs/samples/](../docs/samples/README.md).
+## Fixtures
 
-## Live book
+| Folder | Contents |
+|--------|----------|
+| `fixtures/` | Synthetic market snapshots (also the CLI's `--fixture` names) |
+| `fixtures/stress/` | Hand-chosen spot/IV that force a residual regime ([README](fixtures/stress/README.md)) |
+| `fixtures/historical/` | Real-chain slices from DoltHub, quotes on both days ([README](fixtures/historical/README.md)) |
+| `fixtures/quiet_days/` | The deterministic quiet-day selection ([README](fixtures/quiet_days/README.md)) |
+| `fixtures/books/` | A demo multi-leg book |
+| `fixtures/golden/` | Expected blotter Markdown |
 
-```bash
-./scripts/run-portfolio-e2e.sh
-python tests/live_book/portfolio_e2e.py --offline
-python tests/live_book/replay_archives.py
-python tests/live_book/test_determinism_llm.py  # needs OPENAI_API_KEY
-```
+## Tests vs evals
 
-Pin: `tests/live_book/pinned_books/book_2026-10-05.json`. Replay uses archived
-snapshots + news (no live Yahoo). Presentation notebooks live in `notebooks/`
-(committed). Suite `output/` folders are gitignored archives. Hiring/demo captures of the
-product report live in [`docs/samples/`](../docs/samples/README.md) — not in `output/`.
+Everything here is deterministic: scripted LLM roles, committed fixtures, no
+network, run on every push. Running the agent with real LLM roles and scoring
+what it does (the red team, the historical events, the live book) is an eval:
+see [`evals/`](../evals/README.md).

@@ -1,4 +1,5 @@
-"""Diagnose system prompt: structured default + optional author-local extra.
+"""Narrator system prompt: the governance text, the PnL source's methodology
+paragraph, and an optional author-local extra.
 
 The product path uses ``with_structured_output(DiagnosticSynthesis)``.
 Incomplete-data eval instructions live in a gitignored file (or env) so other
@@ -10,25 +11,29 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from ..data_loader import UNTRUSTED_SOURCE_INSTRUCTION
+from ..intel.untrusted import UNTRUSTED_SOURCE_INSTRUCTION
 
-# A9.5: bump whenever STRUCTURED_DIAGNOSE_SYSTEM_PROMPT,
-# pipeline.verifier.VERIFIER_SYSTEM_PROMPT, or the verifier decision logic
-# (deterministic precheck / code-confirmation of hard flags) changes -- a red-team result
-# (Task B2) or a runlog entry (Task C3.5) is only meaningful against a
-# stated prompt version; without one the run log mixes measurements of
-# different systems.
-PROMPT_VERSION = "v3.1-b1.4"
+# Bump whenever an LLM-facing prompt (narrator, verifier, critic, digester),
+# the desk packet, or the verifier's decision logic changes. Red-team results
+# and run-log rows are only comparable within one version.
+PROMPT_VERSION = "v3.3"
+
+# How the reference engine computes the official PnL. A PnL source describes its
+# own method through its ``methodology`` attribute.
+QUANTLIB_METHODOLOGY = """**Official model ΔP:** QuantLib American **FDM** (`FdBlackScholesVanillaEngine`). Local vol when
+today's implied-vol grid passes a Dupire calibration probe; otherwise flat contract IV. Exercise
+style follows the snapshot (American by default for US equity)."""
+
+GENERIC_METHODOLOGY = """**Official model ΔP:** computed by the desk's own pricing engine; the blotter shows that
+engine's prices, Greeks and attribution."""
 
 # How official numbers in the blotter were produced (narrator context — not user-editable math).
-PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
+_PRICING_ATTRIBUTION_CONTEXT = """### How pricing & PnL attribution were computed (read-only)
 
 All dollar amounts in the desk blotter are **pre-computed by the quant engine** — you do not
 reprice or invent sensitivities.
 
-**Official model ΔP:** QuantLib American **FDM** (`FdBlackScholesVanillaEngine`). Local vol when
-today's implied-vol grid passes a Dupire calibration probe; otherwise flat contract IV. Exercise
-style follows the snapshot (American by default for US equity).
+{methodology}
 
 **Taylor blotter (Greek-based):** close-to-close attribution using **T-1 engine Greeks**:
   ΔP ≈ Delta·ΔS + ½·Gamma·(ΔS)² + Vega·Δσ + Theta·Δt + **residual (ε)**
@@ -38,23 +43,23 @@ Display scales engine-per-option math by `quantity × multiplier` (default 1 con
 Taylor truncation bites (extreme spot jumps), American early-exercise boundary shifts, vol skew
 curvature (Vanna/Volga), discrete dividends, or mark/quote gaps — not necessarily a "data bug."
 
-**Two residuals (Task A6) — read this before naming a cause for either one:**
+**Two residuals — read this before naming a cause for either one:**
 The method residual is the part of the model's own price change not captured by the chosen
 Greek decomposition. It is arithmetic, not news. Only the model residual — the gap between
 the market's price change and the model's — may be discussed in terms of events. If only the
 method residual is available, say that the run explains a model price change and name no
 catalyst.
 
-**Regime (Task A9.3):** When `taylor_regime` is INVALID, the Greek decomposition is a
+**Regime:** When `taylor_regime` is INVALID, the Greek decomposition is a
 reference view only and the headline attribution is the full revaluation. Describe the full
 revaluation figures. Do not present a Greek term as the explanation of the move.
 
-**Implied borrow (Task A9.3):** `q_implied` is a borrow rate backed out of put-call parity,
+**Implied borrow:** `q_implied` is a borrow rate backed out of put-call parity,
 not a forecast and not a cost quote. When `borrow_regime` is elevated or extreme, state that
 the observed parity gap implies a borrow cost of that size and that this cost is now inside
 the model. Do not describe it as an opportunity, a mispricing, or an arbitrage.
 
-**Early exercise relevance (Task A9.3):** When `ee_relevant` is false, the early exercise
+**Early exercise relevance:** When `ee_relevant` is false, the early exercise
 premium is not a finding. State that the dividend does not cover the remaining time value,
 and do not present a near-zero premium as a result.
 
@@ -64,11 +69,11 @@ same engine after each input move; step sum equals model ΔP (audit residual ≈
 Your job is to **explain** these layers and tie news to both the dominant factor and any named
 catalyst in the headlines — never override the blotter."""
 
-# Public default — structured synthesis for the industrial report template.
-STRUCTURED_DIAGNOSE_SYSTEM_PROMPT = """You are a derivatives desk analyst diagnosing 1-day option PnL.
+# Structured synthesis for the report template; {methodology} is filled per PnL source.
+_DIAGNOSE_SYSTEM_TEMPLATE = """You are a derivatives desk analyst diagnosing 1-day option PnL.
 Your job: explain why the price moved, not forecast the next move. Output DiagnosticSynthesis only.
 
-""" + PRICING_ATTRIBUTION_CONTEXT + """
+""" + _PRICING_ATTRIBUTION_CONTEXT + """
 
 ### Two layers (both, when evidence exists — not a single-track tree)
 
@@ -108,6 +113,11 @@ The code may list **headline mechanisms** (a scan of *relevant* titles only, not
 background). If that list is non-empty, those tags MUST appear in verdict and in at least one
 takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush story.
 
+### Playbook records
+The code may attach **playbook records**: fixed desk guidance for a special case it has
+detected (for example, a terminal break). Follow every attached record. A record refines the
+guidance above for that case; the output rules below still apply.
+
 ### Field contract
 - primary_driver: Layer A modeled-factor label only (e.g. "Delta / spot move"). Overlay mechanisms go in verdict, not as a replacement driver.
 - verdict: 2–3 sentences covering Layer A then Layer B.
@@ -130,11 +140,15 @@ takeaway. If the list is empty, do not invent a squeeze, borrow, or IV-crush sto
   early-exercise premium is material; otherwise leave it empty.
 - verdict and rationale are narrative prose; takeaways are desk risk bullets.
 
-### Untrusted content (Task B1.1)
+### Untrusted content
 """ + UNTRUSTED_SOURCE_INSTRUCTION
 
-# Alias — product default (plain-prose prompt removed 2026-08-19).
-DEFAULT_DIAGNOSE_SYSTEM_PROMPT = STRUCTURED_DIAGNOSE_SYSTEM_PROMPT
+
+def diagnose_system_prompt(methodology: str = QUANTLIB_METHODOLOGY) -> str:
+    return _DIAGNOSE_SYSTEM_TEMPLATE.replace("{methodology}", methodology.strip())
+
+
+STRUCTURED_DIAGNOSE_SYSTEM_PROMPT = diagnose_system_prompt()
 
 _EXTRA_ENV = "EMO_DIAGNOSE_SYSTEM_EXTRA"
 _EXTRA_FILE_ENV = "EMO_DIAGNOSE_SYSTEM_EXTRA_FILE"
@@ -154,13 +168,8 @@ def extra_from_env() -> str:
 
 
 def blotter_field_whitelist_section() -> str:
-    """A9.2: the blotter fields the narrator may cite, generated from the
-    dataclasses (report.facts.blotter_field_names) rather than
-    hand-maintained -- a future field rename cannot silently leave this
-    describing a field that no longer exists. Deferred import: report.facts
-    (via report/__init__.py -> report.synthesis) imports this module, so a
-    module-level import here would be circular.
-    """
+    """The blotter fields the narrator may cite, generated from the report
+    dataclasses. Imported lazily: report.synthesis imports this module."""
     from ..report.facts import blotter_field_names
 
     names = ", ".join(f"`{n}`" for n in sorted(blotter_field_names()))
@@ -176,9 +185,12 @@ def compose_diagnose_system_prompt(
     *,
     base: str | None = None,
     extra: str | None = None,
+    methodology: str | None = None,
 ) -> str:
-    """``extra=None`` means 'not provided here' (caller already resolved env)."""
-    body = (base or STRUCTURED_DIAGNOSE_SYSTEM_PROMPT).strip()
+    """``base`` replaces the whole prompt; otherwise ``methodology`` (default: the
+    reference engine's) fills the pricing paragraph. ``extra=None`` means 'not
+    provided here' (caller already resolved env)."""
+    body = (base or diagnose_system_prompt(methodology or QUANTLIB_METHODOLOGY)).strip()
     body = body + "\n\n" + blotter_field_whitelist_section()
     add = (extra or "").strip()
     if add:

@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from .agent_graph import run_pipeline
 from .data.synthetic import load_fixture
-from .graph.deps import FixtureMarketLoader, GraphDeps, fixture_deps
+from .graph.deps import GraphDeps
 from .pipeline.book_schema import BookSpec, load_book_json
 from .pipeline.config import PipelineConfig
 from .pipeline.llm_roles import LlmRoleRegistry
@@ -23,13 +23,9 @@ class DiagnoseResult:
     blotter: str
     state: dict[str, Any]
 
-    @property
-    def report_markdown(self) -> str:
-        return self.report
-
 
 class ExplainMyOption:
-    """Stable entrypoint for leg/book/fixture diagnosis."""
+    """Stable entry point for leg, book and fixture diagnosis."""
 
     def __init__(
         self,
@@ -51,6 +47,7 @@ class ExplainMyOption:
         expiry: Optional[str] = None,
         quantity: float = 1.0,
         multiplier: float = 1.0,
+        fixture: str | None = None,
     ) -> DiagnoseResult:
         state = run_pipeline(
             ticker,
@@ -59,53 +56,27 @@ class ExplainMyOption:
             expiry=expiry,
             quantity=quantity,
             multiplier=multiplier,
+            fixture=fixture,
             deps=self.deps,
             config=self.config,
             roles=self.roles,
         )
-        return DiagnoseResult(
-            report=str(state.get("report", "")),
-            blotter=str(state.get("blotter", "")),
-            state=dict(state),
-        )
-
-    def diagnose_book(self, book: BookSpec | str | Path) -> dict[str, Any]:
-        if not isinstance(book, BookSpec):
-            book = load_book_json(book)
-        return dict(
-            run_book_pipeline(
-                book,
-                config=self.config,
-                deps=self.deps,
-                roles=self.roles,
-            )
-        )
+        return DiagnoseResult(report=str(state.get("report", "")), blotter=str(state.get("blotter", "")), state=dict(state))
 
     def diagnose_fixture(self, name: str) -> DiagnoseResult:
+        """Diagnose a committed synthetic fixture offline (no market or news calls)."""
         snap, _ = load_fixture(name)
-        deps = self.deps or fixture_deps(name)
-        if self.deps is not None:
-            deps = GraphDeps(
-                market=FixtureMarketLoader(name),
-                pnl=self.deps.pnl,
-                planner=self.deps.planner,
-                intel=self.deps.intel,
-                diagnose_system_prompt=self.deps.diagnose_system_prompt,
-                diagnose_system_extra=self.deps.diagnose_system_extra,
-            )
-        state = run_pipeline(
+        return self.diagnose_leg(
             snap.ticker,
             option_type=snap.option_type,
             strike=snap.strike,
             expiry=snap.expiry,
             quantity=snap.quantity,
             multiplier=snap.multiplier,
-            deps=deps,
-            config=self.config,
-            roles=self.roles,
+            fixture=name,
         )
-        return DiagnoseResult(
-            report=str(state.get("report", "")),
-            blotter=str(state.get("blotter", "")),
-            state=dict(state),
-        )
+
+    def diagnose_book(self, book: BookSpec | str | Path) -> dict[str, Any]:
+        if not isinstance(book, BookSpec):
+            book = load_book_json(book)
+        return dict(run_book_pipeline(book, config=self.config, deps=self.deps, roles=self.roles))

@@ -37,27 +37,28 @@ def _narrative_texts(synthesis: DiagnosticSynthesis) -> list[str]:
     ]
 
 
+def narrative_text_errors(text: str) -> list[str]:
+    """What validate_synthesis rejects in one narrative field."""
+    errors: list[str] = []
+    if _DOLLAR.search(text):
+        errors.append("LLM prose must not contain dollar amounts.")
+    if _PERCENT.search(text):
+        errors.append("LLM prose must not contain percentage literals.")
+    if _PNL_CLAIM.search(text):
+        errors.append("LLM prose must not embed numeric PnL claims.")
+    return errors
+
+
 def validate_synthesis(synthesis: DiagnosticSynthesis) -> list[str]:
     """Return validation errors; empty list means safe to render."""
-    errors: list[str] = []
-    for text in _narrative_texts(synthesis):
-        if not text:
-            continue
-        if _DOLLAR.search(text):
-            errors.append("LLM prose must not contain dollar amounts.")
-        if _PERCENT.search(text):
-            errors.append("LLM prose must not contain percentage literals.")
-        if _PNL_CLAIM.search(text):
-            errors.append("LLM prose must not embed numeric PnL claims.")
+    errors = [e for text in _narrative_texts(synthesis) if text for e in narrative_text_errors(text)]
     return list(dict.fromkeys(errors))
 
 
-# A9.4: the borrow field (A9.3) makes "opportunity"/"mispricing"/
-# "arbitrage"/"free money" newly likely -- a real elevated/extreme
-# q_implied is easy to misdescribe as a tradeable edge instead of a cost
-# now inside the model. "riskless", "should have", "cheap", "rich" are the
-# project's pre-existing red line (no trade advice, no "should have
-# exercised") made explicit and enforced, not new ground.
+# Trade-advice language is out of scope however well evidenced the rest is:
+# an elevated implied borrow is easy to misdescribe as an "opportunity" or
+# "mispricing" rather than a cost inside the model, and "should have
+# (exercised)" is hindsight advice.
 PROHIBITED_TRADE_ADVICE_PHRASES: tuple[str, ...] = (
     "arbitrage",
     "mispricing",
@@ -101,8 +102,7 @@ def find_hedge_directives(synthesis: DiagnosticSynthesis) -> list[str]:
 
 
 def find_prohibited_phrases(synthesis: DiagnosticSynthesis) -> list[str]:
-    """A9.4: trade-advice-adjacent language, distinct from numeric
-    hallucination (validate_synthesis) -- no dollar figure is involved."""
+    """Trade-advice language (no figure involved, unlike validate_synthesis)."""
     hits: list[str] = []
     for text in _narrative_texts(synthesis):
         if not text:
@@ -139,6 +139,14 @@ def find_prohibited_synonyms(synthesis: DiagnosticSynthesis) -> list[str]:
     for text in _narrative_texts(synthesis):
         if text:
             hits.extend(m.group(1).lower() for m in _SYNONYM_RE.finditer(text))
+    return list(dict.fromkeys(hits))
+
+
+def advice_wording_hits(text: str) -> list[str]:
+    """Every trade or hedge term in one text: the literal list, its synonyms and
+    hedge directives. For code-authored text such as playbook records."""
+    hits = [m.group(1).lower() for rx in (_PROHIBITED_PHRASE_RE, _SYNONYM_RE) for m in rx.finditer(text)]
+    hits.extend(m.group(0).lower() for m in _HEDGE_DIRECTIVE_RE.finditer(text))
     return list(dict.fromkeys(hits))
 
 

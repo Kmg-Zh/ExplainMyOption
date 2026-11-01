@@ -1,58 +1,22 @@
-"""Analysis-only pricing API for later LLM tools. Not called by quant_node."""
+"""Analysis-only pricing API used by the diagnostic tools. The official PnL never calls it."""
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from typing import Optional
 
 from .config import EngineConfig, MertonParams, default_merton_params
 from .engines.lsm import price_lsm_bs, price_lsm_merton
 from .engines.merton import merton_european_series, price_merton_european
 from .facade import price_and_attribute
-from .ql_engine import _day_count, _parse_iso, _to_ql_date
+from .ql_engine import year_fraction
 from .types import (
     CrossCheckResult,
     MarketSnapshot,
     PricingResult,
-    PricingSpec,
     SecondOrderTaylorResult,
     SequentialRevalResult,
     VolSurfaceData,
 )
-
-
-def _eval_date(snapshot: MarketSnapshot) -> date:
-    if snapshot.as_of:
-        return datetime.strptime(snapshot.as_of, "%Y-%m-%d").date()
-    return date.today()
-
-
-def _spec_now(
-    snapshot: MarketSnapshot,
-    surface: Optional[VolSurfaceData] = None,
-) -> PricingSpec:
-    return PricingSpec(
-        spot=snapshot.spot_now,
-        strike=snapshot.strike,
-        rate=snapshot.risk_free_rate,
-        dividend_yield=snapshot.dividend_yield,
-        vol=snapshot.iv_now,
-        expiry=snapshot.expiry,
-        eval_date=_eval_date(snapshot),
-        option_type=snapshot.option_type,  # type: ignore[arg-type]
-        exercise_style=snapshot.exercise_style,
-        discrete_dividends=snapshot.discrete_dividends,
-        surface=surface,
-    )
-
-
-def _year_frac(snapshot: MarketSnapshot) -> float:
-    return max(
-        _day_count().yearFraction(
-            _to_ql_date(_eval_date(snapshot)), _parse_iso(snapshot.expiry)
-        ),
-        1.0 / 365.0,
-    )
 
 
 def calibrate_merton(
@@ -63,7 +27,7 @@ def calibrate_merton(
     base = default_merton_params()
     if surface is None:
         return base, ["merton_params_defaulted"]
-    t = _year_frac(snapshot)
+    t = year_fraction(snapshot.as_of_date(), snapshot.expiry)
     from .ql_engine import price_european_flat
 
     target = price_european_flat(
@@ -73,7 +37,7 @@ def calibrate_merton(
         dividend_yield=snapshot.dividend_yield,
         vol=snapshot.iv_now,
         expiry=snapshot.expiry,
-        eval_date=_eval_date(snapshot),
+        eval_date=snapshot.as_of_date(),
         option_type=snapshot.option_type,  # type: ignore[arg-type]
         discrete_dividends=snapshot.discrete_dividends,
     ).price
@@ -112,7 +76,9 @@ def compare_to_official(
 ) -> CrossCheckResult:
     cfg = config or EngineConfig.from_env()
     official = price_and_attribute(snapshot, surface, config=cfg)
-    spec = _spec_now(snapshot, surface)
+    spec = snapshot.spec(
+        spot=snapshot.spot_now, vol=snapshot.iv_now, eval_date=snapshot.as_of_date(), surface=surface
+    )
     limitations = list(official.diagnostics.limitations)
     params, m_lim = calibrate_merton(snapshot, surface)
     limitations.extend(m_lim)
@@ -157,14 +123,12 @@ def taylor_second_order(
     *,
     config: Optional[EngineConfig] = None,
 ) -> SecondOrderTaylorResult:
-    """Layer 3: Vanna/Volga second-order Taylor shrinkage."""
+    """Vanna/Volga second-order Taylor terms on top of the first-order blotter."""
     from .second_order import compute_second_order_taylor
 
     pnl = pricing_result.pnl
     return compute_second_order_taylor(
         snapshot,
-        price_prev=pricing_result.greeks_prev.price,
-        price_now=pricing_result.greeks_now.price,
         d_spot=pnl.d_spot,
         d_vol=pnl.d_vol,
         residual_pnl=pnl.residual_pnl,
@@ -179,7 +143,7 @@ def path_reprice(
     config: Optional[EngineConfig] = None,
     surface: Optional[VolSurfaceData] = None,
 ) -> SequentialRevalResult:
-    """Layer 4: sequential full revaluation t → S → σ → r."""
+    """Sequential full revaluation along t → S → σ → r."""
     from .sequential_reval import sequential_full_revaluation
 
     return sequential_full_revaluation(

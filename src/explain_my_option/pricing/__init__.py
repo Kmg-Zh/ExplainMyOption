@@ -1,11 +1,12 @@
-"""Data-agnostic QuantLib pricing facade.
+"""Reference pricing engine (QuantLib) and the plain dataclasses the agent consumes.
 
-Consumes plain dataclasses only — never imports yfinance or fixture I/O.
+``types`` has no vendor imports and is the agent's input contract; the engine
+entry points load lazily, so importing the types never pulls in QuantLib.
 """
 
-from .analysis_api import compare_to_official
+from importlib import import_module
+
 from .config import EngineConfig, MertonParams
-from .facade import price_and_attribute
 from .types import (
     CrossCheckResult,
     Greeks,
@@ -16,6 +17,15 @@ from .types import (
     SurfaceDiagnostics,
     VolSurfaceData,
 )
+
+_ENGINE_ENTRY_POINTS = {"price_and_attribute": ".facade", "compare_to_official": ".analysis_api"}
+
+
+def __getattr__(name: str):
+    if name in _ENGINE_ENTRY_POINTS:
+        return getattr(import_module(_ENGINE_ENTRY_POINTS[name], __name__), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "CrossCheckResult",

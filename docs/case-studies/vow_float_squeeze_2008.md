@@ -4,7 +4,7 @@
 **As-of:** 2008-10-27 · **Fixture:** `vow_float_squeeze_2008`  
 **Historical context:** Porsche disclosed control over most VW shares; free float collapsed while short interest exceeded float — a classic cornered-market / squeeze setup.
 
-This is a **synthetic benchmark case** in the historical anomaly suite (`tests/historical/historical_test_cases.json`). It is designed to stress the diagnostic workflow when standard Greek attribution breaks down.
+This is a **synthetic benchmark case** in the historical anomaly suite (`evals/historical/historical_test_cases.json`). It is designed to stress the diagnostic workflow when standard Greek attribution breaks down.
 
 ---
 
@@ -27,7 +27,7 @@ fixture for residual behaviour, not a reproduction of the tape.
 Regenerate the full report:
 
 ```bash
-python tests/historical/run.py --case vow_float_squeeze_2008
+python evals/historical/run.py --case vow_float_squeeze_2008
 ```
 
 ---

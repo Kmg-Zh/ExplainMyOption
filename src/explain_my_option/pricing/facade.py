@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Optional
 
 from .calibrate import implied_vol_flat
@@ -18,57 +18,10 @@ from .types import (
     MarketSnapshot,
     PricingDiagnostics,
     PricingResult,
-    PricingSpec,
     SurfaceDiagnostics,
     VolSurfaceData,
 )
 from .vol_models import run_surface_diagnostics
-
-
-def _as_of_date(snapshot: MarketSnapshot) -> date:
-    if snapshot.as_of:
-        return datetime.strptime(snapshot.as_of, "%Y-%m-%d").date()
-    return date.today()
-
-
-def _calendar_days_elapsed(snapshot: MarketSnapshot) -> float:
-    """Calendar days between T-1 and T from snapshot metadata."""
-    as_of = _as_of_date(snapshot)
-    if snapshot.prev_as_of:
-        prev = datetime.strptime(snapshot.prev_as_of, "%Y-%m-%d").date()
-    else:
-        prev = as_of - timedelta(days=1)
-    days = (as_of - prev).days
-    return float(max(days, 1))
-
-
-def _prev_eval_date(as_of: date, snapshot: MarketSnapshot) -> date:
-    if snapshot.prev_as_of:
-        return datetime.strptime(snapshot.prev_as_of, "%Y-%m-%d").date()
-    return as_of - timedelta(days=1)
-
-
-def _spec(
-    snapshot: MarketSnapshot,
-    *,
-    spot: float,
-    vol: float,
-    eval_date: date,
-    surface: Optional[VolSurfaceData],
-) -> PricingSpec:
-    return PricingSpec(
-        spot=spot,
-        strike=snapshot.strike,
-        rate=snapshot.risk_free_rate,
-        dividend_yield=snapshot.dividend_yield,
-        vol=vol,
-        expiry=snapshot.expiry,
-        eval_date=eval_date,
-        option_type=snapshot.option_type,  # type: ignore[arg-type]
-        exercise_style=snapshot.exercise_style,
-        discrete_dividends=snapshot.discrete_dividends,
-        surface=surface,
-    )
 
 
 def _surface_dupire_ok(
@@ -117,15 +70,13 @@ def _try_mark_calibration(
         # Synthetic fixtures leave marks at 0 — silent skip, not a limitation.
         return None, None, limitations
 
-    spec_now = _spec(
-        snapshot,
+    spec_now = snapshot.spec(
         spot=snapshot.spot_now,
         vol=snapshot.iv_now,
         eval_date=as_of,
         surface=None,
     )
-    spec_prev = _spec(
-        snapshot,
+    spec_prev = snapshot.spec(
         spot=snapshot.spot_prev,
         vol=snapshot.iv_prev,
         eval_date=prev_date,
@@ -168,8 +119,8 @@ def price_and_attribute(
     today's surface). Heston remains diagnostic-only.
     """
     cfg = config or EngineConfig.from_env()
-    as_of = _as_of_date(snapshot)
-    prev_date = _prev_eval_date(as_of, snapshot)
+    as_of = snapshot.as_of_date()
+    prev_date = snapshot.prev_date()
     limitations: list[str] = []
     mark_calibrated = False
 
@@ -191,15 +142,13 @@ def price_and_attribute(
         iv_prev = float(iv_cal_prev)
         engine_t = get_engine("fdm_flat", cfg)
         engine_t1 = get_engine("fdm_flat", cfg)
-        spec_now = _spec(
-            snapshot,
+        spec_now = snapshot.spec(
             spot=snapshot.spot_now,
             vol=iv_now,
             eval_date=as_of,
             surface=None,
         )
-        spec_prev = _spec(
-            snapshot,
+        spec_prev = snapshot.spec(
             spot=snapshot.spot_prev,
             vol=iv_prev,
             eval_date=prev_date,
@@ -230,8 +179,7 @@ def price_and_attribute(
         iv_now = float(snapshot.iv_now)
         iv_prev = float(snapshot.iv_prev)
         engine_t = get_engine(official, cfg)
-        spec_now = _spec(
-            snapshot,
+        spec_now = snapshot.spec(
             spot=snapshot.spot_now,
             vol=iv_now,
             eval_date=as_of,
@@ -242,8 +190,7 @@ def price_and_attribute(
         if official == "fdm_local_vol" and "local_vol_failed" in lim_now:
             official = "fdm_flat"
             engine_t = get_engine("fdm_flat", cfg)
-            spec_now = _spec(
-                snapshot,
+            spec_now = snapshot.spec(
                 spot=snapshot.spot_now,
                 vol=iv_now,
                 eval_date=as_of,
@@ -258,8 +205,7 @@ def price_and_attribute(
             engine_t1_id = "fdm_flat"
             spec_prev_surface = None
         engine_t1 = get_engine(engine_t1_id, cfg)
-        spec_prev = _spec(
-            snapshot,
+        spec_prev = snapshot.spec(
             spot=snapshot.spot_prev,
             vol=iv_prev,
             eval_date=prev_date,
@@ -274,16 +220,14 @@ def price_and_attribute(
         price_now=greeks_now.price,
         d_spot=snapshot.spot_now - snapshot.spot_prev,
         d_vol=iv_now - iv_prev,
-        dt_days=_calendar_days_elapsed(snapshot),
+        dt_days=float(max((as_of - prev_date).days, 1)),
     )
 
     am_price = eu_price = ee_prem = div_pv_effect = None
     ee_anomaly = False
     try:
-        # Analytic European, no dividends -- kept as the legacy comparator
-        # (still exposed as ``european_price`` / ``european_analytic_no_div``
-        # for the existing ex-div overlay) and as a cross-check against the
-        # FDM no-div European below, per spec §2.1.
+        # Analytic European without dividends: reported as ``european_price``
+        # and used to sanity-check the FDM no-dividend European below.
         eu_g = price_european_flat(
             spot=snapshot.spot_now,
             strike=snapshot.strike,
@@ -302,8 +246,7 @@ def price_and_attribute(
                 am_flat = greeks_now.price
             else:
                 g_flat, _ = FdmFlatEngine(cfg).price(
-                    _spec(
-                        snapshot,
+                    snapshot.spec(
                         spot=snapshot.spot_now,
                         vol=iv_now,
                         eval_date=as_of,
@@ -312,14 +255,10 @@ def price_and_attribute(
                 )
                 am_flat = g_flat.price
 
-            # Same FDM engine and grid for both European legs (European
-            # exercise), so discretisation error cancels against am_flat --
-            # spec §2.1. P_eu_div carries snapshot.discrete_dividends;
-            # P_eu_nodiv carries none. Both replace the old comparator,
-            # which was European-analytic-with-NO-dividends regardless of
-            # snapshot.discrete_dividends.
-            eu_div_spec = _spec(
-                snapshot,
+            # Both European legs use the same FDM engine and grid as am_flat,
+            # so discretisation error cancels in the differences below. The
+            # first carries the snapshot's discrete dividends, the second none.
+            eu_div_spec = snapshot.spec(
                 spot=snapshot.spot_now,
                 vol=iv_now,
                 eval_date=as_of,
@@ -341,8 +280,7 @@ def price_and_attribute(
 
             ee_prem = am_flat - eu_div_price  # signed, not floored
             div_pv_effect = eu_div_price - eu_nodiv_price  # signed
-            legacy_am_minus_eunodiv = am_flat - eu_nodiv_price
-            if abs((ee_prem + div_pv_effect) - legacy_am_minus_eunodiv) > 1e-6:
+            if abs((ee_prem + div_pv_effect) - (am_flat - eu_nodiv_price)) > 1e-6:
                 limitations.append("ee_premium_identity_mismatch")
             if ee_prem < -1e-6 * snapshot.spot_now:
                 ee_anomaly = True

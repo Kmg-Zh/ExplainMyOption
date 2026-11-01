@@ -48,6 +48,11 @@ def _day_count():
     return ql.Actual365Fixed()
 
 
+def year_fraction(eval_date: date | str, expiry: str) -> float:
+    """ACT/365 years from ``eval_date`` to ``expiry``, floored at one day."""
+    return max(_day_count().yearFraction(_to_ql_date(eval_date), _parse_iso(expiry)), 1.0 / 365.0)
+
+
 def _payoff(option_type: OptionType, strike: float):
     ql = _require_ql()
     opt = ql.Option.Call if option_type == "call" else ql.Option.Put

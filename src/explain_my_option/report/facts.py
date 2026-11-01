@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from datetime import datetime
-from typing import Literal
+from datetime import date
+from typing import Literal, Sequence
 
-from ..data_loader import NewsItem
-from ..intel.types import SearchPlan
-from ..pricing.types import MarketSnapshot, PnLAttribution, PricingResult
-from ..report_generator import contract_id, scale_pnl
+from ..intel.types import NewsItem, SearchPlan
+from ..pricing.types import MarketSnapshot, PricingResult, intrinsic_value
+from .formatting import contract_id
 from .reconciliation import ReconciliationFacts, build_reconciliation_facts
 
 DriverKey = Literal["delta", "gamma", "vega", "theta", "residual"]
 ConfidenceLevel = Literal["high", "medium", "low"]
+
+# Percentage shares use a positive denominator, so a share always carries the
+# sign of its dollar amount. The denominator is |model ΔP| unless the
+# components largely offset each other (|ΔP| under a quarter of the gross
+# movement, where shares of ΔP would run past ±400%); then it is the gross
+# factor movement Σ|component|.
+GROSS_SHARE_BELOW = 0.25
 
 
 @dataclass
@@ -21,7 +27,7 @@ class AttributionRow:
     key: DriverKey
     label: str
     usd: float
-    pct_of_total: float
+    share_pct: float
     driver_note: str
 
 
@@ -40,9 +46,8 @@ class AmericanFacts:
     next_ex_div: str | None
     next_div_amount: float | None
     early_exercise_assessment: str
-    # A2.3 economic screen: a dividend alone doesn't make early exercise
-    # relevant -- needs both dividend_coverage > 1 (the dividend exceeds
-    # remaining time value) and the ex-div date landing before expiry.
+    # Early exercise is economically relevant only when the next dividend
+    # exceeds the remaining time value (coverage > 1) and goes ex before expiry.
     dividend_coverage: float | None
     days_to_ex: int | None
     days_to_expiry: int | None
@@ -74,7 +79,6 @@ class PositionFacts:
     d_vol_pts: float
     price_prev: float
     price_now: float
-    total_pnl: float
     pnl_pct: float
     headline_pnl_usd: float
     headline_is_mtm: bool
@@ -87,9 +91,10 @@ class PositionFacts:
     greeks_theta: float
 
     attribution: list[AttributionRow]
+    shares_of_gross: bool
+    total_share_pct: float
     primary_driver: DriverKey
     primary_driver_label: str
-    primary_driver_pct: float
     explained_pct: float
     residual_pct: float
     confidence: ConfidenceLevel
@@ -99,8 +104,11 @@ class PositionFacts:
     reconciliation: ReconciliationFacts | None
     limitations: list[str]
     surface_notes: list[str]
-    pct_uses_abs_share: bool
     prev_as_of_note: str | None = None
+
+    @property
+    def position_scale(self) -> float:
+        return float(self.quantity) * float(self.multiplier)
 
 
 @dataclass
@@ -109,7 +117,6 @@ class PortfolioFacts:
 
     eval_date: str
     position_count: int
-    total_pnl: float
     total_mark_pnl: float | None
     total_model_pnl: float
     aggregate_mark_gap: float | None
@@ -135,23 +142,12 @@ def _pct(part: float, whole: float) -> float:
     return 100.0 * part / whole
 
 
-def _abs_share(part: float, parts: list[float]) -> float:
-    denom = sum(abs(x) for x in parts)
-    if denom < 1e-12:
-        return 0.0
-    return 100.0 * abs(part) / denom
-
-
-def _intrinsic(snap: MarketSnapshot) -> float:
-    if snap.option_type.lower().startswith("c"):
-        return max(snap.spot_now - snap.strike, 0.0)
-    return max(snap.strike - snap.spot_now, 0.0)
-
-
-def _spot_pct(d_spot: float, spot_prev: float) -> float:
-    if abs(spot_prev) < 1e-12:
-        return 0.0
-    return 100.0 * d_spot / spot_prev
+def share_basis(components: Sequence[float], total: float) -> tuple[float, bool]:
+    """``(denominator, of_gross)`` for percentage shares; see GROSS_SHARE_BELOW."""
+    gross = sum(abs(c) for c in components)
+    if abs(total) >= GROSS_SHARE_BELOW * gross:
+        return abs(total), False
+    return gross, True
 
 
 def _confidence(
@@ -216,30 +212,23 @@ def _days_between(start: str | None, end: str | None) -> int | None:
     if not start or not end:
         return None
     try:
-        d0 = datetime.strptime(start, "%Y-%m-%d").date()
-        d1 = datetime.strptime(end, "%Y-%m-%d").date()
+        return (date.fromisoformat(end) - date.fromisoformat(start)).days
     except ValueError:
         return None
-    return (d1 - d0).days
 
 
-def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFacts:
+def american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFacts:
     diag = pricing.diagnostics
     american = diag.american_price if diag.american_price is not None else pricing.greeks_now.price
-    intrinsic = _intrinsic(snap)
+    intrinsic = intrinsic_value(snap.option_type, snap.spot_now, snap.strike)
     time_value = max(american - intrinsic, 0.0)
 
     next_ex: str | None = None
     next_amt: float | None = None
     if snap.discrete_dividends:
-        future = sorted(snap.discrete_dividends, key=lambda d: d.ex_date)
-        if future:
-            next_ex = future[0].ex_date
-            next_amt = future[0].amount
+        first = min(snap.discrete_dividends, key=lambda d: d.ex_date)
+        next_ex, next_amt = first.ex_date, first.amount
 
-    # A2.3: a dividend alone does not make early exercise relevant -- needs
-    # the dividend to exceed remaining time value (coverage > 1) *and* the
-    # ex-div date to land before expiry.
     days_to_ex = _days_between(snap.as_of, next_ex)
     days_to_expiry = _days_between(snap.as_of, snap.expiry)
     dividend_coverage: float | None = None
@@ -253,7 +242,7 @@ def _american_facts(snap: MarketSnapshot, pricing: PricingResult) -> AmericanFac
         ee_assessment = (
             "Early-exercise premium printed negative — a numerical "
             "anomaly (engine/grid inconsistency), not a genuine exercise "
-            "signal; see docs/dev/WORK_ORDER_REPORT.md."
+            "signal."
         )
     elif ee_relevant is True:
         ee_assessment = (
@@ -306,13 +295,13 @@ def build_position_facts(
     news_count: int = 0,
 ) -> PositionFacts:
     """Derive template numbers from the quant engine output."""
-    scale = snap.position_scale()
-    pnl = scale_pnl(pricing.pnl, scale)
+    pnl = pricing.pnl.scaled(snap.position_scale())
     g = pricing.greeks_prev
-    pos_g = pricing.greeks_prev  # per-option greeks for display rows
-
+    diag = pricing.diagnostics
+    # The vols the official PnL used: mark-calibrated when marks exist.
+    iv_prev = snap.iv_prev if diag.effective_iv_prev is None else diag.effective_iv_prev
+    iv_now = snap.iv_now if diag.effective_iv_now is None else diag.effective_iv_now
     price_prev = g.price
-    price_now = pricing.greeks_now.price
     total = pnl.total_pnl
     explained = total - pnl.residual_pnl
     explained_pct = _pct(explained, total) if abs(total) > 1e-12 else 100.0
@@ -321,37 +310,22 @@ def build_position_facts(
     reconciliation: ReconciliationFacts | None = None
     if snap.option_price_now > 0 or (snap.bid is not None and snap.ask is not None):
         reconciliation = build_reconciliation_facts(snap, pricing)
-    pct_uses_abs = (
-        reconciliation.pct_uses_abs_share
-        if reconciliation is not None
-        else abs(total) < 1e-12 or abs(total) < 5.0
-    )
 
     rows_spec: list[tuple[DriverKey, str, float, str]] = [
         (
             "delta",
             "Delta PnL (ΔS · Delta)",
             pnl.delta_pnl,
-            f"Stock moved {_spot_note(pnl.d_spot, snap.spot_prev, snap.spot_now)}",
+            f"Stock moved from ${snap.spot_prev:,.2f} to ${snap.spot_now:,.2f} ({pnl.d_spot:+.4f})",
         ),
-        (
-            "gamma",
-            "Gamma PnL (½(ΔS)² · Gamma)",
-            pnl.gamma_pnl,
-            "Convexity from the spot move",
-        ),
+        ("gamma", "Gamma PnL (½(ΔS)² · Gamma)", pnl.gamma_pnl, "Convexity from the spot move"),
         (
             "vega",
             "Vega PnL (Δσ · Vega)",
             pnl.vega_pnl,
-            f"IV moved {pnl.d_vol * 100:+.2f} vol pts ({snap.iv_prev * 100:.2f}% → {snap.iv_now * 100:.2f}%)",
+            f"IV moved {pnl.d_vol * 100:+.2f} vol pts ({iv_prev * 100:.2f}% → {iv_now * 100:.2f}%)",
         ),
-        (
-            "theta",
-            "Theta decay (Δt · Theta)",
-            pnl.theta_pnl,
-            "Calendar time decay (1 day)",
-        ),
+        ("theta", "Theta decay (Δt · Theta)", pnl.theta_pnl, "Calendar time decay (1 day)"),
         (
             "residual",
             "Unexplained residual (ε)",
@@ -359,26 +333,17 @@ def build_position_facts(
             "American EE, skew curvature, dividend discreteness, model gap",
         ),
     ]
-    usd_parts = [usd for _, _, usd, _ in rows_spec]
+    denominator, of_gross = share_basis([usd for _, _, usd, _ in rows_spec], total)
     attribution = [
-        AttributionRow(
-            key=key,
-            label=label,
-            usd=usd,
-            pct_of_total=_abs_share(usd, usd_parts) if pct_uses_abs else _pct(usd, total),
-            driver_note=note,
-        )
+        AttributionRow(key=key, label=label, usd=usd, share_pct=_pct(usd, denominator), driver_note=note)
         for key, label, usd, note in rows_spec
     ]
 
     primary = max(attribution, key=lambda r: abs(r.usd))
-    diag = pricing.diagnostics
     iv_src = diag.iv_prev_source or snap.iv_prev_source
     lim = list(diag.limitations)
-    surface_notes: list[str] = []
     sd = pricing.surface_diagnostics
-    if sd is not None and sd.limitations:
-        surface_notes.extend(sd.limitations)
+    surface_notes = list(sd.limitations) if sd is not None and sd.limitations else []
 
     confidence, confidence_reasons = _confidence(
         explained_pct=explained_pct,
@@ -389,18 +354,15 @@ def build_position_facts(
         reconciliation=reconciliation,
     )
 
-    eval_date = snap.as_of or "—"
-    model_pnl = total
     mark_pnl = reconciliation.mark_pnl_usd if reconciliation else None
     headline_is_mtm = mark_pnl is not None
-    headline_pnl = mark_pnl if headline_is_mtm else model_pnl
     return PositionFacts(
         contract_label=contract_id(snap),
         ticker=snap.ticker,
         option_type=snap.option_type.upper(),
         strike=snap.strike,
         expiry=snap.expiry,
-        eval_date=eval_date,
+        eval_date=snap.as_of or "—",
         data_source=diag.data_source,
         engine=diag.engine,
         iv_prev_source=iv_src,
@@ -409,80 +371,66 @@ def build_position_facts(
         spot_prev=snap.spot_prev,
         spot_now=snap.spot_now,
         d_spot=pnl.d_spot,
-        spot_pct=_spot_pct(pnl.d_spot, snap.spot_prev),
-        iv_prev=snap.iv_prev,
-        iv_now=snap.iv_now,
+        spot_pct=_pct(pnl.d_spot, snap.spot_prev),
+        iv_prev=iv_prev,
+        iv_now=iv_now,
         d_vol_pts=pnl.d_vol * 100,
         price_prev=price_prev,
-        price_now=price_now,
-        total_pnl=total,
-        pnl_pct=_pct(total, price_prev) if abs(price_prev) > 1e-12 else 0.0,
-        headline_pnl_usd=headline_pnl,
+        price_now=pricing.greeks_now.price,
+        # Per-option return on the T-1 model price; quantity × multiplier cancels.
+        pnl_pct=_pct(pricing.pnl.total_pnl, price_prev),
+        headline_pnl_usd=mark_pnl if headline_is_mtm else total,
         headline_is_mtm=headline_is_mtm,
-        model_pnl_usd=model_pnl,
+        model_pnl_usd=total,
         mark_pnl_usd=mark_pnl,
         greeks_delta=g.delta,
         greeks_gamma=g.gamma,
         greeks_vega=g.vega,
         greeks_theta=g.theta,
         attribution=attribution,
+        shares_of_gross=of_gross,
+        total_share_pct=_pct(total, denominator),
         primary_driver=primary.key,
         primary_driver_label=primary.label.split(" ")[0],
-        primary_driver_pct=abs(primary.pct_of_total),
         explained_pct=explained_pct,
         residual_pct=abs(residual_pct),
         confidence=confidence,
         confidence_reasons=confidence_reasons,
-        american=_american_facts(snap, pricing),
+        american=american_facts(snap, pricing),
         reconciliation=reconciliation,
         limitations=lim,
         surface_notes=surface_notes,
-        pct_uses_abs_share=pct_uses_abs,
         prev_as_of_note=snap.prev_as_of,
     )
-
-
-def _spot_note(d_spot: float, prev: float, now: float) -> str:
-    return f"from ${prev:,.2f} to ${now:,.2f} ({d_spot:+.4f})"
 
 
 def build_portfolio_facts(bundles: list[PositionBundle]) -> PortfolioFacts:
     """Aggregate PnL across positions for the portfolio header."""
     facts_list = [
-        build_position_facts(b.snapshot, b.pricing, news_count=len(b.news))
-        for b in bundles
+        build_position_facts(b.snapshot, b.pricing, news_count=len(b.news)) for b in bundles
     ]
-    total = sum(f.total_pnl for f in facts_list)
     model_total = sum(f.model_pnl_usd for f in facts_list)
     mark_vals = [f.mark_pnl_usd for f in facts_list if f.mark_pnl_usd is not None]
     mark_total = sum(mark_vals) if mark_vals and len(mark_vals) == len(facts_list) else None
-    agg_gap = (model_total - mark_total) if mark_total is not None else None
-    by_label = [(f.contract_label, f.total_pnl) for f in facts_list]
-    by_label.sort(key=lambda x: abs(x[1]), reverse=True)
+    by_label = sorted(
+        ((f.contract_label, f.model_pnl_usd) for f in facts_list), key=lambda x: abs(x[1]), reverse=True
+    )
     by_ticker: dict[str, float] = {}
     for f in facts_list:
-        by_ticker[f.ticker] = by_ticker.get(f.ticker, 0.0) + f.total_pnl
+        by_ticker[f.ticker] = by_ticker.get(f.ticker, 0.0) + f.model_pnl_usd
     ticker_rows = sorted(by_ticker.items(), key=lambda x: abs(x[1]), reverse=True)
 
-    agg: dict[DriverKey, float] = {
-        "delta": 0.0,
-        "gamma": 0.0,
-        "vega": 0.0,
-        "theta": 0.0,
-        "residual": 0.0,
-    }
+    agg: dict[DriverKey, float] = {"delta": 0.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0, "residual": 0.0}
     for f in facts_list:
         for row in f.attribution:
             agg[row.key] += row.usd
 
-    eval_date = facts_list[0].eval_date if facts_list else "—"
     return PortfolioFacts(
-        eval_date=eval_date,
+        eval_date=facts_list[0].eval_date if facts_list else "—",
         position_count=len(facts_list),
-        total_pnl=total,
         total_mark_pnl=mark_total,
         total_model_pnl=model_total,
-        aggregate_mark_gap=agg_gap,
+        aggregate_mark_gap=(model_total - mark_total) if mark_total is not None else None,
         tickers=sorted({f.ticker for f in facts_list}),
         top_by_abs_pnl=by_label[:3],
         top_by_ticker=ticker_rows[:3],
@@ -490,12 +438,9 @@ def build_portfolio_facts(bundles: list[PositionBundle]) -> PortfolioFacts:
     )
 
 
-# A9.2: the blotter's field whitelist, generated from the dataclasses
-# rather than hand-maintained, so a future field rename cannot silently
-# leave the narrator prompt describing a field that no longer exists.
-# PositionFacts is the template's own "sole source of numeric truth"; the
-# other three are its directly nested dataclasses -- what the narrator and
-# verifier actually read field-by-field.
+# The blotter's field whitelist for the narrator prompt, generated from the
+# dataclasses so a renamed field cannot leave the prompt describing a field
+# that no longer exists.
 _BLOTTER_SCHEMA_CLASSES = (PositionFacts, AmericanFacts, ReconciliationFacts, AttributionRow)
 
 

@@ -1,8 +1,4 @@
-"""Unified product entrypoints.
-
-The product now runs a book-first parent graph with Send fan-out into leg
-subgraphs. ``run_pipeline`` remains as a single-leg convenience wrapper.
-"""
+"""Product entry points: the book graph, and a single-leg convenience wrapper."""
 
 from __future__ import annotations
 
@@ -24,14 +20,16 @@ def run_pipeline(
     quantity: float = 1.0,
     multiplier: float = 1.0,
     *,
+    fixture: str | None = None,
     deps: GraphDeps | None = None,
     config: PipelineConfig | None = None,
     roles: LlmRoleRegistry | None = None,
 ) -> OptionState:
-    """Run one leg via the unified book graph and return compatibility fields."""
+    """Diagnose one leg through the book graph. ``fixture`` names an offline
+    synthetic market (news frozen empty) instead of live data."""
     leg = BookLegSpec(
         leg_id=ticker,
-        fixture=None,
+        fixture=fixture,
         ticker=ticker,
         option_type=option_type,
         strike=strike,
@@ -39,17 +37,14 @@ def run_pipeline(
         quantity=float(quantity),
         multiplier=float(multiplier),
     )
-    book = BookSpec(version="1", as_of="", legs=(leg,))
-    out = run_book_pipeline(book, config=config, deps=deps, roles=roles)
+    out = run_book_pipeline(BookSpec(version="1", as_of="", legs=(leg,)), config=config, deps=deps, roles=roles)
     legs = out.get("leg_results") or []
     if not legs:
-        raise RuntimeError("Unified pipeline returned no leg results.")
+        raise RuntimeError("Pipeline returned no leg results.")
     leg_state = legs[0]
-    if not leg_state.get("ok"):
-        raise RuntimeError(str(leg_state.get("error") or "Single-leg pipeline failed."))
     bundle = leg_state.get("bundle")
-    if bundle is None:
-        raise RuntimeError("Missing successful leg bundle in unified result.")
+    if not leg_state.get("ok") or bundle is None:
+        raise RuntimeError(str(leg_state.get("error") or "Single-leg pipeline failed."))
     synthesis = leg_state.get("synthesis") or {}
     return {
         "ticker": ticker,
@@ -70,9 +65,7 @@ def run_pipeline(
         "stage_timings": leg_state.get("stage_timings") or {},
         "llm_calls": leg_state.get("llm_calls"),
         "no_escalation": leg_state.get("no_escalation", False),
-        "terminal_no_comparable_observation": leg_state.get(
-            "terminal_no_comparable_observation", False
-        ),
+        "terminal_no_comparable_observation": leg_state.get("terminal_no_comparable_observation", False),
     }
 
 
@@ -82,5 +75,5 @@ def build_graph(
     config: PipelineConfig | None = None,
     roles: LlmRoleRegistry | None = None,
 ):
-    """Canonical compiled graph (book-first parent with Send fan-out)."""
+    """The compiled product graph (book parent with ``Send`` fan-out per leg)."""
     return build_book_graph(config=config, deps=deps, roles=roles)

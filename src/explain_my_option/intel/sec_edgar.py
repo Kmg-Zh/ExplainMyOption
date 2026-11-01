@@ -13,9 +13,7 @@ from typing import Any, Callable, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from explain_my_option.data_loader import NewsItem
-
-from .types import IntelUnconfigured, SearchQuery
+from .types import IntelUnconfigured, NewsItem, SearchQuery
 
 _TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 _SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"

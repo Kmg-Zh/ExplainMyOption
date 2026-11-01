@@ -1,20 +1,11 @@
-"""Observation preconditions and basis-consistency guards (Task A3).
+"""Input guards that run before pricing.
 
-Two independent problems, both about trusting the *inputs* before pricing:
-
-1. A one-day attribution needs the *same contract* observed on both t-1 and
-   t. When a source can't supply that -- a whole day missing, or just this
-   contract missing on an otherwise-fine day -- that is a data coverage gap,
-   not an unexplained market move, and must never be reported as one.
-2. Splits and ticker renames fail *silently*: a mis-based price is still a
-   plausible-looking number. A handful of no-arbitrage-adjacent sanity
-   checks on the raw quotes catches this before it reaches the engine.
-
-Both are source-agnostic. Today only the live/fixture single-contract path
-exercises a subset of these (see ``leg_graph.fetch_market_node``); the full
-per-date chain-level checks (strike-window diagnostics, labelled
-substitution, the two multi-strike basis invariants) are built and tested
-here so Task A4's historical-chain adapter has them ready to call.
+1. Continuity: a one-day attribution needs the same contract observed on both
+   T-1 and T. A missing day or contract is a data coverage gap, never an
+   unexplained market move.
+2. Basis consistency: splits and ticker renames fail silently, because a
+   mis-based price still looks plausible. No-arbitrage sanity bounds on the
+   raw quotes catch them before the engine sees them.
 """
 
 from __future__ import annotations
@@ -34,7 +25,7 @@ class ObservationStatus(str, Enum):
 def classify_observation_status(
     *, reference_row_counts: Mapping[str, int], contract_rows: int
 ) -> ObservationStatus:
-    """A3.1: classify one date's observability for one contract.
+    """Classify one date's observability for one contract.
 
     ``reference_row_counts`` is a basket of reference symbols (e.g. SPY,
     AAPL, plus the case symbol) mapped to the source's row count for that
@@ -57,11 +48,10 @@ NO_COMPARABLE_OBSERVATION_TEMPLATE = (
 
 
 class NoComparableObservationError(Exception):
-    """A3.2: continuity gate failure. Never conflate with an unexplained break.
+    """Continuity gate failure: no comparison was possible at all.
 
-    One says the market did something the model did not capture; this says
-    no comparison was possible at all. Carries both per-date statuses so
-    the caller can route to a distinct terminal state.
+    Distinct from an unexplained break (the market did something the model
+    did not capture). Carries both per-date statuses.
     """
 
     def __init__(
@@ -98,7 +88,7 @@ def continuity_gate(
     date_t1: str,
     date_t: str,
 ) -> None:
-    """A3.2: raise ``NoComparableObservationError`` unless both dates are OK."""
+    """Raise ``NoComparableObservationError`` unless both dates are OK."""
     if status_t1 is ObservationStatus.OK and status_t is ObservationStatus.OK:
         return
     raise NoComparableObservationError(
@@ -133,14 +123,12 @@ def check_basis_consistency(
     carried_strikes: Sequence[float] = (),
     forward: Optional[float] = None,
 ) -> BasisCheckResult:
-    """A3.5: the silent-failure catcher, run before pricing.
+    """Catch a mis-based chain before pricing.
 
-    A single-contract caller (today's live/fixture path) can only ever
-    supply ``call_mid``/``put_mid`` + the matching strike; the two
-    multi-strike checks need a full chain (``carried_strikes`` + a
-    ``forward``), which only Task A4's historical adapter has. Whichever
-    inputs are missing, that check is skipped -- never guessed. On a hit,
-    never apply a correction factor: report the failing invariant and stop.
+    Single-contract callers supply ``call_mid``/``put_mid`` with the matching
+    strike; the two multi-strike checks need a full chain (``carried_strikes``
+    and a ``forward``). A check whose inputs are missing is skipped, never
+    guessed. On a hit, report the failing invariant; never apply a correction.
     """
     if call_mid is not None and call_strike is not None:
         limit = spot * 1.01
@@ -190,80 +178,3 @@ def check_basis_consistency(
             )
 
     return BasisCheckResult(False)
-
-
-@dataclass
-class StrikeWindowDiagnostics:
-    """A3.3: per (symbol, date) strike-window coverage.
-
-    Coverage narrows as the move widens, so deep-OTM contracts are
-    systematically absent on the most extreme days -- that bias must be
-    named in any case study built on a source exercising this.
-    """
-
-    strikes_available: tuple[float, ...]
-    expiries_available: tuple[str, ...]
-    spot: float
-
-    @property
-    def strike_min(self) -> Optional[float]:
-        return min(self.strikes_available) if self.strikes_available else None
-
-    @property
-    def strike_max(self) -> Optional[float]:
-        return max(self.strikes_available) if self.strikes_available else None
-
-
-def compute_strike_overlap(
-    t1: StrikeWindowDiagnostics, t: StrikeWindowDiagnostics, *, target_strike: float
-) -> tuple[Optional[tuple[float, float]], bool]:
-    """``(strike_overlap, overlap_contains_target)`` across the two dates."""
-    if t1.strike_min is None or t.strike_min is None:
-        return None, False
-    lo = max(t1.strike_min, t.strike_min)
-    hi = min(t1.strike_max, t.strike_max)  # type: ignore[arg-type]
-    if lo > hi:
-        return None, False
-    return (lo, hi), (lo <= target_strike <= hi)
-
-
-@dataclass
-class SubstitutionResult:
-    target_strike: float
-    used_strike: float
-    substitution_reason: str
-
-    @property
-    def substituted(self) -> bool:
-        return self.used_strike != self.target_strike
-
-
-def select_substitute_strike(
-    *,
-    target_strike: float,
-    target_expiry: str,
-    available: Mapping[str, Sequence[float]],
-    overlap: tuple[float, float],
-) -> Optional[SubstitutionResult]:
-    """A3.4: labelled substitution. Never silent, never across expiries.
-
-    ``available`` maps expiry -> strikes that are OK on *both* dates for
-    that expiry only. Picks the nearest such strike to the target inside
-    the overlap window, on the target's own expiry only.
-    """
-    strikes = available.get(target_expiry, ())
-    lo, hi = overlap
-    candidates = [k for k in strikes if lo <= k <= hi]
-    if not candidates:
-        return None
-    if target_strike in candidates:
-        return SubstitutionResult(target_strike, target_strike, "exact strike available")
-    nearest = min(candidates, key=lambda k: abs(k - target_strike))
-    return SubstitutionResult(
-        target_strike=target_strike,
-        used_strike=nearest,
-        substitution_reason=(
-            f"target strike {target_strike} not OK on both dates; substituted "
-            f"nearest in-overlap strike {nearest} on the same expiry"
-        ),
-    )

@@ -1,0 +1,49 @@
+"""Offline test setup: import this checkout's ``src`` and never see real credentials.
+
+``evals/`` is on the path because the historical cases test the eval's own
+no-lookahead and scoring rules (``historical.cases``, ``historical.scoring``).
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+for path in (ROOT / "tests", ROOT / "evals", ROOT / "src"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+# Blank rather than unset: python-dotenv (loaded by the CLI) never overrides an
+# existing variable, so a developer's .env cannot leak a real key into a test.
+_CREDENTIALS = (
+    "OPENAI_API_KEY",
+    "TAVILY_API_KEY",
+    "EMO_SEC_USER_AGENT",
+    "EMO_DIAGNOSE_SYSTEM_EXTRA",
+    "EMO_DIAGNOSE_SYSTEM_EXTRA_FILE",
+    "LANGSMITH_TRACING",
+    "LANGCHAIN_TRACING_V2",
+)
+
+
+@pytest.fixture(autouse=True)
+def offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _CREDENTIALS:
+        monkeypatch.setenv(name, "")
+
+
+# Two suites, one per folder: `pytest tests/agent` or `pytest -m agent` (and the
+# same for engineering). CI runs them as separate steps, so a test outside both
+# folders would silently drop out of CI; refuse it instead.
+SUITES = ("engineering", "agent")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        suite = item.path.relative_to(ROOT / "tests").parts[0]
+        if suite not in SUITES:
+            raise pytest.UsageError(f"{item.nodeid}: put tests under tests/engineering/ or tests/agent/")
+        item.add_marker(suite)

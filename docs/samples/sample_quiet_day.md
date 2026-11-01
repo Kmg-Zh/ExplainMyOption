@@ -9,7 +9,7 @@
 
 * **Mark MTM PnL**: `+$0.0250` (+0.5%)
 * **Model ΔP**: `+$0.0250`
-* **Primary drivers**: **Theta decay** (46%) and **Vega PnL** (26%) and **Delta PnL** (26%).
+* **Primary drivers**: **Theta decay** (-45.7%) and **Vega PnL** (+25.9%) and **Delta PnL** (+25.8%).
 * **Verdict**: Nothing to explain. The move is accounted for by carry and a small spot move; the unexplained portion is within tolerance. No news search was performed.
 * **Confidence**: **Medium** — Escalation metric is at or below the quiet-day threshold; see the Mark Reconciliation section for the exact figures.
 
@@ -41,16 +41,16 @@
 
 ## 4. Quantitative PnL Attribution
 
-Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% shares use sum-of-|components| because |total PnL| is near zero):
+Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (the components largely offset, so % Share is of the gross movement Σ|component|):
 
 | Attribution Component | Value ($) | % Share | Quant Driver |
 | :--- | ---: | ---: | :--- |
 | **Delta PnL (ΔS · Delta)** | `+$0.1641` | +25.8% | Stock moved from $165.02 to $165.33 (+0.3100) |
 | **Gamma PnL (½(ΔS)² · Gamma)** | `+$0.0016` | +0.3% | Convexity from the spot move |
-| **Vega PnL (Δσ · Vega)** | `+$0.1644` | +25.9% | IV moved +0.90 vol pts (25.35% → 26.81%) |
-| **Theta decay (Δt · Theta)** | `-$0.2903` | +45.7% | Calendar time decay (1 day) |
-| **Unexplained residual (ε)** | `-$0.0148` | +2.3% | American EE, skew curvature, dividend discreteness, model gap |
-| **Total Model PnL** | **+$0.0250** | **100.0%** | ΔP = P₁ − P₀ (model) |
+| **Vega PnL (Δσ · Vega)** | `+$0.1644` | +25.9% | IV moved +0.90 vol pts (26.03% → 26.94%) |
+| **Theta decay (Δt · Theta)** | `-$0.2903` | -45.7% | Calendar time decay (1 day) |
+| **Unexplained residual (ε)** | `-$0.0148` | -2.3% | American EE, skew curvature, dividend discreteness, model gap |
+| **Total Model PnL** | **+$0.0250** | **+3.9%** | ΔP = P₁ − P₀ (model) |
 
 ---
 
@@ -58,22 +58,15 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 * **Taylor residual**: `-$0.0148` (59.1% of |model|)
 
-### Second-order Taylor (Layer 3)
+### Second-order Taylor (vanna, volga)
 * other second-order: `-$0.0003`
-* Combined: `-$0.0003` | Residual after: `+$0.0253`
+* Combined: `-$0.0003` | Residual after: `-$0.0145`
 
-### Sequential full revaluation (Layer 4, t → S → σ → r)
-* **time**: `-$0.2959`
-* **spot**: `+$0.1651`
-* **vol**: `+$0.1554`
-* **rate**: `-$0.0041`
-* Step sum: `+$0.0205` | Model ΔP: `+$0.0250` | Audit residual: `+$0.0045`
-
-### Ex-div attribution overlay (FO; official PnL stays American FDM Taylor)
-* **Spot drop vs dividend**: spot `+$0.3100` vs next cash dividend `+$0.2400` (gap `+$0.5500`)
-* **American FDM vs European analytic (no cash div, cross-check)**: `+$4.9750` vs `+$4.9973` (gap `-$0.0223`)
-* **Early-exercise premium** (American vs European, same dividend schedule, signed, not floored): `+$0.0078` — not material
-* **Dividend PV effect** (European, same divs − no divs): `-$0.0310`
+### Ex-div attribution overlay (official PnL stays the American FDM Taylor blotter)
+* **Spot drop vs dividend** (per share): spot `+$0.3100` vs next cash dividend `+$0.2400` (gap `+$0.5500`)
+* **American FDM vs European analytic (no cash div, cross-check, per option)**: `+$4.9750` vs `+$4.9973` (gap `-$0.0223`)
+* **Early-exercise premium** (American vs European, same dividend schedule, signed, not floored, per option): `+$0.0078` — not material
+* **Dividend PV effect** (European, same divs − no divs, per option): `-$0.0310`
 * **Dividend coverage** (dividend / time value): `0.05` — carry/theta case, not an early-exercise case
 * **Vol (Taylor Vega PnL)**: `+$0.1644`
 * **Residual (Taylor ε)**: `-$0.0148`
@@ -81,7 +74,7 @@ Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities) (% sha
 
 ### Diagnostic tool summary
 
-* **Tools run** (4 total; costly 1/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`, `path_reprice`
+* **Tools run** (3 total; costly 0/1, free tools do not use the budget): `reconcile_mark_vs_model`, `quote_quality_and_noise_band`, `taylor_second_order`
 * **Skipped candidates**:
   * `deep_diagnostics` — mark calibrated and gap small
   * `american_dividend_exercise_check` — budget exhausted or lower priority

@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+@dataclass
+class NewsItem:
+    """One retrieved headline. ``published`` is an ISO date or datetime when known."""
+
+    title: str
+    publisher: str = ""
+    link: str = ""
+    published: str = ""
+
 
 # Allow-listed source ids. Register a new IntelSource to honor a new id.
 IntelSourceId = Literal["yfinance_news", "tavily", "sec_8k"]

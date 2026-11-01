@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import date
+from dataclasses import asdict, dataclass, field, replace
+from datetime import date, timedelta
 from typing import Literal, Optional, Sequence
 
 OptionType = Literal["call", "put"]
@@ -35,6 +35,18 @@ class Greeks:
     vega: float
     theta: float
 
+    def scaled(self, scale: float) -> Greeks:
+        """Position Greeks: every field times ``scale`` (quantity × multiplier)."""
+        if scale == 1.0:
+            return self
+        return Greeks(
+            price=self.price * scale,
+            delta=self.delta * scale,
+            gamma=self.gamma * scale,
+            vega=self.vega * scale,
+            theta=self.theta * scale,
+        )
+
     def as_dict(self) -> dict:
         return asdict(self)
 
@@ -51,6 +63,20 @@ class PnLAttribution:
     residual_pnl: float
     d_spot: float
     d_vol: float
+
+    def scaled(self, scale: float) -> PnLAttribution:
+        """Position PnL. The market moves ``d_spot`` and ``d_vol`` are not scaled."""
+        if scale == 1.0:
+            return self
+        return replace(
+            self,
+            total_pnl=self.total_pnl * scale,
+            delta_pnl=self.delta_pnl * scale,
+            gamma_pnl=self.gamma_pnl * scale,
+            vega_pnl=self.vega_pnl * scale,
+            theta_pnl=self.theta_pnl * scale,
+            residual_pnl=self.residual_pnl * scale,
+        )
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -106,11 +132,9 @@ class MarketSnapshot:
     volume: Optional[float] = None
     open_interest: Optional[float] = None
     risk_free_rate_source: RateSource = "fixture"
-    # A6.2: per-date quote tier, "tight"|"normal"|"wide" (data.historical_chain's
-    # vocabulary) when known -- only HistoricalChainMarketLoader populates
-    # these today, since it is the only source that quotes t-1 directly
-    # rather than deriving iv_prev from a cache/HV20 proxy. None means
-    # unknown, which marks_reliable() treats as not reliable.
+    # Quote tier on each date ("tight" | "normal" | "wide") when the source
+    # quotes both days directly (historical chains). None means unknown, which
+    # report.reconciliation.marks_reliable treats as not reliable.
     quote_tier_now: Optional[str] = None
     quote_tier_prev: Optional[str] = None
 
@@ -122,8 +146,48 @@ class MarketSnapshot:
         """Contracts × contract multiplier. Default 1 = per option."""
         return float(self.quantity) * float(self.multiplier)
 
+    def as_of_date(self) -> date:
+        """Evaluation date T: ``as_of``, else today."""
+        return date.fromisoformat(self.as_of) if self.as_of else date.today()
+
+    def prev_date(self) -> date:
+        """Observation date T-1: ``prev_as_of``, else the calendar day before T."""
+        if self.prev_as_of:
+            return date.fromisoformat(self.prev_as_of)
+        return self.as_of_date() - timedelta(days=1)
+
+    def spec(
+        self,
+        *,
+        spot: float,
+        vol: float,
+        eval_date: date,
+        rate: Optional[float] = None,
+        surface: Optional[VolSurfaceData] = None,
+    ) -> PricingSpec:
+        """Single-date pricing request for this contract (rate defaults to today's)."""
+        return PricingSpec(
+            spot=spot,
+            strike=self.strike,
+            rate=self.risk_free_rate if rate is None else rate,
+            dividend_yield=self.dividend_yield,
+            vol=vol,
+            expiry=self.expiry,
+            eval_date=eval_date,
+            option_type=self.option_type,  # type: ignore[arg-type]
+            exercise_style=self.exercise_style,
+            discrete_dividends=self.discrete_dividends,
+            surface=surface,
+        )
+
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+def intrinsic_value(option_type: str, spot: float, strike: float) -> float:
+    if str(option_type).lower().startswith("c"):
+        return max(float(spot) - float(strike), 0.0)
+    return max(float(strike) - float(spot), 0.0)
 
 
 @dataclass
@@ -143,6 +207,15 @@ class VolSurfaceData:
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass
+class LoadedData:
+    """What a market loader returns: today's snapshot and optional vol grids."""
+
+    snapshot: MarketSnapshot
+    surface: Optional[VolSurfaceData] = None
+    surface_prev: Optional[VolSurfaceData] = None
 
 
 @dataclass
@@ -168,7 +241,8 @@ class PricingDiagnostics:
 
     data_source: DataSource
     exercise_style: ExerciseStyle
-    engine: EngineId = "fdm_flat"
+    # The reference engine uses an EngineId; another PnL source names its own.
+    engine: str = "fdm_flat"
     ql_version: Optional[str] = None
     iv_prev_source: Optional[IvPrevSource] = None
     local_vol_used: bool = False
@@ -179,9 +253,8 @@ class PricingDiagnostics:
     european_price: Optional[float] = None
     american_price: Optional[float] = None
     early_exercise_premium: Optional[float] = None
-    # P_eu_div - P_eu_nodiv (signed, same FDM grid both sides). Together
-    # with early_exercise_premium this reconstructs the legacy
-    # American-minus-no-div-European figure to 1e-9 (see facade.py).
+    # European price with dividends minus without (signed, same FDM grid).
+    # early_exercise_premium + dividend_pv_effect = American - no-div European.
     dividend_pv_effect: Optional[float] = None
     # True when early_exercise_premium < -1e-6*S -- a numerical anomaly
     # (engine/grid inconsistency), not a genuine negative exercise value.
@@ -231,17 +304,9 @@ class SecondOrderTaylorResult:
     volga: float
     vanna_pnl: float
     volga_pnl: float
-    combined_pnl: float
-    residual_after: float
+    combined_pnl: float  # vanna_pnl + volga_pnl
+    residual_after: float  # first-order Taylor residual minus combined_pnl
     limitations: list[str] = field(default_factory=list)
-    # A5.2: named per the spec, alongside (not replacing) the fields above.
-    # second_order_explained is combined_pnl under the spec's own name;
-    # residual_first_order is the *first-order Taylor* residual (pnl.residual_pnl)
-    # this correction is applied against, distinct from residual_after's
-    # existing (total_pnl - combined_pnl) definition.
-    residual_first_order: float = 0.0
-    second_order_explained: float = 0.0
-    residual_reduction_pct: float = 0.0
 
     def as_dict(self) -> dict:
         return asdict(self)

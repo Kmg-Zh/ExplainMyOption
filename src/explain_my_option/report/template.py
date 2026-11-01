@@ -4,41 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..data_loader import NewsItem
-from ..intel.types import SearchPlan
+from ..intel.types import NewsItem, SearchPlan
 from .facts import PositionBundle, PositionFacts, build_portfolio_facts, build_position_facts
+from .formatting import is_reference_engine, official_model, pct
+from .formatting import money as _money
 from .reconciliation import ReconciliationFacts
 from .schema import DiagnosticSynthesis
 
-
-def _money(x: float) -> str:
-    sign = "+" if x >= 0 else "-"
-    return f"{sign}${abs(x):,.4f}"
-
-
-# Display-only cap: a percentage over a near-zero denominator (e.g. a residual
-# over a ~$0 model move) prints as an absurd figure like 6582029380.9%. Routing
-# and escalation numerics are untouched; only what is printed is clamped.
-_PCT_DISPLAY_CAP = 1000.0
-
-
-def _pct_mag(x: float, signed: bool = False) -> str:
-    """One-decimal percent text, ``>1000%`` when the denominator is near zero."""
-    if abs(x) > _PCT_DISPLAY_CAP:
-        sign = "-" if x < 0 else ("+" if signed else "")
-        return f"{sign}>{_PCT_DISPLAY_CAP:.0f}%"
-    return f"{x:+.1f}%" if signed else f"{x:.1f}%"
-
-
-def _pct(x: float) -> str:
-    return _pct_mag(x, signed=True)
-
-
-def _abs_share(part: float, parts: list[float]) -> float:
-    denom = sum(abs(x) for x in parts)
-    if denom < 1e-12:
-        return 0.0
-    return 100.0 * abs(part) / denom
+# A factor counts as a headline driver when it is at least this share of the
+# gross factor movement.
+_DRIVER_MIN_GROSS_SHARE = 0.05
 
 
 def _confidence_badge(level: str) -> str:
@@ -99,7 +74,7 @@ def _reconciliation_section(facts: PositionFacts) -> str:
     lines.append(f"* **Model ΔP (engine)**: `{_money(rec.model_pnl_usd)}`")
     if rec.model_vs_mark_gap_usd is not None:
         gap_note = (
-            f" ({_pct_mag(rec.gap_pct_of_model, signed=True)} of model)"
+            f" ({pct(rec.gap_pct_of_model)} of model)"
             if rec.gap_pct_of_model is not None
             else ""
         )
@@ -115,7 +90,7 @@ def _reconciliation_section(facts: PositionFacts) -> str:
 
 
 def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) -> list[str]:
-    """A6.1/A6.3: print ε_method and ε_model as separate lines, always."""
+    """The method and model residuals, always as separate lines."""
     method = rec.residual_method_usd if rec is not None else facts.attribution[-1].usd
     lines = [
         "",
@@ -134,7 +109,7 @@ def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) 
         )
     basis = rec.escalation_basis if rec is not None else "method"
     metric = rec.escalation_metric_pct if rec is not None else None
-    metric_note = f" ({_pct_mag(metric)})" if metric is not None else ""
+    metric_note = f" ({pct(metric, signed=False)})" if metric is not None else ""
     lines.append(f"* **Escalation basis**: `{basis}`{metric_note}")
     if basis == "method":
         dates = f"{facts.eval_date}" if not facts.prev_as_of_note else f"{facts.prev_as_of_note} and/or {facts.eval_date}"
@@ -157,23 +132,24 @@ def _two_residuals_lines(facts: PositionFacts, rec: ReconciliationFacts | None) 
 
 
 def _attribution_table(facts: PositionFacts) -> str:
-    pct_note = (
-        " (% shares use sum-of-|components| because |total PnL| is near zero)"
-        if facts.pct_uses_abs_share
+    share_note = (
+        " (the components largely offset, so % Share is of the gross movement Σ|component|)"
+        if facts.shares_of_gross
         else ""
     )
     lines = [
-        f"Greek-based (Taylor) attribution (official FDM Greeks, T-1 sensitivities){pct_note}:",
+        f"Greek-based (Taylor) attribution (official {official_model(facts.engine)} Greeks, "
+        f"T-1 sensitivities){share_note}:",
         "",
         "| Attribution Component | Value ($) | % Share | Quant Driver |",
         "| :--- | ---: | ---: | :--- |",
     ]
     for row in facts.attribution:
         lines.append(
-            f"| **{row.label}** | `{_money(row.usd)}` | {_pct(row.pct_of_total)} | {row.driver_note} |"
+            f"| **{row.label}** | `{_money(row.usd)}` | {pct(row.share_pct)} | {row.driver_note} |"
         )
     lines.append(
-        f"| **Total Model PnL** | **{_money(facts.model_pnl_usd)}** | **100.0%** | "
+        f"| **Total Model PnL** | **{_money(facts.model_pnl_usd)}** | **{pct(facts.total_share_pct)}** | "
         f"ΔP = P₁ − P₀ (model) |"
     )
     return "\n".join(lines)
@@ -185,13 +161,21 @@ def _residual_drill_section(
 ) -> str:
     findings = diagnostic_findings or {}
     results = findings.get("results") or {}
+    # Tool payloads are per option; PnL figures below are position-scaled
+    # like the attribution table.
+    scale = facts.position_scale
     lines = [
         "## 5. Residual Drill",
         "",
         f"* **Taylor residual**: `{_money(facts.attribution[-1].usd)}` "
-        f"({_pct_mag(facts.residual_pct)} of |model|)",
+        f"({pct(facts.residual_pct, signed=False)} of |model|)",
     ]
-    if findings.get("terminal_unexplained_break"):
+    if findings.get("terminal_cause") == "verifier_hard_fail":
+        lines.append(
+            "* **Terminal break**: the verifier's hard failure was confirmed by code (see Headline); "
+            "the narrative is not reliable and needs human review."
+        )
+    elif findings.get("terminal_unexplained_break"):
         lines.append(
             "* **Terminal break**: diagnostic budget exhausted with large unexplained "
             "residual/gap; the factor story is not reliable and needs human review."
@@ -211,11 +195,11 @@ def _residual_drill_section(
         )
     second = results.get("taylor_second_order")
     if second:
-        # A5.4: materiality folding -- a term earns its own line only if
-        # |term| >= max(0.01*|ΔP|, 0.01); smaller terms fold into one line.
-        materiality_floor = max(0.01 * abs(facts.total_pnl), 0.01)
-        vanna_pnl = float(second.get("vanna_pnl", 0.0))
-        volga_pnl = float(second.get("volga_pnl", 0.0))
+        # A term earns its own line only if |term| >= max(1% of |ΔP|, $0.01);
+        # smaller terms fold into one line.
+        materiality_floor = max(0.01 * abs(facts.model_pnl_usd), 0.01)
+        vanna_pnl = scale * float(second.get("vanna_pnl", 0.0))
+        volga_pnl = scale * float(second.get("volga_pnl", 0.0))
         term_lines: list[str] = []
         folded = 0.0
         if abs(vanna_pnl) >= materiality_floor:
@@ -231,24 +215,24 @@ def _residual_drill_section(
         lines.extend(
             [
                 "",
-                "### Second-order Taylor (Layer 3)"
+                "### Second-order Taylor (vanna, volga)"
                 + (" — reference only, see Regime above" if taylor_regime == "INVALID" else ""),
                 "* " + " | ".join(term_lines),
-                f"* Combined: `{_money(second.get('combined_pnl', 0.0))}` | "
-                f"Residual after: `{_money(second.get('residual_after', 0.0))}`",
+                f"* Combined: `{_money(scale * float(second.get('combined_pnl', 0.0)))}` | "
+                f"Residual after: `{_money(scale * float(second.get('residual_after', 0.0)))}`",
             ]
         )
     path = results.get("path_reprice")
     if path:
-        lines.extend(["", "### Sequential full revaluation (Layer 4, t → S → σ → r)"])
+        lines.extend(["", "### Sequential full revaluation (t → S → σ → r)"])
         for step in path.get("steps") or []:
             lines.append(
-                f"* **{step.get('factor', '?')}**: `{_money(step.get('pnl_usd', 0.0))}`"
+                f"* **{step.get('factor', '?')}**: `{_money(scale * float(step.get('pnl_usd', 0.0)))}`"
             )
         lines.append(
-            f"* Step sum: `{_money(path.get('step_sum', 0.0))}` | "
-            f"Model ΔP: `{_money(path.get('model_total_pnl', 0.0))}` | "
-            f"Audit residual: `{_money(path.get('residual_vs_model', 0.0))}`"
+            f"* Step sum: `{_money(scale * float(path.get('step_sum', 0.0)))}` | "
+            f"Model ΔP: `{_money(scale * float(path.get('model_total_pnl', 0.0)))}` | "
+            f"Audit residual: `{_money(scale * float(path.get('residual_vs_model', 0.0)))}`"
         )
     if not second and not path:
         lines.append(
@@ -259,23 +243,23 @@ def _residual_drill_section(
         lines.extend(
             [
                 "",
-                "### Ex-div attribution overlay (FO; official PnL stays American FDM Taylor)",
-                f"* **Spot drop vs dividend**: spot `{_money(float(split.get('spot_drop') or 0.0))}` "
+                "### Ex-div attribution overlay (official PnL stays the American FDM Taylor blotter)",
+                f"* **Spot drop vs dividend** (per share): spot `{_money(float(split.get('spot_drop') or 0.0))}` "
                 f"vs next cash dividend `{_money(float(split.get('dividend_amount') or 0.0))}` "
                 f"(gap `{_money(float(split.get('spot_drop_vs_dividend') or 0.0))}`)",
-                f"* **American FDM vs European analytic (no cash div, cross-check)**: "
+                f"* **American FDM vs European analytic (no cash div, cross-check, per option)**: "
                 f"`{_money(float(split.get('american_price') or 0.0))}` vs "
                 f"`{_money(float(split.get('european_analytic_no_div') or 0.0))}` "
                 f"(gap `{_money(float(split.get('am_minus_eu') or 0.0))}`)",
                 f"* **Early-exercise premium** (American vs European, same dividend "
-                f"schedule, signed, not floored): "
+                f"schedule, signed, not floored, per option): "
                 f"`{_money(float(split.get('ee_premium_now') or 0.0))}`"
                 + (
                     " — material"
                     if split.get("ee_premium_material")
                     else " — not material"
                 ),
-                f"* **Dividend PV effect** (European, same divs − no divs): "
+                f"* **Dividend PV effect** (European, same divs − no divs, per option): "
                 f"`{_money(float(split.get('dividend_pv_effect') or 0.0))}`",
                 (
                     f"* **Dividend coverage** (dividend / time value): "
@@ -289,15 +273,15 @@ def _residual_drill_section(
                     and split.get("ee_relevant") is not None
                     else "* **Dividend coverage**: n/a (no upcoming dividend or expiry data)"
                 ),
-                f"* **Vol (Taylor Vega PnL)**: `{_money(float(split.get('vega_pnl') or 0.0))}`",
-                f"* **Residual (Taylor ε)**: `{_money(float(split.get('residual_pnl') or 0.0))}`",
+                f"* **Vol (Taylor Vega PnL)**: `{_money(scale * float(split.get('vega_pnl') or 0.0))}`",
+                f"* **Residual (Taylor ε)**: `{_money(scale * float(split.get('residual_pnl') or 0.0))}`",
                 "* _Overlay only — not a trading edge. LSM/Heston stay diagnostic-only._",
             ]
             + (
                 [
                     f"* early exercise premium: {float(split.get('ee_premium_now') or 0.0):.4f} "
-                    "(NEGATIVE — numerical anomaly, engine/grid inconsistency; "
-                    "see docs/dev/WORK_ORDER_REPORT.md)"
+                    "(NEGATIVE — numerical anomaly from an engine/grid inconsistency, "
+                    "not an exercise signal)"
                 ]
                 if split.get("ee_premium_anomaly")
                 else []
@@ -326,7 +310,38 @@ def _diagnostic_summary_section(findings: dict[str, Any] | None) -> str:
         for item in skipped:
             if isinstance(item, dict):
                 lines.append(f"  * `{item.get('name', '?')}` — {item.get('reason', '')}")
+    records = findings.get("playbook_records") or []
+    if records:
+        lines.append(
+            "* **Playbook records** (selected by code for the narrator): "
+            + ", ".join(f"`{r.get('id', '?')}` (`{r.get('when', '?')}`)" for r in records)
+        )
     return "\n".join(lines)
+
+
+def _digest_item_lines(items: list[dict[str, Any]], start: int) -> tuple[list[str], int]:
+    lines: list[str] = []
+    idx = start
+    for item in items[:5]:
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        pub = str(item.get("publisher") or "").strip()
+        fact = str(item.get("one_line_fact") or "").strip()
+        src = f" _(Source: {pub})_" if pub else ""
+        lines.append(f"{idx}. **{title}**{src}")
+        if fact:
+            lines.append(f"   {fact}")
+        idx += 1
+    return lines, idx
+
+
+def _news_lines(news: list[NewsItem]) -> list[str]:
+    lines = []
+    for i, item in enumerate(news, 1):
+        pub = f" — _{item.publisher}_" if item.publisher else ""
+        lines.append(f"{i}. [{item.title}]({item.link}){pub}" if item.link else f"{i}. {item.title}{pub}")
+    return lines
 
 
 def _evidence_section(
@@ -339,34 +354,18 @@ def _evidence_section(
     section: int = 6,
 ) -> str:
     reliable = facts.reconciliation.observation_reliable if facts.reconciliation else True
-    findings = diagnostic_findings or {}
-    digest = findings.get("intel_digest") if isinstance(findings, dict) else None
-    digest_relevant = (
-        list(digest.get("relevant") or [])
-        if isinstance(digest, dict)
-        else []
-    )
-    digest_background = (
-        list(digest.get("background") or [])
-        if isinstance(digest, dict)
-        else []
-    )
-    digest_brief = (
-        str(digest.get("brief") or "").strip()
-        if isinstance(digest, dict)
-        else ""
-    )
-    digest_discarded_count = (
-        len(digest.get("discarded") or [])
-        if isinstance(digest, dict)
-        else 0
-    )
+    digest = (diagnostic_findings or {}).get("intel_digest")
+    if not isinstance(digest, dict):
+        digest = None
+    digest_relevant = list(digest.get("relevant") or []) if digest else []
+    digest_background = list(digest.get("background") or []) if digest else []
+    digest_brief = str(digest.get("brief") or "").strip() if digest else ""
+    digest_discarded_count = len(digest.get("discarded") or []) if digest else 0
     lines = [
         f"## {section}. Root-Cause Market Intelligence",
         "",
     ]
-    skip_reason = getattr(plan, "skip_reason", "") if plan is not None else ""
-    if skip_reason:
+    if plan is not None and plan.skip_reason:
         lines.append(
             "_No catalyst search — move below materiality / observation lock._"
         )
@@ -388,51 +387,23 @@ def _evidence_section(
         lines.append(f"_Intel triage discarded {digest_discarded_count} low-relevance headline(s)._")
     if digest_brief or digest_discarded_count:
         lines.append("")
-    if plan is not None:
-        for note in plan.honesty_notes():
-            lines.append(f"_{note}_")
-        if plan.honesty_notes():
-            lines.append("")
+    notes = plan.honesty_notes() if plan is not None else []
+    lines.extend(f"_{note}_" for note in notes)
+    if notes:
+        lines.append("")
 
-    if isinstance(digest, dict):
-        idx = 1
-        for item in digest_relevant[:5]:
-            title = str(item.get("title") or "").strip()
-            if not title:
-                continue
-            pub = str(item.get("publisher") or "").strip()
-            fact = str(item.get("one_line_fact") or "").strip()
-            src = f" _(Source: {pub})_" if pub else ""
-            lines.append(f"{idx}. **{title}**{src}")
-            if fact:
-                lines.append(f"   {fact}")
-            idx += 1
+    if digest is not None:
+        item_lines, idx = _digest_item_lines(digest_relevant, 1)
+        lines.extend(item_lines)
         if digest_background:
             if digest_relevant:
                 lines.append("")
             lines.append("_Peer / sector background (indirect context, not a required catalyst):_")
             lines.append("")
-            for item in digest_background[:5]:
-                title = str(item.get("title") or "").strip()
-                if not title:
-                    continue
-                pub = str(item.get("publisher") or "").strip()
-                fact = str(item.get("one_line_fact") or "").strip()
-                src = f" _(Source: {pub})_" if pub else ""
-                lines.append(f"{idx}. **{title}**{src}")
-                if fact:
-                    lines.append(f"   {fact}")
-                idx += 1
+            item_lines, idx = _digest_item_lines(digest_background, idx)
+            lines.extend(item_lines)
         if idx == 1:
-            if news:
-                for i, item in enumerate(news[:5], 1):
-                    pub = f" — _{item.publisher}_" if item.publisher else ""
-                    if item.link:
-                        lines.append(f"{i}. [{item.title}]({item.link}){pub}")
-                    else:
-                        lines.append(f"{i}. {item.title}{pub}")
-            else:
-                lines.append("_No corroborating headlines retrieved for this window._")
+            lines.extend(_news_lines(news[:5]) or ["_No corroborating headlines retrieved for this window._"])
         return "\n".join(lines)
     if synthesis.evidence:
         for i, item in enumerate(synthesis.evidence, 1):
@@ -440,15 +411,8 @@ def _evidence_section(
                 f"{i}. **[{item.headline}]** _(Source: {item.source})_  \n"
                 f"   {item.relevance}"
             )
-    elif news:
-        for i, item in enumerate(news, 1):
-            pub = f" — _{item.publisher}_" if item.publisher else ""
-            if item.link:
-                lines.append(f"{i}. [{item.title}]({item.link}){pub}")
-            else:
-                lines.append(f"{i}. {item.title}{pub}")
     else:
-        lines.append("_No corroborating headlines retrieved for this window._")
+        lines.extend(_news_lines(news) or ["_No corroborating headlines retrieved for this window._"])
     return "\n".join(lines)
 
 
@@ -487,12 +451,16 @@ def render_position_report(
 ) -> str:
     """Seven-section morning-pack diagnostic report for one position."""
     news = news or []
-    status = f"Verified by QuantLib ({facts.engine})"
+    if is_reference_engine(facts.engine):
+        status = f"Verified by QuantLib ({facts.engine})"
+    else:
+        status = f"Priced by {facts.engine}"
     headline_label = "Mark MTM PnL" if facts.headline_is_mtm else "Model PnL (no mark)"
+    gross = sum(abs(r.usd) for r in facts.attribution)
     driver_parts = [
-        f"**{row.label.split('(')[0].strip()}** ({_abs_share(row.usd, [r.usd for r in facts.attribution]):.0f}%)"
+        f"**{row.label.split('(')[0].strip()}** ({pct(row.share_pct)})"
         for row in sorted(facts.attribution, key=lambda r: abs(r.usd), reverse=True)
-        if _abs_share(row.usd, [r.usd for r in facts.attribution]) >= 5.0 and row.key != "residual"
+        if row.key != "residual" and gross > 1e-12 and abs(row.usd) >= _DRIVER_MIN_GROSS_SHARE * gross
     ][:3]
     driver_line = " and ".join(driver_parts) if driver_parts else synthesis.primary_driver
 
@@ -507,8 +475,7 @@ def render_position_report(
         "",
         "## 1. Headline",
         "",
-        f"* **{headline_label}**: `{_money(facts.headline_pnl_usd)}` "
-        f"({ _pct(facts.pnl_pct) if facts.headline_is_mtm else _pct(facts.pnl_pct) })",
+        f"* **{headline_label}**: `{_money(facts.headline_pnl_usd)}` ({pct(facts.pnl_pct)})",
         f"* **Model ΔP**: `{_money(facts.model_pnl_usd)}`",
         f"* **Primary drivers**: {driver_line}.",
     ]
