@@ -221,7 +221,7 @@ def _mask_unstable_lines(text: str) -> str:
     CI resolves under ``QuantLib>=1.43,<2`` (a release bump alone is not pricing drift)."""
 
     def mask(line: str) -> str:
-        if line.startswith("- Heston"):
+        if line.startswith("- ") and "Heston" in line:
             return re.sub(r"-?\d+\.\d+(e-?\d+)?", "<num>", line)
         if line.startswith("| QuantLib |"):
             return "| QuantLib | <ver> |"
