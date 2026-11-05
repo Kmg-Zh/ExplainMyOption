@@ -63,6 +63,27 @@ the narrator that a diagnostic-pass terminal break must show in the verdict.
 The verdict logic is unchanged. The report and `audit.json` list the records a
 leg got (`playbook_records`).
 
+### Stale spot, 2026-09-17 to 2026-11-04
+
+The live loader took "the last two valid daily closes" as spot. At 21:15 ET
+Yahoo usually lists the session's daily bar with no close yet, so the run
+paired that session's option marks with the previous session's spot move.
+Checked against published closes, 167 of the 246 cached leg-days in this
+window carry the previous session's close, and 26 of the 33 days have at
+least one such leg. On those legs the mark PnL is right (the option quotes are
+the session's own), but the Greek attribution is not, and neither is any
+narrative built on it: mark calibration put the wrong day's spot move into
+vega. The clearest case is 2026-11-04: AAPL closed +5.3% (331.90 → 349.51), the
+report used −1.9% (338.32 → 331.90), the 325C escalated on a 482% mark gap,
+and the 350C was narrated as a +31 vol pt "volatility shock". With the session
+closes its vol moved −0.3 pts and delta plus gamma explain 95% of the move.
+
+Since the data-check fix (after the 2026-11-04 run) spot is dated to the
+quotes, and a mark that fails its
+no-arbitrage bounds or calibrates far from the quote source's IV ends the leg
+as a data break ([README](../../README.md#data-checks)). The 33 entries above
+stay as they were written.
+
 Days before the relevant fix landed keep their real outcome, including any
 escalation that fix would have prevented; the incident write-ups are in
 [`docs/archive/WORK_ORDER_REPORT.md`](../archive/WORK_ORDER_REPORT.md).

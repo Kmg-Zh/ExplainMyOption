@@ -106,6 +106,19 @@ The pricing layer is checked against arbitrage and numerical invariants, not onl
 | Reference prices | published American put benchmark values |
 | Implied borrow | recovered from put-call parity within 1e-3 on a known-q chain |
 
+## Data checks
+
+A mark paired with another session's spot looks like a real move, and mark calibration turns the gap into vega. Code checks the inputs before anything is narrated; a failure ends the leg as a **Data Break**: no blotter, no narrative, no news search (`src/explain_my_option/data/observation.py`).
+
+| Check | Runs in | Catches |
+|---|---|---|
+| Spot dated to the quotes | live loader | In the evening Yahoo lists the session's daily bar before it has a close. The spot is that session's close (or Yahoo's regular-market price stamped with the same session), and the prior spot is the close of the prior mark's session, never "the last valid close". |
+| No-arbitrage bounds on both marks | `fetch_market` | A mark under intrinsic or forward intrinsic, or above spot (call) or strike (put), at its own date's spot |
+| Calibrated IV vs the quote source's IV | `quant` | A mark that only fits at a vol more than 5 vol pts and 25% away from the source's own IV (checked when time value is at least 30% of the mark) |
+| No calibration to a proxy | `quant` | A first live day: with no cached t-1 mark there is nothing to calibrate the prior day to |
+
+Through the 2026-11-04 run the live loader took the last two valid daily closes, so most runlog days paired the session's option marks with the previous session's spot move; see [docs/runlog/README.md](docs/runlog/README.md#stale-spot-2026-09-17-to-2026-11-04).
+
 ## Two residuals
 
 Every run carries two distinct residuals, not one. `ε_method` is the gap between the model's own PnL and what the Taylor / second-order decomposition explains — pure arithmetic (truncation, discretization, American-exercise effects), and a catalyst may never be blamed for it. `ε_model` is the gap between the market's real price change and the model's — the only residual a news catalyst may legitimately explain — but it exists only when reliable marks are available on both dates. Escalation is driven by `ε_model` when reliable marks exist and by `ε_method` otherwise, and every report labels which basis (`escalation_basis`) is active.

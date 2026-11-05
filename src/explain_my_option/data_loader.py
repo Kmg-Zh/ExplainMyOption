@@ -12,7 +12,7 @@ import yfinance as yf
 
 from .data.cache import MIN_PLAUSIBLE_IV, load_t1, upsert_snapshot
 from .data.dividends import normalize_dividend_yield, project_dividends
-from .data.observation import ObservationStatus, continuity_gate
+from .data.observation import DataBreakError, ObservationStatus, continuity_gate
 from .data.rates import fetch_irx_rate
 from .data.realized import hv20_from_closes, iv_prev_from_hv20
 from .pricing.surface import parallel_shift_surface
@@ -102,22 +102,92 @@ def _clean_iv(raw) -> Optional[float]:
     return iv
 
 
-def latest_two_closes(hist: pd.DataFrame) -> tuple[float, float]:
-    """(spot_now, spot_prev) from the last two *valid* daily closes.
-
-    Yahoo can append a trailing row with a NaN Close in the evening (the new
-    session's bar before it has a price); float(NaN) then reaches QuantLib as
-    "negative or null underlying given" for every leg. Drop non-finite/
-    non-positive closes first, and fail loudly with the real cause if fewer
-    than two remain.
-    """
+def _valid_closes(hist: pd.DataFrame) -> dict[date, float]:
+    """Session date → close, for bars with a finite, positive close."""
     closes = pd.to_numeric(hist["Close"], errors="coerce")
-    closes = closes[np.isfinite(closes) & (closes > 0)]
-    if len(closes) < 2:
-        raise RuntimeError(
-            f"fewer than 2 valid daily closes in history ({len(closes)} of {len(hist)} rows usable)"
+    return {ts.date(): float(c) for ts, c in closes.items() if np.isfinite(c) and c > 0}
+
+
+def _exchange_date(stamp, tz_name: Optional[str]) -> Optional[date]:
+    """Exchange-local date of a Yahoo timestamp (epoch seconds or Timestamp)."""
+    if stamp is None:
+        return None
+    try:
+        ts = pd.Timestamp(stamp, unit="s") if isinstance(stamp, (int, float)) else pd.Timestamp(stamp)
+        if pd.isna(ts):
+            return None
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        return ts.tz_convert(tz_name or "America/New_York").date()
+    except Exception:
+        return None
+
+
+def quote_session(hist: pd.DataFrame, metadata: Optional[dict] = None) -> date:
+    """The trading session today's option quotes belong to.
+
+    Yahoo stamps its latest regular-market price with that session's time;
+    that date wins. Without it, the newest daily bar's date, even when the
+    bar's close is still NaN: in the evening Yahoo lists the session's daily
+    bar before it has a close.
+    """
+    md = metadata or {}
+    stamped = _exchange_date(md.get("regularMarketTime"), md.get("exchangeTimezoneName"))
+    if stamped is not None:
+        return stamped
+    return hist.index[-1].date()
+
+
+def session_close(
+    hist: pd.DataFrame,
+    session: date,
+    *,
+    market_price: Optional[float] = None,
+    market_price_session: Optional[date] = None,
+) -> float:
+    """Spot for ``session``: its daily close, else Yahoo's regular-market
+    price when that is stamped with the same session.
+
+    Never the last *valid* close: while the session's bar has a NaN close,
+    that is the previous session's, and it would pair today's option quotes
+    with yesterday's spot move.
+    """
+    closes = _valid_closes(hist)
+    if session in closes:
+        return closes[session]
+    if market_price_session == session and market_price is not None and np.isfinite(market_price) and market_price > 0:
+        return float(market_price)
+    last = max((d for d in closes if d < session), default=None)
+    raise DataBreakError(
+        "spot dated to the option quotes",
+        f"The quotes are from the {session} session, but the source has no {session} close yet "
+        f"and no regular-market price stamped {session}; the newest close is {last}. Pairing "
+        "them would attribute the wrong day's spot move.",
+    )
+
+
+def prior_close(
+    hist: pd.DataFrame,
+    session: date,
+    *,
+    prior_mark_date: Optional[date] = None,
+) -> tuple[float, date]:
+    """(spot_prev, its session) for the prior mark.
+
+    The close of the last session on or before ``prior_mark_date`` (a run
+    on a weekend or holiday captured the previous session's quotes), else of
+    the last session before ``session``.
+    """
+    closes = _valid_closes(hist)
+    candidates = [d for d in closes if d < session and (prior_mark_date is None or d <= prior_mark_date)]
+    if not candidates:
+        anchor = prior_mark_date or session
+        raise DataBreakError(
+            "prior spot dated to the prior mark",
+            f"The source has no close on or before {anchor} before the {session} session.",
         )
-    return float(closes.iloc[-1]), float(closes.iloc[-2])
+    prev = max(candidates)
+    return closes[prev], prev
 
 
 def fetch_vol_surface(
@@ -232,8 +302,6 @@ def load_market_data(
     ``iv_prev`` resolution: SQLite t-1 chain, else HV20 proxy, else copy.
     """
     tk = yf.Ticker(ticker)
-    as_of_d = date.today()
-    as_of = as_of_d.isoformat()
 
     hist = tk.history(period="3mo", auto_adjust=False)
     if hist.empty or len(hist) < 2:
@@ -246,9 +314,19 @@ def load_market_data(
             status_t1=ObservationStatus.OK,
             status_t=ObservationStatus.DAY_MISSING,
             date_t1="t-1",
-            date_t=as_of,
+            date_t=date.today().isoformat(),
         )
-    spot_now, spot_prev = latest_two_closes(hist)
+    # as_of is the session the option quotes belong to, not the calendar day
+    # of the run; both spots are dated to the marks they are paired with.
+    metadata = _history_metadata(tk)
+    as_of_d = quote_session(hist, metadata)
+    as_of = as_of_d.isoformat()
+    spot_now = session_close(
+        hist,
+        as_of_d,
+        market_price=_finite_or_none(metadata.get("regularMarketPrice")),
+        market_price_session=_exchange_date(metadata.get("regularMarketTime"), metadata.get("exchangeTimezoneName")),
+    )
     hist = hist[np.isfinite(pd.to_numeric(hist["Close"], errors="coerce"))]
 
     expiry = expiry or _pick_nearest_expiry(tk)
@@ -310,14 +388,12 @@ def load_market_data(
     hv_now, hv_prev = hv20_from_closes(hist["Close"].to_numpy())
     iv_prev = iv_now
     iv_prev_source = "hv20_proxy"
-    option_price_prev = option_price_now
+    # No prior mark until the t-1 cache supplies one: a copy of today's mark
+    # would calibrate ΔP_model to zero and push the whole spot move into vega.
+    option_price_prev = 0.0
     surface_prev = None
-    prev_as_of: str | None = None
     rate_prev: float | None = None
-    try:
-        prev_as_of = hist.index[-2].date().isoformat()
-    except Exception:
-        prev_as_of = None
+    prior_mark_date: date | None = None
 
     cached_snap, cached_surf = load_t1(
         ticker.upper(), expiry, strike, option_type, as_of
@@ -328,13 +404,17 @@ def load_market_data(
         iv_prev_source = "chain_t1"
         surface_prev = cached_surf
         if cached_snap.as_of:
-            prev_as_of = cached_snap.as_of
+            prior_mark_date = date.fromisoformat(cached_snap.as_of)
         rate_prev = float(cached_snap.risk_free_rate)
     elif hv_now is not None and hv_prev is not None:
         iv_prev, _ = iv_prev_from_hv20(iv_now, hv_now, hv_prev)
         iv_prev_source = "hv20_proxy"
     else:
         iv_prev_source = "copied"
+    # A cached row's own spot_now may be stale (rows cached before the session
+    # alignment above); never read it. Re-read the close of its session.
+    spot_prev, prev_session = prior_close(hist, as_of_d, prior_mark_date=prior_mark_date)
+    prev_as_of = prev_session.isoformat()
 
     snapshot = MarketSnapshot(
         ticker=ticker.upper(),
@@ -347,7 +427,7 @@ def load_market_data(
         iv_prev=iv_prev,
         option_price_now=option_price_now,
         option_price_prev=option_price_prev,
-        time_to_expiry_years=_year_fraction(expiry),
+        time_to_expiry_years=_year_fraction(expiry, as_of_d),
         risk_free_rate=float(risk_free_rate),
         dividend_yield=q,
         discrete_dividends=discrete,
@@ -390,6 +470,14 @@ def load_market_data(
         pass
 
     return LoadedData(snapshot=snapshot, surface=surface, surface_prev=surface_prev)
+
+
+def _history_metadata(tk: yf.Ticker) -> dict:
+    """Yahoo's chart metadata for the last ``history`` call; {} when absent."""
+    try:
+        return dict(tk.history_metadata or {})
+    except Exception:
+        return {}
 
 
 def _finite_or_none(raw) -> Optional[float]:

@@ -15,7 +15,13 @@ from typing import Any, Callable, Literal
 
 from langgraph.graph import END, START, StateGraph
 
-from ..data.observation import NoComparableObservationError, check_basis_consistency
+from ..data.observation import (
+    DataBreakError,
+    NoComparableObservationError,
+    check_basis_consistency,
+    check_calibrated_iv,
+    check_mark_bounds,
+)
 from ..graph.deps import FixtureMarketLoader, GraphDeps, default_deps, fixture_deps
 from ..graph.diagnostic_controller import run_diagnostic_pass
 from ..graph.playbook import select_records
@@ -53,6 +59,7 @@ class LegState(OptionState, total=False):
     leg_error: str | None
     terminal_no_comparable_observation: bool
     basis_mismatch_suspected: bool
+    data_break: bool
     no_escalation: bool
     llm_calls: int
     verifier_trace: list[dict[str, Any]]
@@ -147,6 +154,8 @@ def build_leg_diagnosis_subgraph(
         except NoComparableObservationError as exc:
             # A data coverage gap, never an unexplained break: nothing is priced.
             return {"leg_error": exc.report_text(), "terminal_no_comparable_observation": True}
+        except DataBreakError as exc:
+            return {"leg_error": exc.report_text(), "data_break": True}
         except Exception as exc:
             return {"leg_error": str(exc)}
 
@@ -171,6 +180,9 @@ def build_leg_diagnosis_subgraph(
                 "basis_mismatch_suspected": True,
             }
         _apply_leg_overrides(snap, leg)
+        marks = check_mark_bounds(snap)
+        if not marks.ok:
+            return {"leg_error": marks.error().report_text(), "data_break": True}
         return {
             "snapshot": snap,
             "surface": data.surface,
@@ -183,9 +195,19 @@ def build_leg_diagnosis_subgraph(
     def quant_node(state: LegState) -> LegState:
         ports = _resolve_ports(state["leg"], deps)
         try:
-            return {"pricing": ports.pnl.attribute(state["snapshot"], state.get("surface"), state.get("surface_prev"))}
+            pricing = ports.pnl.attribute(state["snapshot"], state.get("surface"), state.get("surface_prev"))
         except Exception as exc:
             return {"leg_error": str(exc)}
+        diag = pricing.diagnostics
+        if diag.mark_calibrated:
+            # Calibration fits any mark it can; a mark that does not belong to
+            # its spot would otherwise reach the blotter as a vol move.
+            iv_check = check_calibrated_iv(
+                state["snapshot"], iv_cal_now=diag.effective_iv_now, iv_cal_prev=diag.effective_iv_prev
+            )
+            if not iv_check.ok:
+                return {"leg_error": iv_check.error().report_text(), "data_break": True}
+        return {"pricing": pricing}
 
     def blotter_node(state: LegState) -> LegState:
         try:
@@ -374,6 +396,9 @@ def build_leg_diagnosis_subgraph(
         elif state.get("basis_mismatch_suspected"):
             heading = "## Basis Mismatch Suspected"
             takeaway = "No pricing was performed; the raw quotes failed a basis-consistency check."
+        elif state.get("data_break"):
+            heading = "## Data Break"
+            takeaway = "No narrative or news search; fix the market data for this leg and rerun."
         else:
             heading = "## Leg Failure"
             takeaway = "Inspect fixture or market input for this leg."

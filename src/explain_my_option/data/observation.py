@@ -6,14 +6,29 @@
 2. Basis consistency: splits and ticker renames fail silently, because a
    mis-based price still looks plausible. No-arbitrage sanity bounds on the
    raw quotes catch them before the engine sees them.
+3. Mark consistency: a mark and a spot taken at different times look like a
+   real move, and mark calibration turns the gap into vega. No-arbitrage
+   bounds on both marks run before pricing; a calibrated-vs-vendor IV
+   cross-check runs right after it. A failure is a data break: nothing is
+   narrated.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
 from typing import Mapping, Optional, Sequence
+
+from ..pricing.types import MarketSnapshot, intrinsic_value
+
+# Yahoo prints impliedVolatility=1e-05 (and similar) as a stale-quote sentinel,
+# mostly outside market hours. No listed equity option trades at a 1% implied
+# vol, so anything below this is "no usable IV", not a real reading -- at
+# load time (data_loader._clean_iv), when reading a cached t-1 back
+# (data.cache), and as the reference for the calibrated-IV check below.
+MIN_PLAUSIBLE_IV = 0.01
 
 
 class ObservationStatus(str, Enum):
@@ -178,3 +193,162 @@ def check_basis_consistency(
             )
 
     return BasisCheckResult(False)
+
+
+class DataBreakError(Exception):
+    """The inputs exist but do not belong together: a spot from another
+    session, or a mark outside its no-arbitrage bounds or inconsistent with
+    the quote source's own IV.
+
+    Distinct from a coverage gap (nothing observed) and from an unexplained
+    break (the market did something the model did not capture). Nothing is
+    narrated and no correction is applied.
+    """
+
+    def __init__(self, check: str, detail: str) -> None:
+        self.check = check
+        self.detail = detail
+        super().__init__(self.report_text())
+
+    def report_text(self) -> str:
+        return (
+            f"Data break: {self.check} failed. {self.detail} No correction applied; "
+            "nothing was narrated. This is a data problem, not an unexplained market move."
+        )
+
+
+@dataclass
+class MarkCheckResult:
+    failing_check: Optional[str] = None
+    detail: Optional[str] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.failing_check is None
+
+    def error(self) -> DataBreakError:
+        return DataBreakError(self.failing_check or "mark check", self.detail or "")
+
+
+# A mark may sit this far outside a no-arbitrage bound before it counts as a
+# break: half today's quoted spread, 1% of the larger of mark and bound, or a
+# cent, whichever is widest. Mids of deep ITM options print a few cents under
+# intrinsic without anything being wrong.
+MARK_BOUND_REL_TOL = 0.01
+MARK_BOUND_ABS_TOL = 0.01
+
+# Calibrated-vs-vendor IV cross-check. The quote source computes its IV with
+# its own spot at quote time, so a mark paired with another session's spot
+# calibrates to a vol far from the source's. Deep ITM marks carry almost no vol
+# information (the source's IV there is noise), so the check needs time value
+# of at least 30% of the mark. On the 2026-08..11 live cache this flags none of
+# the 272 rows whose spot matched the session close, except one last-trade
+# mark with no two-sided quote; it flags the stale-spot rows with a large move.
+IV_CHECK_MIN_TIME_VALUE_SHARE = 0.30
+IV_CHECK_ABS_PTS = 5.0
+IV_CHECK_REL = 0.25
+
+
+def _years(start: date, end: date) -> float:
+    return max((end - start).days, 0) / 365.0
+
+
+def _mark_bounds(snap: MarketSnapshot, spot: float, eval_date: date) -> tuple[float, float]:
+    """(lower, upper) no-arbitrage bounds for one mark of this contract."""
+    k = float(snap.strike)
+    expiry = date.fromisoformat(snap.expiry)
+    tau = _years(eval_date, expiry)
+    r = float(snap.risk_free_rate)
+    disc = math.exp(-r * tau)
+    if snap.discrete_dividends:
+        pv_div = sum(
+            float(d.amount) * math.exp(-r * _years(eval_date, date.fromisoformat(d.ex_date)))
+            for d in snap.discrete_dividends
+            if eval_date < date.fromisoformat(d.ex_date) <= expiry
+        )
+        carried_spot = spot - pv_div
+    else:
+        carried_spot = spot * math.exp(-float(snap.dividend_yield) * tau)
+    if str(snap.option_type).lower().startswith("c"):
+        lower = max(carried_spot - k * disc, 0.0)
+        upper = spot
+    else:
+        lower = max(k * disc - carried_spot, 0.0)
+        upper = k if snap.exercise_style == "american" else k * disc
+    if snap.exercise_style == "american":
+        lower = max(lower, intrinsic_value(snap.option_type, spot, k))
+    return lower, upper
+
+
+def _contract_label(snap: MarketSnapshot) -> str:
+    return f"{snap.ticker} {snap.strike:g}{str(snap.option_type)[:1].upper()} {snap.expiry}"
+
+
+def _observed_marks(snap: MarketSnapshot):
+    """(label, date, spot, mark) for each date that has an observed mark."""
+    for label, eval_date, spot, mark in (
+        ("T", snap.as_of_date(), snap.spot_now, snap.option_price_now),
+        ("T-1", snap.prev_date(), snap.spot_prev, snap.option_price_prev),
+    ):
+        if mark is not None and mark > 0 and spot is not None and spot > 0:
+            yield label, eval_date, float(spot), float(mark)
+
+
+def check_mark_bounds(snap: MarketSnapshot) -> MarkCheckResult:
+    """Both marks inside their no-arbitrage bounds at their own date's spot.
+
+    Lower bound: intrinsic for an American, the discounted forward intrinsic
+    for either style. Upper bound: spot for a call, strike for a put. A date
+    without a mark (synthetic fixtures, a first live day) is skipped.
+    """
+    half_spread = 0.0
+    if snap.bid is not None and snap.ask is not None and snap.ask >= snap.bid > 0:
+        half_spread = 0.5 * (float(snap.ask) - float(snap.bid))
+    for label, eval_date, spot, mark in _observed_marks(snap):
+        lower, upper = _mark_bounds(snap, spot, eval_date)
+        tol = max(half_spread, MARK_BOUND_REL_TOL * max(mark, lower), MARK_BOUND_ABS_TOL)
+        if mark < lower - tol:
+            return MarkCheckResult(
+                f"{label} mark >= no-arbitrage lower bound",
+                f"{_contract_label(snap)} mark {mark:.4f} on {eval_date} is below its lower "
+                f"bound {lower:.4f} at spot {spot:.2f} (tolerance {tol:.4f}).",
+            )
+        if mark > upper + tol:
+            return MarkCheckResult(
+                f"{label} mark <= no-arbitrage upper bound",
+                f"{_contract_label(snap)} mark {mark:.4f} on {eval_date} is above its upper "
+                f"bound {upper:.4f} at spot {spot:.2f} (tolerance {tol:.4f}).",
+            )
+    return MarkCheckResult()
+
+
+def check_calibrated_iv(
+    snap: MarketSnapshot,
+    *,
+    iv_cal_now: Optional[float],
+    iv_cal_prev: Optional[float],
+) -> MarkCheckResult:
+    """Mark-calibrated vols agree with the quote source's own IV readings.
+
+    T-1 is checked only when its source IV is a real chain reading
+    (``iv_prev_source == "chain_t1"``), never a proxy.
+    """
+    calibrated = {"T": iv_cal_now, "T-1": iv_cal_prev}
+    source_iv = {"T": snap.iv_now, "T-1": snap.iv_prev if snap.iv_prev_source == "chain_t1" else None}
+    for label, eval_date, spot, mark in _observed_marks(snap):
+        cal, ref = calibrated[label], source_iv[label]
+        if cal is None or ref is None or not (ref >= MIN_PLAUSIBLE_IV):
+            continue
+        time_value = mark - intrinsic_value(snap.option_type, spot, snap.strike)
+        if time_value < IV_CHECK_MIN_TIME_VALUE_SHARE * mark:
+            continue
+        gap_pts = (float(cal) - float(ref)) * 100.0
+        if abs(gap_pts) > IV_CHECK_ABS_PTS and abs(gap_pts) > IV_CHECK_REL * float(ref) * 100.0:
+            return MarkCheckResult(
+                f"{label} calibrated IV ~= quote-source IV",
+                f"{_contract_label(snap)} mark {mark:.4f} on {eval_date} at spot {spot:.2f} "
+                f"calibrates to {cal * 100:.2f}% vol; the quote source reads {ref * 100:.2f}% "
+                f"({gap_pts:+.2f} vol pts). A mark and a spot taken at different times "
+                "produce this gap.",
+            )
+    return MarkCheckResult()

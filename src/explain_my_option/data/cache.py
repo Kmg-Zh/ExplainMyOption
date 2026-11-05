@@ -14,14 +14,9 @@ from ..pricing.types import (
     MarketSnapshot,
     VolSurfaceData,
 )
+from .observation import MIN_PLAUSIBLE_IV
 
 DEFAULT_CACHE = Path(".cache/explain-my-option/market.sqlite")
-
-# Yahoo prints impliedVolatility=1e-05 (and similar) as a stale-quote sentinel,
-# mostly outside market hours. No listed equity option trades at a 1% implied
-# vol, so anything below this is "no usable IV", not a real reading -- at
-# load time (data_loader._clean_iv) and when reading a cached t-1 back.
-MIN_PLAUSIBLE_IV = 0.01
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (

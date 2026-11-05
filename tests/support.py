@@ -17,6 +17,7 @@ from explain_my_option.pipeline.config import PipelineConfig
 from explain_my_option.pipeline.leg_graph import build_leg_diagnosis_subgraph
 from explain_my_option.pipeline.llm_roles import LlmRoleRegistry
 from explain_my_option.pricing.config import EngineConfig
+from explain_my_option.pricing.types import DiscreteDividend, MarketSnapshot
 from explain_my_option.report.schema import DiagnosticSynthesis
 
 # The scripted LLM roles ship with the package; the tests use them under these names.
@@ -35,6 +36,26 @@ FAST = EngineConfig.fast()
 QUIET_DAYS = ("quiet_aapl_2023-04-24", "quiet_spy_2023-03-06", "quiet_spy_2023-04-24")
 
 LEG = BookLegSpec(leg_id="t", ticker="TEST", strike=100.0, expiry="2026-12-18")
+
+
+def aapl_nov20_call(strike: float, *, stale_spot: bool) -> MarketSnapshot:
+    """One leg of the 2026-11-04 live run's AAPL vertical, with its real quotes.
+
+    At 21:15 ET Yahoo's 11-04 daily bar had no close yet, so that run paired the
+    11-04 and 11-03 marks with the 11-03 and 11-02 closes (``stale_spot``). The
+    session closes were 349.51 and 331.90.
+    """
+    quotes = {325.0: (25.35, 26.40, 0.3383, 11.95, 0.2953), 350.0: (6.75, 7.10, 0.2514, 1.50, 0.2489)}
+    bid, ask, iv_now, mark_prev, iv_prev = quotes[strike]
+    spot_now, spot_prev = (331.90, 338.32) if stale_spot else (349.51, 331.90)
+    return MarketSnapshot(
+        ticker="AAPL", option_type="call", strike=strike, expiry="2026-11-20",
+        spot_now=spot_now, spot_prev=spot_prev, iv_now=iv_now, iv_prev=iv_prev,
+        option_price_now=0.5 * (bid + ask), option_price_prev=mark_prev, time_to_expiry_years=16 / 365,
+        risk_free_rate=0.04025, discrete_dividends=[DiscreteDividend(ex_date="2026-11-12", amount=0.27)],
+        data_source="yfinance", as_of="2026-11-04", prev_as_of="2026-11-03", iv_prev_source="chain_t1",
+        bid=bid, ask=ask, mid=0.5 * (bid + ask), volume=500.0, open_interest=10000.0,
+    )
 
 
 class NeverPrice:

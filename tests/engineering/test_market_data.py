@@ -12,40 +12,86 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.stats import norm
+from support import FAST, aapl_nov20_call
 
 from explain_my_option.data.cache import MIN_PLAUSIBLE_IV, load_t1, upsert_snapshot
 from explain_my_option.data.dividends import normalize_dividend_yield
 from explain_my_option.data.historical_chain import imply_borrow_rate, quote_hygiene
 from explain_my_option.data.observation import (
+    DataBreakError,
     NoComparableObservationError,
     ObservationStatus,
     check_basis_consistency,
+    check_calibrated_iv,
+    check_mark_bounds,
     classify_observation_status,
     continuity_gate,
 )
 from explain_my_option.data.realized import hv20_from_closes, iv_prev_from_hv20
 from explain_my_option.data.synthetic import load_fixture
-from explain_my_option.data_loader import _clean_iv, latest_two_closes
+from explain_my_option.data_loader import _clean_iv, prior_close, quote_session, session_close
 from explain_my_option.intel.sec_edgar import SecEdgar8KSource, reset_ticker_cache
 from explain_my_option.intel.sources import IntelRegistry, TavilyNewsSource
 from explain_my_option.intel.types import SearchPlan, SearchQuery
+from explain_my_option.pricing.facade import price_and_attribute
 from explain_my_option.pricing.surface import parallel_shift_surface
+from explain_my_option.pricing.types import MarketSnapshot
 
 # --- Live market data ---------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "closes, expected",
-    [([330.0, 331.5, 336.13, np.nan], (336.13, 331.5)), ([100.0, np.nan, 0.0, -1.0, 102.0, 103.0], (103.0, 102.0))],
-    ids=["trailing NaN bar", "interior bad bars"],
-)
-def test_spot_comes_from_the_last_two_valid_closes(closes, expected):
-    assert latest_two_closes(pd.DataFrame({"Close": closes})) == expected
+def _bars(closes: dict[str, float]) -> pd.DataFrame:
+    index = pd.DatetimeIndex(list(closes)).tz_localize("America/New_York")
+    return pd.DataFrame({"Close": list(closes.values())}, index=index)
 
 
-def test_too_few_valid_closes_fails_with_the_real_cause():
-    with pytest.raises(RuntimeError, match="fewer than 2 valid daily closes"):
-        latest_two_closes(pd.DataFrame({"Close": [np.nan, 336.13, np.nan]}))
+# Yahoo at 21:15 ET on 2026-11-04: the session's daily bar is listed with no close yet.
+EVENING_BARS = {"2026-10-30": 344.63, "2026-11-02": 338.32, "2026-11-03": 331.90, "2026-11-04": np.nan}
+EVENING_META = {
+    "regularMarketPrice": 349.51,
+    "regularMarketTime": pd.Timestamp("2026-11-04 16:00:01", tz="America/New_York"),
+    "exchangeTimezoneName": "America/New_York",
+}
+
+
+def test_spot_is_the_close_of_the_session_the_quotes_belong_to():
+    hist = _bars(EVENING_BARS)
+    session = quote_session(hist, EVENING_META)
+    assert session == date(2026, 11, 4)
+    # The bar's close is NaN: the regular-market price stamped with the session stands in.
+    assert session_close(hist, session, market_price=349.51, market_price_session=session) == 349.51
+    assert prior_close(hist, session) == (331.90, date(2026, 11, 3))
+    # Epoch seconds, as older yfinance returns them, give the same session.
+    epoch = {**EVENING_META, "regularMarketTime": int(EVENING_META["regularMarketTime"].timestamp())}
+    assert quote_session(hist, epoch) == session
+
+
+def test_a_session_without_a_close_is_a_data_break_not_yesterdays_spot():
+    """The old rule took the last two *valid* closes: 331.90 and 338.32, one session late."""
+    hist = _bars(EVENING_BARS)
+    assert quote_session(hist) == date(2026, 11, 4)  # no metadata: the newest bar, NaN close or not
+    with pytest.raises(DataBreakError, match="no 2026-11-04 close yet"):
+        session_close(hist, date(2026, 11, 4))
+    with pytest.raises(DataBreakError, match="no 2026-11-04 close yet"):
+        session_close(hist, date(2026, 11, 4), market_price=331.90, market_price_session=date(2026, 11, 3))
+
+
+def test_the_prior_spot_is_dated_to_the_prior_mark():
+    hist = _bars({**EVENING_BARS, "2026-11-04": 349.51})
+    # A missed run: the newest cached mark is from 10-30, so is its spot.
+    assert prior_close(hist, date(2026, 11, 4), prior_mark_date=date(2026, 10, 30)) == (344.63, date(2026, 10, 30))
+    # A weekend run captured Friday's quotes under Saturday's date.
+    assert prior_close(hist, date(2026, 11, 4), prior_mark_date=date(2026, 10, 31)) == (344.63, date(2026, 10, 30))
+    with pytest.raises(DataBreakError, match="no close on or before 2026-10-01"):
+        prior_close(hist, date(2026, 11, 4), prior_mark_date=date(2026, 10, 1))
+
+
+def test_a_first_live_day_never_calibrates_to_a_copied_prior_mark():
+    """No t-1 in the cache: a prior mark copied from today forced ΔP_model to 0."""
+    snap = replace(aapl_nov20_call(350.0, stale_spot=False), option_price_prev=6.925, iv_prev_source="hv20_proxy")
+    result = price_and_attribute(snap, config=FAST)
+    assert not result.diagnostics.mark_calibrated
+    assert result.pnl.total_pnl > 3.0 and result.pnl.delta_pnl > 0  # the +17.61 spot move survives
 
 
 def test_yahoo_sentinel_iv_is_not_a_reading():
@@ -162,6 +208,54 @@ def test_observation_continuity_is_a_precondition():
 def test_single_contract_basis_bounds(quote, failing):
     result = check_basis_consistency(spot=100.0, rate=0.04, time_to_expiry_years=0.5, **quote)
     assert result.failing_invariant == failing and result.basis_mismatch_suspected == (failing is not None)
+
+
+def test_a_prior_mark_under_its_lower_bound_is_a_data_break():
+    """2026-11-04 AAPL 325C: the 11-03 mark met the 11-02 close."""
+    stale = check_mark_bounds(aapl_nov20_call(325.0, stale_spot=True))
+    assert stale.failing_check == "T-1 mark >= no-arbitrage lower bound"
+    assert "mark 11.9500 on 2026-11-03" in stale.detail and "spot 338.32" in stale.detail
+    assert check_mark_bounds(aapl_nov20_call(325.0, stale_spot=False)).ok
+
+
+@pytest.mark.parametrize(
+    "change, failing",
+    [
+        ({"option_price_now": 102.0}, "T mark <= no-arbitrage upper bound"),  # call above spot
+        ({"option_type": "put", "option_price_now": 10.6, "option_price_prev": 0.5}, "T-1 mark >= no-arbitrage lower bound"),
+        ({"option_type": "put", "option_price_now": 9.6, "option_price_prev": 10.6}, None),  # within half a spread of K - S
+        ({"option_price_now": 0.0, "option_price_prev": 0.0}, None),  # no marks: nothing to check
+    ],
+)
+def test_mark_bounds_both_sides(change, failing):
+    snap = MarketSnapshot(
+        ticker="X", option_type="call", strike=110.0, expiry="2027-01-15", spot_now=100.0, spot_prev=100.0,
+        iv_now=0.30, iv_prev=0.30, option_price_now=2.0, option_price_prev=2.0, time_to_expiry_years=0.2,
+        bid=10.5, ask=11.5, as_of="2026-11-04", prev_as_of="2026-11-03",
+    )
+    assert check_mark_bounds(replace(snap, **change)).failing_check == failing
+
+
+def test_a_mark_calibrated_far_from_the_source_iv_is_a_data_break():
+    """2026-11-04 AAPL 350C: inside its bounds, but the stale spot calibrates to 49% vs Yahoo's 25%."""
+    for stale, failing in ((True, "T calibrated IV ~= quote-source IV"), (False, None)):
+        snap = aapl_nov20_call(350.0, stale_spot=stale)
+        assert check_mark_bounds(snap).ok
+        diag = price_and_attribute(snap, config=FAST).diagnostics
+        assert diag.mark_calibrated
+        check = check_calibrated_iv(snap, iv_cal_now=diag.effective_iv_now, iv_cal_prev=diag.effective_iv_prev)
+        assert check.failing_check == failing
+
+
+def test_the_iv_cross_check_skips_what_carries_no_vol_information():
+    snap = aapl_nov20_call(350.0, stale_spot=False)
+    # Deep ITM: time value under 30% of the mark.
+    deep = replace(snap, strike=300.0, option_price_now=50.0, option_price_prev=32.5)
+    assert check_calibrated_iv(deep, iv_cal_now=0.60, iv_cal_prev=0.25).ok
+    # A proxied prior IV is not a reading to compare against.
+    proxy = replace(snap, iv_prev_source="hv20_proxy")
+    assert check_calibrated_iv(proxy, iv_cal_now=snap.iv_now, iv_cal_prev=0.60).ok
+    assert not check_calibrated_iv(snap, iv_cal_now=snap.iv_now, iv_cal_prev=0.60).ok
 
 
 def test_chain_basis_bounds_catch_an_unadjusted_split():

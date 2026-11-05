@@ -47,7 +47,7 @@ Return `LoadedData(snapshot=MarketSnapshot(...))`. The vol grids `surface` and `
 | --- | --- |
 | `ticker`, `option_type`, `strike`, `expiry` | contract identity |
 | `spot_prev`, `spot_now`, `iv_prev`, `iv_now` | the market move and its materiality |
-| `option_price_prev`, `option_price_now` | your marks (mid); `0.0` when you have none. With marks on both days the headline is mark-to-market and the report has a model residual (mark ΔP − model ΔP), the only residual a catalyst may explain. |
+| `option_price_prev`, `option_price_now` | your marks (mid); `0.0` when you have none. With marks on both days the headline is mark-to-market and the report has a model residual (mark ΔP − model ΔP), the only residual a catalyst may explain. Each mark must sit inside its no-arbitrage bounds at the same date's spot, or the leg ends as a data break before pricing; so date `spot_prev` to the prior mark's session, not to the session before today. |
 | `time_to_expiry_years`, `risk_free_rate` | the pre-pricing basis check (a call mid above spot stops the leg) and the blotter |
 | `as_of`, `prev_as_of` | report dates. A headline published after `as_of` cannot be cited as evidence. |
 | `bid`, `ask`, `volume`, `open_interest` | quote tier, IV noise band and the observation lock. With marks but no quote, confidence drops to low (`unquoted`). |
@@ -74,7 +74,7 @@ def attribute(self, snapshot, surface_data=None, surface_prev=None) -> PricingRe
 Optional `PricingDiagnostics` fields:
 
 - `early_exercise_premium`, `american_price`, `european_price`, `dividend_pv_effect`: the early-exercise facts. Without them the blotter has no early-exercise section and any early-exercise commentary is removed. If you pass `discrete_dividends`, supply these too: a dividend inside the window adds an ex-dividend overlay whose price comparison otherwise prints zeros.
-- `effective_iv_prev`, `effective_iv_now`, `mark_calibrated`: set these when your PnL used vols other than the snapshot's (for example, calibrated to marks).
+- `effective_iv_prev`, `effective_iv_now`, `mark_calibrated`: set these when your PnL used vols other than the snapshot's (for example, calibrated to marks). With `mark_calibrated`, a calibrated vol more than 5 vol pts and 25% away from the snapshot's `iv_now` (or a `chain_t1` `iv_prev`) ends the leg as a data break.
 - `limitations`: short strings shown in the report. Any entry caps confidence at medium.
 
 Optional attributes on the source itself, used when present:

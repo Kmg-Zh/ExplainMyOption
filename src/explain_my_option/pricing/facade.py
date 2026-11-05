@@ -64,6 +64,10 @@ def _try_mark_calibration(
     both marks calibrate; otherwise both are None and callers keep vendor IV.
     """
     limitations: list[str] = []
+    if snapshot.iv_prev_source in ("hv20_proxy", "copied"):
+        # A proxied prior day has no observed mark. Calibrating to one would
+        # force ΔP_model to the mark difference and push the spot move into vega.
+        return None, None, limitations
     mark_now = float(snapshot.option_price_now)
     mark_prev = float(snapshot.option_price_prev)
     if mark_now <= 0.0 or mark_prev <= 0.0:

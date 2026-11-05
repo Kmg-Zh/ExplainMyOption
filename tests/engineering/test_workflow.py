@@ -19,6 +19,7 @@ from support import (
     NeverPrice,
     ScriptedNarrator,
     ScriptedVerifier,
+    aapl_nov20_call,
     frozen_intel,
     invoke_leg,
     no_llm_roles,
@@ -31,7 +32,7 @@ from explain_my_option.data_loader import LoadedData
 from explain_my_option.graph.deps import GraphDeps, OfficialFdmPnlSource
 from explain_my_option.graph.topology import book_mermaid, leg_mermaid
 from explain_my_option.paths import FIXTURES_DIR, LIVE_BOOK_DIR, REPO_ROOT
-from explain_my_option.pipeline.book_schema import load_book_json
+from explain_my_option.pipeline.book_schema import BookLegSpec, load_book_json
 from explain_my_option.pipeline.config import PipelineConfig
 from explain_my_option.pipeline.portfolio_graph import run_book_pipeline
 from explain_my_option.pricing.types import MarketSnapshot
@@ -62,6 +63,27 @@ def test_a_mis_based_quote_aborts_before_pricing():
     out = invoke_leg(LEG, market=MisBased(), pnl=NeverPrice(), llm=no_llm_roles())
     assert out["basis_mismatch_suspected"] and "blotter" not in out
     assert out["report"].startswith("## Basis Mismatch Suspected")
+
+
+@pytest.mark.parametrize(
+    "strike, pnl, failing",
+    [
+        (325.0, NeverPrice(), "T-1 mark >= no-arbitrage lower bound"),  # stops before pricing
+        (350.0, None, "T calibrated IV ~= quote-source IV"),  # stops after calibration, before the blotter
+    ],
+)
+def test_marks_paired_with_a_stale_spot_end_in_a_data_break(strike, pnl, failing):
+    """The 2026-11-04 AAPL vertical: no blotter, no narrative, no LLM call."""
+    snap = aapl_nov20_call(strike, stale_spot=True)
+
+    class StaleSpot:
+        def load(self, **_):
+            return LoadedData(snapshot=snap)
+
+    leg = BookLegSpec(leg_id="aapl", ticker="AAPL", option_type="call", strike=strike, expiry="2026-11-20")
+    out = invoke_leg(leg, market=StaleSpot(), pnl=pnl, llm=no_llm_roles())
+    assert out["data_break"] and "blotter" not in out and not out.get("llm_calls")
+    assert out["report"].startswith("## Data Break") and f"Data break: {failing} failed" in out["report"]
 
 
 # --- Book, entry gate, CLI, topology -----------------------------------------------------------
