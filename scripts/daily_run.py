@@ -10,6 +10,11 @@ honest; a fabricated entry would destroy the log's value. The roll-up report
 is the deterministic portfolio render, not an extra LLM call; legs that are
 quiet days make no LLM call at all (legs_silent).
 
+A leg past its expiry settles at intrinsic value (no LLM call) and is rolled
+by the book's roll_rule (evals/live_book/roll.py): book.json gets the new
+contract, and its snapshot is cached at this session so the next run has a
+real prior mark.
+
     python scripts/daily_run.py            # today, needs OPENAI_API_KEY
     python scripts/daily_run.py --dry-run  # price and diagnose, write nothing
 """
@@ -23,6 +28,7 @@ import statistics
 import sys
 import time
 from collections import Counter
+from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
@@ -39,6 +45,7 @@ from dotenv import load_dotenv  # noqa: E402
 load_dotenv()
 
 from live_book.portfolio_book import load_pinned_book  # noqa: E402
+from live_book.roll import contract_label, live_roll_inputs, successor  # noqa: E402
 from explain_my_option.agent_graph import run_pipeline  # noqa: E402
 from explain_my_option.data.cache import upsert_snapshot  # noqa: E402
 from explain_my_option.graph.deps import default_deps  # noqa: E402
@@ -47,6 +54,7 @@ from explain_my_option.pipeline.llm_roles import default_openai_roles  # noqa: E
 from explain_my_option.report.facts import PositionBundle  # noqa: E402
 from explain_my_option.report.reconciliation import build_reconciliation_facts  # noqa: E402
 from explain_my_option.report.schema import DiagnosticSynthesis  # noqa: E402
+from explain_my_option.report.settlement import ExpirySettlement, settlement_total  # noqa: E402
 from explain_my_option.report.template import render_portfolio_report  # noqa: E402
 
 BOOK_PATH = _REPO_ROOT / "docs" / "runlog" / "book.json"
@@ -114,6 +122,7 @@ def main() -> int:
     deps = default_deps()
 
     bundles_by_id: dict[str, PositionBundle] = {}
+    settled_by_id: dict[str, ExpirySettlement] = {}
     syntheses: list[DiagnosticSynthesis] = []
     leg_findings: list[dict] = []
     errors: list[dict] = []
@@ -149,6 +158,17 @@ def main() -> int:
         except Exception as exc:
             print(f"  FAIL: {type(exc).__name__}: {exc}", file=sys.stderr)
             errors.append({"leg_id": leg_id, "ticker": leg.ticker, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+
+        if state.get("settlement") is not None:
+            settlement = state["settlement"]
+            settled_by_id[leg_id] = settlement
+            terminal_states_by_leg[leg_id] = "settled_at_expiry"
+            audit_by_leg[leg_id] = {
+                "terminal_state": "settled_at_expiry",
+                "settlement": {**asdict(settlement), "outcome": settlement.outcome, "position_pnl": settlement.position_pnl},
+            }
+            print(f"  settled at expiry: {settlement.outcome}", file=sys.stderr)
             continue
 
         bundle = PositionBundle(
@@ -229,6 +249,39 @@ def main() -> int:
                     c["input"] += u.get("input_tokens", 0)
                     c["output"] += u.get("output_tokens", 0)
 
+    # Roll every settled leg into its successor, opened at this session's close.
+    book_payload = json.loads(BOOK_PATH.read_text(encoding="utf-8"))
+    rows_by_id = {row["leg_id"]: row for row in book_payload["legs"]}
+    rolls: list[dict] = []
+    for leg_id, settlement in settled_by_id.items():
+        row = rows_by_id[leg_id]
+        try:
+            new_row = successor(row, live_roll_inputs(row["ticker"], row["option_type"]))
+            opened_mark = None
+            if not args.dry_run:
+                loaded = deps.market.load(
+                    ticker=new_row["ticker"], option_type=new_row["option_type"],
+                    strike=new_row["strike"], expiry=new_row["expiry"],
+                )
+                upsert_snapshot(loaded.snapshot, None)
+                opened_mark = loaded.snapshot.option_price_now
+        except Exception as exc:
+            print(f"  ROLL FAIL [{leg_id}]: {type(exc).__name__}: {exc}", file=sys.stderr)
+            errors.append({"leg_id": leg_id, "ticker": row["ticker"], "error": f"roll failed: {type(exc).__name__}: {exc}"})
+            continue
+        rows_by_id[leg_id] = new_row
+        rolls.append({
+            "session": new_row["picked_session"],
+            "leg_id": leg_id,
+            "from": contract_label(row),
+            "to": contract_label(new_row),
+            "settled_session": settlement.session,
+            "settlement_value": round(settlement.value, 4),
+            "settlement_pnl_usd": None if settlement.position_pnl is None else round(settlement.position_pnl, 4),
+            "spot": new_row["spot_at_pick"],
+            "opened_mark": None if opened_mark is None else round(opened_mark, 4),
+        })
+
     wall_clock_s = time.perf_counter() - t_start
     skew = _skew_proxy(bundles_by_id)
 
@@ -244,9 +297,26 @@ def main() -> int:
     taylor_regime = Counter(taylor_regimes).most_common(1)[0][0] if taylor_regimes else ""
     verifier_verdict = Counter(verifier_verdicts).most_common(1)[0][0] if verifier_verdicts else ""
 
+    settlements = list(settled_by_id.values())
     report = render_portfolio_report(
         list(bundles_by_id.values()), syntheses, leg_findings=leg_findings,
+        settlements=settlements,
     )
+    roll_lines = ""
+    if rolls:
+        items = []
+        for r in rolls:
+            late = (
+                " It expired before this run's session; this is the first run to settle it."
+                if r["settled_session"] < r["session"] else ""
+            )
+            mark = "" if r["opened_mark"] is None else f", mark {r['opened_mark']:.4f}"
+            items.append(
+                f"- **{r['leg_id']}**: `{r['from']}` settled at the {r['settled_session']} close.{late} "
+                f"Rolled into `{r['to']}` at the {r['session']} close (spot {r['spot']:,.2f}{mark}); "
+                "its PnL starts with the next run."
+            )
+        roll_lines = "\n\n## Rolls\n\n" + "\n".join(items) + "\n"
     skew_lines = ""
     if skew:
         s = skew["SPY"]
@@ -262,7 +332,7 @@ def main() -> int:
         b.snapshot.iv_prev_source == "chain_t1" for b in bundles_by_id.values()
     )
     day1_note = ""
-    if not any_real_t1:
+    if bundles_by_id and not any_real_t1:
         day1_note = (
             "\n\n**No leg in this run has a cached t-1 snapshot yet** "
             "(`iv_prev_source` is `hv20_proxy` or `copied` for every leg below) "
@@ -276,11 +346,12 @@ def main() -> int:
         )
     report_full = (
         f"# Live book run — {today}\n\n"
-        f"Run `{run_id}`. {len(bundles_by_id)}/{len(legs)} legs completed, "
-        f"{len(errors)} failed. `legs_narrated={legs_narrated}` `legs_silent={legs_silent}` "
+        f"Run `{run_id}`. {len(bundles_by_id)}/{len(legs)} legs diagnosed, "
+        f"{len(settlements)} settled at expiry, {len(legs) - len(bundles_by_id) - len(settlements)} failed. "
+        f"`legs_narrated={legs_narrated}` `legs_silent={legs_silent}` "
         f"`llm_calls={llm_calls_total}`."
         + day1_note
-        + "\n\n" + report + skew_lines
+        + "\n\n" + report + skew_lines + roll_lines
     )
     if errors:
         report_full += "\n\n## Errors\n\n" + "\n".join(
@@ -315,6 +386,9 @@ def main() -> int:
         "verifier_verdict": verifier_verdict,
         "verifier_downgraded": verifier_downgraded,
         "terminal_states_by_leg": terminal_states_by_leg,
+        "legs_settled": len(settlements),
+        "settlement_pnl_usd": round(settlement_total(settlements), 4),
+        "rolls": [{k: r[k] for k in ("leg_id", "from", "to")} for r in rolls],
         "injection_observed": injection_observed_any,
         "quote_tier_counts": dict(quote_tier_counts),
         "skew_proxy_by_underlying": {k: {kk: vv for kk, vv in v.items() if kk != "note"} for k, v in skew.items()},
@@ -323,7 +397,7 @@ def main() -> int:
 
     print(json.dumps(metrics_line, indent=2))
 
-    if not bundles_by_id:
+    if not bundles_by_id and not settlements:
         # Every leg failed: there is no run to record. Writing an all-errors
         # entry (and exiting 0, so the launchd wrapper commits it) would put
         # a failed day into the permanent log as if it were a real one.
@@ -347,6 +421,11 @@ def main() -> int:
     )
     with METRICS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(metrics_line) + "\n")
+    if rolls:
+        book_payload["legs"] = [rows_by_id[row["leg_id"]] for row in book_payload["legs"]]
+        book_payload.setdefault("rolls", []).extend(rolls)
+        BOOK_PATH.write_text(json.dumps(book_payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"Rolled {len(rolls)} leg(s) in docs/runlog/book.json", file=sys.stderr)
     print(f"\nWrote docs/runlog/{today}/report.md and appended to docs/runlog/metrics.jsonl", file=sys.stderr)
     return 0
 

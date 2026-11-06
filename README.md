@@ -119,6 +119,10 @@ A mark paired with another session's spot looks like a real move, and mark calib
 
 Through the 2026-11-04 run the live loader took the last two valid daily closes, so most runlog days paired the session's option marks with the previous session's spot move; see [docs/runlog/README.md](docs/runlog/README.md#stale-spot-2026-09-17-to-2026-11-04).
 
+## Expiry
+
+A leg whose session is on or after its expiry is not priced. `settle_expiry` settles it at intrinsic value at the expiry close (OCC exercises an option that closes at least $0.01 in the money) against the last mark before expiry. That PnL needs no model, so it splits exactly into the spot move on intrinsic value and the time value released. The report names exercise or assignment, and flags a close within 0.5% of the strike as a pin. No pricing, LLM or news search runs (`src/explain_my_option/report/settlement.py`). By the evening of expiry Yahoo has already delisted the contract, so the live loader settles from the close and the cached prior mark alone; before that day's close it refuses to settle.
+
 ## Two residuals
 
 Every run carries two distinct residuals, not one. `ε_method` is the gap between the model's own PnL and what the Taylor / second-order decomposition explains — pure arithmetic (truncation, discretization, American-exercise effects), and a catalyst may never be blamed for it. `ε_model` is the gap between the market's real price change and the model's — the only residual a news catalyst may legitimately explain — but it exists only when reliable marks are available on both dates. Escalation is driven by `ε_model` when reliable marks exist and by `ε_method` otherwise, and every report labels which basis (`escalation_basis`) is active.
@@ -283,6 +287,7 @@ flowchart TB
   subgraph compute["Compute — no LLM"]
     FM[fetch_market] -->|ok| Q[quant]
     FM -->|coverage gap or basis mismatch| FAIL[leg_failure_finalize]
+    FM -->|expired| SET[settle_expiry]
     Q -->|ok| BL[blotter]
     Q -->|error| FAIL
     BL --> DP[diagnostic_pass]
@@ -299,6 +304,7 @@ flowchart TB
   REF --> FIN
   TUB --> FIN
   FAIL --> DONE([done])
+  SET --> DONE
   FIN --> DONE
 ```
 

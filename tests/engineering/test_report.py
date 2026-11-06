@@ -7,7 +7,7 @@ import os
 import re
 
 import pytest
-from support import FAST
+from support import FAST, jpm_oct23_straddle
 
 from explain_my_option.data.historical_chain import load_historical_case
 from explain_my_option.data.synthetic import list_fixtures, load_fixture
@@ -22,6 +22,7 @@ from explain_my_option.report.blotter import build_quant_section
 from explain_my_option.report.facts import build_portfolio_facts, build_position_facts
 from explain_my_option.report.formatting import money, pct
 from explain_my_option.report.reconciliation import build_reconciliation_facts, marks_reliable, quote_tier
+from explain_my_option.report.settlement import render_settlement, render_settlements, settle
 from explain_my_option.report.synthesis import fallback_synthesis
 
 
@@ -208,6 +209,47 @@ def test_portfolio_report_rolls_up_the_legs():
     assert pf.total_model_pnl == pytest.approx(sum(b.pricing.pnl.total_pnl for b in bundles))
     report = render_portfolio_report(bundles, syntheses)
     assert "## Portfolio Executive Summary" in report and "### Position 2" in report
+
+
+# --- Expiry settlement -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "option_type, value, pnl, intrinsic_change, time_value",
+    [("call", 0.0, -0.02, 0.0, -0.02), ("put", 18.42, 4.32, 4.96, -0.64)],
+)
+def test_settlement_is_intrinsic_at_the_close_and_splits_exactly(option_type, value, pnl, intrinsic_change, time_value):
+    """JPM 350 straddle: 10-22 marks 0.02 / 14.10 at 336.54, expiry close 331.58."""
+    s = settle(jpm_oct23_straddle(option_type))
+    assert (s.value, s.pnl) == (pytest.approx(value), pytest.approx(pnl))
+    assert (s.intrinsic_change, s.time_value_released) == (pytest.approx(intrinsic_change), pytest.approx(time_value))
+    assert s.intrinsic_change + s.time_value_released == pytest.approx(s.pnl)
+    assert s.position_pnl == pytest.approx(100 * pnl)
+    report = render_settlement(s)
+    assert f"| **Settlement PnL** | `{money(s.pnl)}` | `{money(s.position_pnl)}` |" in report
+
+
+@pytest.mark.parametrize(
+    "option_type, quantity, spot, outcome, delivery, pin",
+    [
+        ("put", 1.0, 331.58, "exercised", "sells 100 shares at 350", False),
+        ("put", -1.0, 331.58, "assigned", "buys 100 shares at 350", False),
+        ("call", -2.0, 351.0, "assigned", "sells 200 shares at 350", True),
+        ("call", 1.0, 351.0, "exercised", "buys 100 shares at 350", True),
+        ("call", 1.0, 349.995, "expired worthless", "no exercise, no stock delivery", True),
+    ],
+)
+def test_settlement_names_exercise_assignment_and_pin(option_type, quantity, spot, outcome, delivery, pin):
+    s = settle(dataclasses.replace(jpm_oct23_straddle(option_type), quantity=quantity, spot_now=spot))
+    assert (s.outcome, s.pin) == (outcome, pin)
+    assert delivery in s.delivery() and ("* Pin:" in render_settlement(s)) is pin
+
+
+def test_settlement_without_a_prior_mark_reports_no_pnl():
+    s = settle(dataclasses.replace(jpm_oct23_straddle("put"), option_price_prev=0.0))
+    assert s.pnl is None and s.position_pnl is None
+    assert "settlement PnL is not computed" in render_settlement(s)
+    assert "| `JPM 350P 2026-10-23` | exercised | 18.4200 | n/a |" in render_settlements([s])
 
 
 # --- Blotter goldens ---------------------------------------------------------------------

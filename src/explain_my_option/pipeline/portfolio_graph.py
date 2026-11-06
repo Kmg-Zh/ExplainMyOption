@@ -49,6 +49,7 @@ def _aggregate(state: PortfolioState) -> PortfolioState:
         [r["bundle"] for r in ok],
         syntheses,
         leg_findings=[r.get("diagnostic_findings") for r in ok],
+        settlements=[r["settlement"] for r in results if r.get("settlement")],
     )
     failed = [r for r in results if not r.get("ok")]
     if failed:

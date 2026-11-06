@@ -1,8 +1,9 @@
 # Live book run log
 
-`book.json`: 8 real, live-discovered contracts, all opened at
-≥35 DTE so none expires inside a 30-day window — no roll policy needed.
-Sizing rule is in the file itself (`sizing_rule` field).
+`book.json`: 8 legs on real, live-discovered contracts, first opened at
+≥35 DTE. Each leg is held to expiry, settled and rolled
+([below](#expiry-and-rolls)). Sizing and roll rules are in the file itself
+(`sizing_rule`, `roll_rule`).
 
 `python scripts/daily_run.py` runs the book through the real graph once
 per trading day, writes `YYYY-MM-DD/report.md`, and appends one line to
@@ -83,6 +84,28 @@ quotes, and a mark that fails its
 no-arbitrage bounds or calibrates far from the quote source's IV ends the leg
 as a data break ([README](../../README.md#data-checks)). The 33 entries above
 stay as they were written.
+
+### Expiry and rolls
+
+A leg is held through its last day. The run on its expiry session settles it
+at intrinsic value at the close, against the last cached mark, with no
+pricing or LLM call ([README](../../README.md#expiry)). The same run rolls
+it (`evals/live_book/roll.py`): the same `leg_id` on a new contract, opened
+at that session's close, with the first standard monthly expiry at least 35
+days out and the two-sided-quoted strike nearest `target_strike_to_spot ×
+spot`. The target is the strike / spot the leg was first picked with, never
+re-fit, so the vertical, straddle and risk reversal keep their shape. The run
+commits the new contract in `book.json`, appends the roll to `rolls` and
+caches the new contract's snapshot, so the next run's PnL on it compares
+against a real prior mark. A roll that fails leaves the expired leg
+in the book; the next run settles it again and retries. Each row records
+`legs_settled`, `settlement_pnl_usd` and `rolls`, and a settled leg's terminal
+state is `settled_at_expiry`.
+
+The JPM straddle expired on 2026-10-23, before settlement existed. Every run
+from 10-23 on listed both legs under Errors (`Expiration 2026-10-23 cannot be
+found`). The first run with settlement books them late, from the 10-22 marks
+and the 10-23 close, and rolls them; that entry's Rolls section says so.
 
 Days before the relevant fix landed keep their real outcome, including any
 escalation that fix would have prevented; the incident write-ups are in

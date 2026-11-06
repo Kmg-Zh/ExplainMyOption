@@ -4,7 +4,9 @@ fetch_market → quant → blotter → diagnostic_pass → plan_search → searc
 digest_news → challenge_catalyst → synthesize → reconcile_debate → verify →
 finalize_leg_report. Market, pricing, blotter and diagnostics use no LLM. A
 quiet day ends after ``diagnostic_pass`` with a fixed report; a data or basis
-failure ends at ``leg_failure_finalize`` before any pricing.
+failure ends at ``leg_failure_finalize`` before any pricing. A leg whose
+session is on or after its expiry ends at ``settle_expiry``: intrinsic value
+at the expiry close, with no pricing, LLM or search.
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from ..report import PositionBundle, render_portfolio_report, synthesize_diagnos
 from ..report.blotter import build_quant_section
 from ..report.facts import build_position_facts
 from ..report.schema import DiagnosticSynthesis
+from ..report.settlement import ExpirySettlement, is_settlement, render_settlement, settle
 from .book_schema import BookLegSpec
 from .challenger import reconcile_with_challenge, run_catalyst_challenge
 from .config import PipelineConfig
@@ -60,6 +63,7 @@ class LegState(OptionState, total=False):
     terminal_no_comparable_observation: bool
     basis_mismatch_suspected: bool
     data_break: bool
+    settlement: ExpirySettlement
     no_escalation: bool
     llm_calls: int
     verifier_trace: list[dict[str, Any]]
@@ -160,6 +164,9 @@ def build_leg_diagnosis_subgraph(
             return {"leg_error": str(exc)}
 
         snap = data.snapshot
+        if is_settlement(snap):
+            _apply_leg_overrides(snap, leg)
+            return {"snapshot": snap, "ticker": snap.ticker, "option_type": snap.option_type, "leg_error": None}
         is_call, is_put = snap.option_type == "call", snap.option_type == "put"
         basis = check_basis_consistency(
             spot=snap.spot_now,
@@ -190,6 +197,29 @@ def build_leg_diagnosis_subgraph(
             "ticker": snap.ticker,
             "option_type": snap.option_type,
             "leg_error": None,
+        }
+
+    def route_after_fetch(state: LegState) -> Literal["quant", "settle_expiry", "leg_failure_finalize"]:
+        if state.get("leg_error"):
+            return "leg_failure_finalize"
+        return "settle_expiry" if is_settlement(state["snapshot"]) else "quant"
+
+    def settle_expiry_node(state: LegState) -> LegState:
+        # Intrinsic value at the expiry close: no pricer, LLM or news search.
+        settlement = settle(state["snapshot"])
+        verdict = f"Expired at the {settlement.session} close and settled at intrinsic value ({settlement.outcome})."
+        synthesis = DiagnosticSynthesis(
+            primary_driver="Expiry settlement",
+            verdict=verdict,
+            confidence_level="high",
+            confidence_rationale="Settlement is intrinsic value at the expiry close; no model is involved.",
+            takeaways=[settlement.delivery()],
+        )
+        return {
+            "settlement": settlement,
+            "diagnosis": verdict,
+            "diagnostic_synthesis": synthesis.model_dump(),
+            "report": render_settlement(settlement),
         }
 
     def quant_node(state: LegState) -> LegState:
@@ -417,6 +447,7 @@ def build_leg_diagnosis_subgraph(
     graph = StateGraph(LegState)
     for name, fn in (
         ("fetch_market", fetch_market_node),
+        ("settle_expiry", settle_expiry_node),
         ("quant", quant_node),
         ("blotter", blotter_node),
         ("diagnostic_pass", diagnostic_pass_node),
@@ -435,7 +466,10 @@ def build_leg_diagnosis_subgraph(
         graph.add_node(name, _timed_node(name, fn))
 
     graph.add_edge(START, "fetch_market")
-    graph.add_conditional_edges("fetch_market", on_error("quant"), ["quant", "leg_failure_finalize"])
+    graph.add_conditional_edges(
+        "fetch_market", route_after_fetch, ["quant", "settle_expiry", "leg_failure_finalize"]
+    )
+    graph.add_edge("settle_expiry", END)
     graph.add_conditional_edges("quant", on_error("blotter"), ["blotter", "leg_failure_finalize"])
     graph.add_conditional_edges("blotter", on_error("diagnostic_pass"), ["diagnostic_pass", "leg_failure_finalize"])
     graph.add_conditional_edges(
@@ -471,7 +505,9 @@ def build_leg_branch_subgraph(
     leg_graph = build_leg_diagnosis_subgraph(config=config, deps=deps, roles=roles)
 
     def pack_leg_result_node(state: LegBranchState) -> LegBranchState:
-        ok = not state.get("leg_error") and bool(state.get("snapshot")) and bool(state.get("pricing"))
+        settlement = state.get("settlement")
+        diagnosed = bool(state.get("pricing")) and settlement is None
+        ok = not state.get("leg_error") and bool(state.get("snapshot")) and (diagnosed or settlement is not None)
         error = None if ok else (state.get("leg_error") or "leg pipeline failed")
         bundle = (
             PositionBundle(
@@ -480,7 +516,7 @@ def build_leg_branch_subgraph(
                 news=state.get("news", []),
                 plan=state.get("search_plan"),
             )
-            if ok
+            if ok and diagnosed
             else None
         )
         result: LegResult = {
@@ -488,6 +524,7 @@ def build_leg_branch_subgraph(
             "ok": ok,
             "error": error,
             "bundle": bundle,
+            "settlement": settlement,
             "synthesis": state.get("diagnostic_synthesis"),
             "diagnostic_findings": state.get("diagnostic_findings") or {},
             "report": state.get("report", ""),

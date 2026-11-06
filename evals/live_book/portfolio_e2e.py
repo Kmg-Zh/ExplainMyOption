@@ -512,6 +512,9 @@ def run_live_portfolio_e2e(
                 deps=deps,
                 roles=roles,
             )
+            if state.get("settlement") is not None:
+                # This book is re-pinned by hand (docs/dev/SCHEDULING.md), never rolled.
+                raise RuntimeError(f"{ticker} {expiry} has expired and settled; the pinned book needs a re-pin.")
             snap = state["snapshot"]
             pricing = state["pricing"]
             surf = state.get("surface")

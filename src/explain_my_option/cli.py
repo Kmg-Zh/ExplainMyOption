@@ -218,6 +218,9 @@ def run_streamlit() -> None:
                 st.error(f"Failed to run pipeline: {exc}")
                 return
 
+        if result.get("settlement") is not None:
+            st.markdown(result["report"])
+            return
         snap = result["snapshot"]
         pricing = result["pricing"]
         scale = snap.position_scale()

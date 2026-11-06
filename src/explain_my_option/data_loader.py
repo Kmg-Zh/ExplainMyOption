@@ -18,6 +18,7 @@ from .data.realized import hv20_from_closes, iv_prev_from_hv20
 from .pricing.surface import parallel_shift_surface
 from .intel.types import NewsItem
 from .pricing.types import LoadedData, MarketSnapshot, VolSurfaceData
+from .report.settlement import intrinsic
 
 
 def _year_fraction(expiry: str, as_of: Optional[date] = None) -> float:
@@ -108,8 +109,8 @@ def _valid_closes(hist: pd.DataFrame) -> dict[date, float]:
     return {ts.date(): float(c) for ts, c in closes.items() if np.isfinite(c) and c > 0}
 
 
-def _exchange_date(stamp, tz_name: Optional[str]) -> Optional[date]:
-    """Exchange-local date of a Yahoo timestamp (epoch seconds or Timestamp)."""
+def _exchange_time(stamp, tz_name: Optional[str]) -> Optional[pd.Timestamp]:
+    """A Yahoo timestamp (epoch seconds or Timestamp) in exchange-local time."""
     if stamp is None:
         return None
     try:
@@ -118,9 +119,95 @@ def _exchange_date(stamp, tz_name: Optional[str]) -> Optional[date]:
             return None
         if ts.tzinfo is None:
             ts = ts.tz_localize("UTC")
-        return ts.tz_convert(tz_name or "America/New_York").date()
+        return ts.tz_convert(tz_name or "America/New_York")
     except Exception:
         return None
+
+
+def _exchange_date(stamp, tz_name: Optional[str]) -> Optional[date]:
+    """Exchange-local date of a Yahoo timestamp (epoch seconds or Timestamp)."""
+    ts = _exchange_time(stamp, tz_name)
+    return None if ts is None else ts.date()
+
+
+def session_closed(hist: pd.DataFrame, session: date, metadata: Optional[dict] = None) -> bool:
+    """True once ``session`` has a final price: its daily close, or Yahoo's
+    regular-market price stamped at or after that session's regular close."""
+    if session in _valid_closes(hist):
+        return True
+    md = metadata or {}
+    tz = md.get("exchangeTimezoneName")
+    stamped = _exchange_time(md.get("regularMarketTime"), tz)
+    if stamped is None or stamped.date() != session:
+        return False
+    end = _exchange_time(((md.get("currentTradingPeriod") or {}).get("regular") or {}).get("end"), tz)
+    if end is None or end.date() != session:
+        end = pd.Timestamp(session).tz_localize(tz or "America/New_York") + pd.Timedelta(hours=16)
+    return stamped >= end
+
+
+def settlement_snapshot(
+    hist: pd.DataFrame,
+    metadata: Optional[dict],
+    *,
+    ticker: str,
+    option_type: str,
+    strike: Optional[float],
+    expiry: str,
+    session: date,
+) -> MarketSnapshot:
+    """A contract whose expiry is on or before ``session``: the expiry
+    session's close and the last cached mark before it. No chain is read: by
+    the evening of expiry Yahoo has already delisted the contract.
+    """
+    contract = f"{ticker.upper()} {option_type} {strike} {expiry}"
+    if strike is None:
+        raise ValueError(f"{contract} has expired; settling it needs its strike.")
+    exp_d = date.fromisoformat(expiry)
+    md = metadata or {}
+    if exp_d == session:
+        if not session_closed(hist, session, md):
+            raise ValueError(
+                f"{contract} expires today and settles at the {session} close; rerun after the close."
+            )
+        settle_d = session
+        spot = session_close(
+            hist,
+            session,
+            market_price=_finite_or_none(md.get("regularMarketPrice")),
+            market_price_session=_exchange_date(md.get("regularMarketTime"), md.get("exchangeTimezoneName")),
+        )
+    else:
+        closes = _valid_closes(hist)
+        settle_d = max((d for d in closes if d <= exp_d), default=None)
+        if settle_d is None:
+            raise DataBreakError(
+                "expiry session close", f"The source has no close on or before the {expiry} expiry of {contract}."
+            )
+        spot = closes[settle_d]
+
+    cached, _ = load_t1(ticker.upper(), expiry, float(strike), option_type, settle_d.isoformat())
+    mark_d = date.fromisoformat(cached.as_of) if cached is not None and cached.as_of else None
+    spot_prev, prev_session = prior_close(hist, settle_d, prior_mark_date=mark_d)
+    return MarketSnapshot(
+        ticker=ticker.upper(),
+        option_type=option_type,
+        strike=float(strike),
+        expiry=expiry,
+        spot_now=spot,
+        spot_prev=spot_prev,
+        iv_now=float(cached.iv_now) if cached is not None else 0.0,
+        iv_prev=float(cached.iv_now) if cached is not None else 0.0,
+        option_price_now=intrinsic(option_type, float(strike), spot),
+        option_price_prev=float(cached.option_price_now) if cached is not None else 0.0,
+        time_to_expiry_years=0.0,
+        risk_free_rate=float(cached.risk_free_rate) if cached is not None else 0.0,
+        exercise_style="american",
+        data_source="yfinance",
+        as_of=settle_d.isoformat(),
+        prev_as_of=prev_session.isoformat(),
+        iv_prev_source="chain_t1" if cached is not None else "copied",
+    )
 
 
 def quote_session(hist: pd.DataFrame, metadata: Optional[dict] = None) -> date:
@@ -320,6 +407,12 @@ def load_market_data(
     # of the run; both spots are dated to the marks they are paired with.
     metadata = _history_metadata(tk)
     as_of_d = quote_session(hist, metadata)
+    if expiry and date.fromisoformat(expiry) <= as_of_d:
+        return LoadedData(
+            snapshot=settlement_snapshot(
+                hist, metadata, ticker=ticker, option_type=option_type, strike=strike, expiry=expiry, session=as_of_d
+            )
+        )
     as_of = as_of_d.isoformat()
     spot_now = session_close(
         hist,

@@ -43,9 +43,30 @@ def run_pipeline(
         raise RuntimeError("Pipeline returned no leg results.")
     leg_state = legs[0]
     bundle = leg_state.get("bundle")
+    synthesis = leg_state.get("synthesis") or {}
+    settlement = leg_state.get("settlement")
+    if leg_state.get("ok") and settlement is not None:
+        # Settled at expiry: no pricing, so no snapshot/pricing pair to return.
+        return {
+            "ticker": ticker,
+            "option_type": option_type,
+            "strike": strike,
+            "expiry": expiry,
+            "quantity": quantity,
+            "multiplier": multiplier,
+            "settlement": settlement,
+            "diagnostic_findings": {},
+            "diagnostic_synthesis": synthesis,
+            "diagnosis": str(synthesis.get("verdict", "")).strip(),
+            "report": leg_state.get("report", ""),
+            "blotter": "",
+            "stage_timings": leg_state.get("stage_timings") or {},
+            "llm_calls": 0,
+            "no_escalation": False,
+            "terminal_no_comparable_observation": False,
+        }
     if not leg_state.get("ok") or bundle is None:
         raise RuntimeError(str(leg_state.get("error") or "Single-leg pipeline failed."))
-    synthesis = leg_state.get("synthesis") or {}
     return {
         "ticker": ticker,
         "option_type": option_type,

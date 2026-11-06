@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.stats import norm
-from support import FAST, aapl_nov20_call
+from support import FAST, aapl_nov20_call, jpm_oct23_straddle
 
 from explain_my_option.data.cache import MIN_PLAUSIBLE_IV, load_t1, upsert_snapshot
 from explain_my_option.data.dividends import normalize_dividend_yield
@@ -29,7 +29,14 @@ from explain_my_option.data.observation import (
 )
 from explain_my_option.data.realized import hv20_from_closes, iv_prev_from_hv20
 from explain_my_option.data.synthetic import load_fixture
-from explain_my_option.data_loader import _clean_iv, prior_close, quote_session, session_close
+from explain_my_option.data_loader import (
+    _clean_iv,
+    prior_close,
+    quote_session,
+    session_close,
+    session_closed,
+    settlement_snapshot,
+)
 from explain_my_option.intel.sec_edgar import SecEdgar8KSource, reset_ticker_cache
 from explain_my_option.intel.sources import IntelRegistry, TavilyNewsSource
 from explain_my_option.intel.types import SearchPlan, SearchQuery
@@ -92,6 +99,33 @@ def test_a_first_live_day_never_calibrates_to_a_copied_prior_mark():
     result = price_and_attribute(snap, config=FAST)
     assert not result.diagnostics.mark_calibrated
     assert result.pnl.total_pnl > 3.0 and result.pnl.delta_pnl > 0  # the +17.61 spot move survives
+
+
+def test_an_expired_contract_settles_from_its_expiry_close_and_last_mark(tmp_path, monkeypatch):
+    """JPM 350P, expired 10-23, first run since on 11-05: no chain read, the 10-22 mark."""
+    monkeypatch.chdir(tmp_path)  # the T-1 cache path is relative
+    upsert_snapshot(replace(jpm_oct23_straddle("put"), as_of="2026-10-22", option_price_now=14.10, time_to_expiry_years=1 / 365), None)
+    hist = _bars({"2026-10-21": 335.19, "2026-10-22": 336.54, "2026-10-23": 331.58, "2026-10-26": 334.04, "2026-11-05": np.nan})
+    snap = settlement_snapshot(hist, {}, ticker="JPM", option_type="put", strike=350.0, expiry="2026-10-23", session=date(2026, 11, 5))
+    assert (snap.as_of, snap.spot_now, snap.option_price_now) == ("2026-10-23", 331.58, pytest.approx(18.42))
+    assert (snap.prev_as_of, snap.spot_prev, snap.option_price_prev) == ("2026-10-22", 336.54, 14.10)
+    assert snap.time_to_expiry_years == 0.0 and snap.iv_prev_source == "chain_t1"
+    # No cached mark for the call: settled, but with no prior mark to compute PnL from.
+    call = settlement_snapshot(hist, {}, ticker="JPM", option_type="call", strike=350.0, expiry="2026-10-23", session=date(2026, 11, 5))
+    assert (call.option_price_now, call.option_price_prev, call.iv_prev_source) == (0.0, 0.0, "copied")
+
+
+def test_an_option_expiring_today_settles_only_once_the_session_has_closed():
+    hist = _bars(EVENING_BARS)
+    snap = settlement_snapshot(hist, EVENING_META, ticker="AAPL", option_type="call", strike=325.0, expiry="2026-11-04", session=date(2026, 11, 4))
+    assert (snap.as_of, snap.spot_now, snap.option_price_now) == ("2026-11-04", 349.51, pytest.approx(24.51))
+    intraday = {**EVENING_META, "regularMarketTime": pd.Timestamp("2026-11-04 13:00", tz="America/New_York")}
+    assert not session_closed(hist, date(2026, 11, 4), intraday)
+    with pytest.raises(ValueError, match="rerun after the close"):
+        settlement_snapshot(hist, intraday, ticker="AAPL", option_type="call", strike=325.0, expiry="2026-11-04", session=date(2026, 11, 4))
+    # A 13:00 early close is final at 13:00.
+    half_day = {**intraday, "currentTradingPeriod": {"regular": {"end": pd.Timestamp("2026-11-04 13:00", tz="America/New_York")}}}
+    assert session_closed(hist, date(2026, 11, 4), half_day)
 
 
 def test_yahoo_sentinel_iv_is_not_a_reading():

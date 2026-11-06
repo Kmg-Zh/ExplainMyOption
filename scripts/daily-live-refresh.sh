@@ -33,7 +33,7 @@ cd "$ROOT" || exit 1
   ./scripts/run-portfolio-e2e.sh --live --compare-to-baseline
   status=$?
   echo "=== run-portfolio-e2e.sh exit code: $status ==="
-  if [[ $status -ne 0 ]] && grep -q "cannot be found. Available expirations" "$LOG_FILE"; then
+  if [[ $status -ne 0 ]] && grep -q -e "cannot be found. Available expirations" -e "pinned book needs a re-pin" "$LOG_FILE"; then
     echo "PINNED BOOK EXPIRED -- re-pin by hand (see docs/dev/SCHEDULING.md)."
   fi
 

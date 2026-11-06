@@ -58,6 +58,23 @@ def aapl_nov20_call(strike: float, *, stale_spot: bool) -> MarketSnapshot:
     )
 
 
+def jpm_oct23_straddle(option_type: str) -> MarketSnapshot:
+    """One leg of the run log's JPM 350 straddle at its 2026-10-23 expiry.
+
+    The prior marks are the real 10-22 cached mids (spot 336.54) and the
+    expiry close was 331.58. The runs from 10-23 on failed on the delisted
+    contract instead of settling it.
+    """
+    mark_prev, iv_prev = {"call": (0.02, 0.3399), "put": (14.10, 0.6274)}[option_type]
+    return MarketSnapshot(
+        ticker="JPM", option_type=option_type, strike=350.0, expiry="2026-10-23",
+        spot_now=331.58, spot_prev=336.54, iv_now=iv_prev, iv_prev=iv_prev,
+        option_price_now=max(350.0 - 331.58, 0.0) if option_type == "put" else 0.0, option_price_prev=mark_prev,
+        time_to_expiry_years=0.0, risk_free_rate=0.04022, data_source="yfinance",
+        as_of="2026-10-23", prev_as_of="2026-10-22", iv_prev_source="chain_t1", multiplier=100.0,
+    )
+
+
 class NeverPrice:
     """A PnL source whose use fails the test: the leg must stop before pricing."""
 

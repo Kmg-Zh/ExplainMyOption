@@ -6,13 +6,16 @@ tests/agent/test_governed_runs.py.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import runpy
 import shutil
 import subprocess
 import sys
+from datetime import date
 
 import pytest
+from live_book.roll import RollInputs, is_standard_monthly, pick_expiry, pick_strike, successor, third_friday
 from support import (
     FAST,
     LEG,
@@ -22,12 +25,14 @@ from support import (
     aapl_nov20_call,
     frozen_intel,
     invoke_leg,
+    jpm_oct23_straddle,
     no_llm_roles,
     roles,
     run_leg,
 )
 
 from explain_my_option import cli
+from explain_my_option.agent_graph import run_pipeline
 from explain_my_option.data_loader import LoadedData
 from explain_my_option.graph.deps import GraphDeps, OfficialFdmPnlSource
 from explain_my_option.graph.topology import book_mermaid, leg_mermaid
@@ -86,6 +91,79 @@ def test_marks_paired_with_a_stale_spot_end_in_a_data_break(strike, pnl, failing
     assert out["report"].startswith("## Data Break") and f"Data break: {failing} failed" in out["report"]
 
 
+# --- Expiry and roll ---------------------------------------------------------------------------
+
+
+class _Expired:
+    def __init__(self, snap: MarketSnapshot):
+        self.snap = snap
+
+    def load(self, **_):
+        return LoadedData(snapshot=self.snap)
+
+
+def test_an_expired_leg_settles_without_pricing_search_or_an_llm_call():
+    """The JPM 350P from 10-23 on: a RuntimeError every day, instead of a settlement."""
+    deps = GraphDeps(market=_Expired(jpm_oct23_straddle("put")), pnl=NeverPrice(), intel=frozen_intel())
+    out = run_pipeline("JPM", "put", 350.0, "2026-10-23", multiplier=100.0, deps=deps,
+                       config=PipelineConfig(require_openai=False), roles=no_llm_roles())
+    settlement = out["settlement"]
+    assert settlement.outcome == "exercised" and settlement.position_pnl == pytest.approx(432.0)
+    assert out["report"].startswith("## Expiry Settlement") and not out["llm_calls"]
+    assert "pricing" not in out and "Exercised: the position sells 100 shares at 350" in out["report"]
+
+
+def test_a_book_lists_settled_legs_apart_from_the_diagnosed_ones():
+    book = load_book_json(FIXTURES_DIR / "books" / "demo_book.json")
+    expired = BookLegSpec(leg_id="jpm_call", ticker="JPM", option_type="call", strike=350.0, expiry="2026-10-23", multiplier=100.0)
+    book = dataclasses.replace(book, legs=(*book.legs[:2], expired))
+    deps = GraphDeps(market=_Expired(jpm_oct23_straddle("call")), pnl=OfficialFdmPnlSource(config=FAST), intel=frozen_intel())
+    out = run_book_pipeline(book, config=PipelineConfig(require_openai=False), deps=deps, roles=roles())
+    results = {r["leg_id"]: r for r in out["leg_results"]}
+    assert all(r["ok"] for r in results.values()) and results["jpm_call"]["bundle"] is None
+    assert results["jpm_call"]["settlement"].outcome == "expired worthless"
+    report = out["report"]
+    assert "* **Settled at expiry**: `-$2.0000` across 1 leg(s), not in the totals above" in report
+    assert "### Position 2" in report and "### Position 3" not in report
+    assert "| `JPM 350C 2026-10-23` | expired worthless | 0.0000 | `-$2.0000` |" in report
+
+
+LISTED_NOV05 = ("2026-11-06", "2026-11-13", "2026-11-20", "2026-11-27", "2026-12-04", "2026-12-11",
+                "2026-12-18", "2027-01-15", "2027-03-19")  # JPM's list on 2026-11-05
+
+
+def test_the_roll_takes_the_first_monthly_expiry_at_least_35_days_out():
+    assert pick_expiry(LISTED_NOV05, date(2026, 11, 5)) == "2026-12-18"  # 43 days; weeklies skipped
+    assert pick_expiry(LISTED_NOV05, date(2026, 11, 20)) == "2027-01-15"  # 12-18 is only 28 days out
+    assert third_friday(2027, 3) == date(2027, 3, 19)
+    # A holiday-shortened week lists the Thursday instead of the third Friday.
+    assert is_standard_monthly(date(2027, 3, 18), {date(2027, 3, 18)})
+    assert not is_standard_monthly(date(2027, 3, 18), {date(2027, 3, 18), date(2027, 3, 19)})
+
+
+def test_a_rolled_leg_keeps_its_target_strike_to_spot():
+    rows = {row["leg_id"]: row for row in json.loads((REPO_ROOT / "docs" / "runlog" / "book.json").read_text())["legs"]}
+    inputs = RollInputs(session=date(2026, 11, 5), spot=337.34, expiries=LISTED_NOV05,
+                        quoted_strikes={"2026-12-18": (325.0, 330.0, 335.0, 340.0, 345.0)})
+    for leg_id in ("jpm_straddle_call", "jpm_straddle_put"):
+        row = rows[leg_id]
+        new = successor(row, inputs)
+        # 1.0031 × 337.34 = 338.39: both straddle legs land on the same strike.
+        assert (new["strike"], new["expiry"], new["picked_session"]) == (340.0, "2026-12-18", "2026-11-05")
+        assert {k: new[k] for k in ("leg_id", "option_type", "quantity", "target_strike_to_spot")} == {
+            k: row[k] for k in ("leg_id", "option_type", "quantity", "target_strike_to_spot")
+        }
+    assert pick_strike((335.0, 340.0), 337.5) == 335.0  # a tie goes to the lower strike
+    with pytest.raises(ValueError, match="two-sided quote"):
+        pick_strike((), 337.5)
+
+
+def test_every_run_log_leg_carries_its_roll_target():
+    for leg in json.loads((REPO_ROOT / "docs" / "runlog" / "book.json").read_text())["legs"]:
+        assert leg["target_strike_to_spot"] > 0 and leg["spot_at_pick"] > 0
+        date.fromisoformat(leg["picked_session"])
+
+
 # --- Book, entry gate, CLI, topology -----------------------------------------------------------
 
 
@@ -115,7 +193,7 @@ def test_no_llm_cli_renders_a_complete_report_without_a_key(monkeypatch, capsys)
 
 def test_the_compiled_graph_matches_the_documented_workflow():
     leg = leg_mermaid(roles=roles())
-    for node in ("fetch_market", "quant", "blotter", "diagnostic_pass", "plan_search", "search", "digest_news",
+    for node in ("fetch_market", "settle_expiry", "quant", "blotter", "diagnostic_pass", "plan_search", "search", "digest_news",
                  "challenge_catalyst", "synthesize", "reconcile_debate", "verify", "reflect_verifier",
                  "terminal_unexplained_break", "finalize_leg_report", "leg_failure_finalize"):
         assert node in leg

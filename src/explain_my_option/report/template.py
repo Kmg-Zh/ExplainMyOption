@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 from ..intel.types import NewsItem, SearchPlan
 from .facts import PositionBundle, PositionFacts, build_portfolio_facts, build_position_facts
@@ -10,6 +10,7 @@ from .formatting import is_reference_engine, official_model, pct
 from .formatting import money as _money
 from .reconciliation import ReconciliationFacts
 from .schema import DiagnosticSynthesis
+from .settlement import ExpirySettlement, render_settlements, settlement_total
 
 # A factor counts as a headline driver when it is at least this share of the
 # gross factor movement.
@@ -548,20 +549,23 @@ def render_portfolio_report(
     syntheses: list[DiagnosticSynthesis],
     *,
     leg_findings: list[dict[str, Any] | None] | None = None,
+    settlements: Sequence[ExpirySettlement] = (),
 ) -> str:
-    """Portfolio roll-up plus per-position reports."""
+    """Portfolio roll-up plus per-position reports; legs settled at expiry last."""
+    tail = "\n" + render_settlements(settlements) if settlements else ""
     if not bundles:
-        return "_Empty portfolio — no positions to diagnose._"
+        return render_settlements(settlements) if settlements else "_Empty portfolio — no positions to diagnose._"
     leg_findings = leg_findings or [None] * len(bundles)
     if len(bundles) == 1:
         facts = build_position_facts(bundles[0].snapshot, bundles[0].pricing, news_count=len(bundles[0].news))
-        return render_position_report(
+        report = render_position_report(
             facts,
             syntheses[0],
             news=bundles[0].news,
             plan=bundles[0].plan,
             diagnostic_findings=leg_findings[0],
         )
+        return report.rstrip() + "\n" + tail if tail else report
 
     pf = build_portfolio_facts(bundles)
     lines = [
@@ -580,6 +584,11 @@ def render_portfolio_report(
     lines.append(f"* **Total Model PnL**: `{_money(pf.total_model_pnl)}`")
     if pf.aggregate_mark_gap is not None:
         lines.append(f"* **Aggregate model vs mark gap**: `{_money(pf.aggregate_mark_gap)}`")
+    if settlements:
+        lines.append(
+            f"* **Settled at expiry**: `{_money(settlement_total(settlements))}` across {len(settlements)} "
+            "leg(s), not in the totals above (see Settled at expiry)"
+        )
     lines.extend(
         [
             "",
@@ -637,4 +646,4 @@ def render_portfolio_report(
         lines.append("---")
         lines.append("")
 
-    return "\n".join(lines).rstrip() + "\n"
+    return "\n".join(lines).rstrip() + "\n" + tail

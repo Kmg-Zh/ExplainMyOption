@@ -8,7 +8,7 @@ tree; each pushes `origin <current branch>`.
 | Job | Time (local) | Script | What it does |
 |-----|--------------|--------|--------------|
 | `com.explainmyoption.daily-refresh` | 21:00 | `scripts/daily-live-refresh.sh` | Runs the pinned 10-leg live e2e reconciliation (`evals/live_book/`) and refreshes the local t-1 cache. Auto-commits only `evals/live_book/pinned_books/`. |
-| `com.explainmyoption.daily-runlog` | 21:15 | `scripts/daily-runlog-run.sh` | Runs `scripts/daily_run.py` on `docs/runlog/book.json` (8 real legs) through the real graph, writes `docs/runlog/YYYY-MM-DD/` and appends one row to `docs/runlog/metrics.jsonl`. |
+| `com.explainmyoption.daily-runlog` | 21:15 | `scripts/daily-runlog-run.sh` | Runs `scripts/daily_run.py` on `docs/runlog/book.json` (8 real legs) through the real graph, writes `docs/runlog/YYYY-MM-DD/` and appends one row to `docs/runlog/metrics.jsonl`. Settles expired legs and rolls them in `book.json` by its `roll_rule`; the commit carries the new contracts. |
 
 ## Install
 
@@ -29,6 +29,9 @@ Repeat for `daily-refresh`. Logs: `.cache/daily-runlog-logs/YYYY-MM-DD.log` and
   print` shows a real last exit code.
 - The refresh job logs `PINNED BOOK EXPIRED` when its pinned expiries have
   passed. Re-pinning is a deliberate manual step (below), never automatic.
+  The run-log book is different: `daily_run.py` rolls it by rule
+  (`docs/runlog/README.md#expiry-and-rolls`). A failed roll is listed under
+  Errors and retried by the next run.
 - The run-log wrapper skips if today's `report.md` already exists (one entry
   per day). It does not know market holidays; a holiday entry must be removed
   by hand.
