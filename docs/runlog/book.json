@@ -3,7 +3,30 @@
   "purpose": "The live-book run log. Real, live-quoted contracts discovered with yfinance, not invented. The opening legs were picked on 2026-09-17 at >=35 DTE; each leg is held to expiry and then rolled by roll_rule.",
   "sizing_rule": "1 contract (multiplier 100) per leg, uniformly, across all 8 legs. Underlyings range from $2 (PLUG) to $754 (SPY), so this is not equal notional exposure -- it is the simplest defensible rule (no leg is deliberately over- or under-sized relative to the others by contract count) and matches how a small paper book is naturally sized. Per-leg PnL, not book-level notional-weighted PnL, is the reported unit throughout.",
   "roll_rule": "Hold each leg to expiry. The run that settles a leg (intrinsic value at the expiry close) replaces it with the same leg_id on a new contract opened at that run's session close: the first standard monthly expiry (third Friday) at least 35 days out, and the two-sided-quoted strike nearest target_strike_to_spot x spot. target_strike_to_spot is the leg's strike / spot when first picked and is never re-fit. For the opening legs spot_at_pick is the 2026-09-16 close, the spot the 2026-09-17 pick saw (the leg notes call it the 2026-09-17 spot). Code: evals/live_book/roll.py.",
-  "rolls": [],
+  "rolls": [
+    {
+      "session": "2026-11-05",
+      "leg_id": "jpm_straddle_call",
+      "from": "JPM 350C 2026-10-23",
+      "to": "JPM 340C 2026-12-18",
+      "settled_session": "2026-10-23",
+      "settlement_value": 0.0,
+      "settlement_pnl_usd": -2.0,
+      "spot": 337.34,
+      "opened_mark": 11.55
+    },
+    {
+      "session": "2026-11-05",
+      "leg_id": "jpm_straddle_put",
+      "from": "JPM 350P 2026-10-23",
+      "to": "JPM 340P 2026-12-18",
+      "settled_session": "2026-10-23",
+      "settlement_value": 18.42,
+      "settlement_pnl_usd": 432.0013,
+      "spot": 337.34,
+      "opened_mark": 12.475
+    }
+  ],
   "legs": [
     {
       "leg_id": "aapl_vertical_long",
@@ -39,30 +62,30 @@
       "leg_id": "jpm_straddle_call",
       "ticker": "JPM",
       "option_type": "call",
-      "strike": 350.0,
-      "expiry": "2026-10-23",
+      "strike": 340.0,
+      "expiry": "2026-12-18",
       "exercise_style": "american",
       "quantity": 1.0,
       "multiplier": 100.0,
       "moneyness_at_pin": "ATM",
-      "notes": "Straddle leg 1/2. 36 DTE at inception. JPM reports earnings 2026-10-13 (real date, yf.Ticker('JPM').get_earnings_dates()) -- inside this leg's own expiry window, so a vol crush is expected before this contract's own expiry, and the leg becomes short-dated gamma by day 30.",
-      "spot_at_pick": 348.92,
-      "picked_session": "2026-09-16",
+      "notes": "Rolled from JPM 350C 2026-10-23 at the 2026-11-05 close by the roll rule (target strike/spot 1.0031, spot 337.34).",
+      "spot_at_pick": 337.34,
+      "picked_session": "2026-11-05",
       "target_strike_to_spot": 1.0031
     },
     {
       "leg_id": "jpm_straddle_put",
       "ticker": "JPM",
       "option_type": "put",
-      "strike": 350.0,
-      "expiry": "2026-10-23",
+      "strike": 340.0,
+      "expiry": "2026-12-18",
       "exercise_style": "american",
       "quantity": 1.0,
       "multiplier": 100.0,
       "moneyness_at_pin": "ATM",
-      "notes": "Straddle leg 2/2. Same strike/expiry as jpm_straddle_call.",
-      "spot_at_pick": 348.92,
-      "picked_session": "2026-09-16",
+      "notes": "Rolled from JPM 350P 2026-10-23 at the 2026-11-05 close by the roll rule (target strike/spot 1.0031, spot 337.34).",
+      "spot_at_pick": 337.34,
+      "picked_session": "2026-11-05",
       "target_strike_to_spot": 1.0031
     },
     {
