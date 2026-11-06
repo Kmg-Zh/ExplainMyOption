@@ -21,7 +21,9 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="$ROOT/.cache/daily-runlog-logs"
+# Outside the checkout: when it sits in OneDrive, appends to a log there can
+# fail with "Resource deadlock avoided" (EDEADLK) and kill the run mid-way.
+LOG_DIR="$HOME/Library/Logs/explainmyoption/daily-runlog"
 mkdir -p "$LOG_DIR"
 TODAY="$(date +%Y-%m-%d)"
 LOG_FILE="$LOG_DIR/$TODAY.log"
@@ -52,10 +54,11 @@ cd "$ROOT" || exit 1
     exit "$status"
   fi
 
+  # OneDrive flips file modes (644 -> 755); a mode-only change is not an entry.
   TRACKED_PATHS=(docs/runlog/book.json docs/runlog/metrics.jsonl "docs/runlog/$TODAY")
-  if [[ -n "$(git status --porcelain -- "${TRACKED_PATHS[@]}")" ]]; then
+  if [[ -n "$(git -c core.fileMode=false status --porcelain -- "${TRACKED_PATHS[@]}")" ]]; then
     echo "New runlog entry — committing and pushing."
-    git add -- "${TRACKED_PATHS[@]}"
+    git -c core.fileMode=false add -- "${TRACKED_PATHS[@]}"
     git commit -m "runlog: $TODAY daily live-book run"
     CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
     if git push origin "$CURRENT_BRANCH"; then

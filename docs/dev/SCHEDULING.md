@@ -20,8 +20,12 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.explainmyoption.daily-ru
 launchctl print gui/$UID/com.explainmyoption.daily-runlog | head
 ```
 
-Repeat for `daily-refresh`. Logs: `.cache/daily-runlog-logs/YYYY-MM-DD.log` and
-`.cache/daily-refresh-logs/YYYY-MM-DD.log` (gitignored).
+Repeat for `daily-refresh`. Logs: `~/Library/Logs/explainmyoption/daily-runlog/YYYY-MM-DD.log`
+and `~/Library/Logs/explainmyoption/daily-refresh/YYYY-MM-DD.log`, outside the
+checkout. In an OneDrive folder, appends to a log there failed with "Resource
+deadlock avoided" and killed both jobs with exit 120. Output from before the
+wrapper redirects goes to the plist's `/tmp/com.explainmyoption.*.log` files,
+which a reboot clears.
 
 ## Failure behaviour
 
@@ -35,6 +39,8 @@ Repeat for `daily-refresh`. Logs: `.cache/daily-runlog-logs/YYYY-MM-DD.log` and
 - The run-log wrapper skips if today's `report.md` already exists (one entry
   per day). It does not know market holidays; a holiday entry must be removed
   by hand.
+- Both wrappers check and stage their paths with `core.fileMode=false`, so a
+  mode-only change (OneDrive flips 644 to 755) is not committed.
 
 ## Re-pinning the refresh book
 
