@@ -29,6 +29,9 @@ SearchCue = Literal[
     "microstructure",
 ]
 SearchSkipReason = Literal["", "below_materiality", "observation_lock"]
+# "spot": the option tape is locked, but the stock's own move is large enough to search
+# for its catalyst. Only spot cues run; vega / residual / 8-K cues stay off.
+SearchLane = Literal["full", "spot"]
 
 
 class IntelUnconfigured(Exception):
@@ -56,6 +59,7 @@ class SearchPlan(BaseModel):
     skipped_sources: list[str] = Field(default_factory=list)
     failed_sources: list[str] = Field(default_factory=list)
     skip_reason: SearchSkipReason = ""
+    lane: SearchLane = "full"
 
     def honesty_notes(self) -> list[str]:
         """Captions for the report: what the plan asked vs what the backends can do."""
@@ -65,6 +69,11 @@ class SearchPlan(BaseModel):
                 "No catalyst search — move below materiality / observation lock."
             )
             return notes
+        if self.lane == "spot":
+            notes.append(
+                "Observation lock: searched only for the catalyst of the spot move; "
+                "option-tape cues (IV, residual, 8-K) stay off."
+            )
         if any(q.source_id == "yfinance_news" for q in self.queries):
             notes.append(
                 "Yahoo `Ticker.news` returns ticker-level titles; the query string is not applied."

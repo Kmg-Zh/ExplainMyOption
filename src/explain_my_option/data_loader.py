@@ -225,6 +225,39 @@ def quote_session(hist: pd.DataFrame, metadata: Optional[dict] = None) -> date:
     return hist.index[-1].date()
 
 
+def check_quotes_not_preopen(
+    session: date,
+    metadata: Optional[dict] = None,
+    *,
+    now: Optional[pd.Timestamp] = None,
+) -> None:
+    """Refuse a chain read in the pre-market of a session after ``session``.
+
+    Before the open, Yahoo still stamps its regular-market price with the
+    previous session, so the spot is that session's close, but the chain's
+    bid/ask/IV are no longer that session's closing quotes. Pairing them
+    misprices both marks (NVDA 125C on 2026-11-23 before the open: mid 24.03
+    against a 2026-11-20 closing print of 11.65).
+    """
+    md = metadata or {}
+    tz = md.get("exchangeTimezoneName")
+    periods = md.get("currentTradingPeriod") or {}
+    regular_start = _exchange_time((periods.get("regular") or {}).get("start"), tz)
+    if regular_start is None or regular_start.date() <= session:
+        return
+    pre_start = _exchange_time((periods.get("pre") or {}).get("start"), tz)
+    open_from = pre_start if pre_start is not None and pre_start.date() == regular_start.date() else regular_start
+    clock = _exchange_time(now if now is not None else pd.Timestamp.now(tz="UTC"), tz)
+    if clock is None or not (open_from <= clock < regular_start):
+        return
+    raise DataBreakError(
+        "option quotes dated to the spot",
+        f"The spot is the {session} close, but the run is in the pre-market of the "
+        f"{regular_start.date()} session, so the chain's quotes are no longer {session}'s closing "
+        f"quotes. Rerun after the {regular_start.date()} open, or after that session's close.",
+    )
+
+
 def session_close(
     hist: pd.DataFrame,
     session: date,
@@ -414,6 +447,7 @@ def load_market_data(
             )
         )
     as_of = as_of_d.isoformat()
+    check_quotes_not_preopen(as_of_d, metadata)
     spot_now = session_close(
         hist,
         as_of_d,

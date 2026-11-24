@@ -372,15 +372,22 @@ def _evidence_section(
         )
         lines.append("")
         return "\n".join(lines)
-    if not reliable:
+    spot_lane = plan is not None and plan.lane == "spot"
+    if not reliable and not spot_lane:
         lines.append(
             "_Observation unreliable — event linkage suppressed; reconcile marks before catalyst stories._"
         )
         lines.append("")
         return "\n".join(lines)
-    lines.append(
-        f"_Targeted retrieval for dominant driver: **{synthesis.primary_driver}**._"
-    )
+    if spot_lane:
+        lines.append(
+            "_Observation lock on the option tape: headlines below are context for the **spot move** "
+            "only, not for the IV change or the residual._"
+        )
+    else:
+        lines.append(
+            f"_Targeted retrieval for dominant driver: **{synthesis.primary_driver}**._"
+        )
     lines.append("")
     if digest_brief:
         lines.append(f"_Intel note: {digest_brief}_")

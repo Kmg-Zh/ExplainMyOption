@@ -104,6 +104,10 @@ claim the residual was caused by news unless the evidence proves causality.
   `american_commentary` empty when that premium is negligible.
 - If `observation_reliable=false` or `suppress_vega_narrative=true`, do not force a catalyst or
   Vega story.
+- If `spot_catalyst_lane=true`, the option tape is locked but the stock's own move was large
+  enough to search. When a relevant headline names why the **stock** moved, name it in verdict
+  and one takeaway as context for the Delta / Gamma leg ("consistent with"). Do not use it to
+  explain the IV change or the residual.
 
 An **independent catalyst critic** may have already filed a brief (Layer B required / mechanisms).
 Address that brief: if it requires a mechanism that headlines support, include it. If you reject

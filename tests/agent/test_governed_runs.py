@@ -124,7 +124,8 @@ def test_a_headline_figure_the_digester_quotes_is_not_an_invented_number():
     assert out["diagnostic_findings"].get("verifier_status") != "FAIL"
 
 
-def test_an_unreliable_quote_skips_search_and_strips_invented_evidence():
+def test_an_unreliable_quote_searches_only_the_spot_move_and_strips_invented_evidence():
+    """GME: the option tape is locked, but the stock's own jump still gets its catalyst searched."""
     narrator = ScriptedRole(
         {
             "primary_driver": "Vega / implied volatility",
@@ -136,5 +137,28 @@ def test_an_unreliable_quote_skips_search_and_strips_invented_evidence():
     )
     out = run_leg(case="gme_squeeze_2021_real", news=[SQUEEZE], llm=roles(narrator, digester=NoLlm(), challenger=NoLlm()))
     assert out["diagnostic_findings"]["observation_reliable"] is False
-    assert out["search_plan"].skip_reason == "observation_lock" and not out["news"]
-    assert out["diagnostic_synthesis"]["evidence"] == []
+    plan = out["search_plan"]
+    assert plan.lane == "spot" and plan.skip_reason == "" and [n.title for n in out["news"]] == [SQUEEZE.title]
+    assert {q.cue for q in plan.queries} <= {"material", "gamma"}  # no vega / residual / 8-K cue
+    assert out["diagnostic_findings"]["spot_catalyst_lane"] is True
+    # The invented headline is dropped; the one the spot search returned is kept.
+    assert [e["headline"] for e in out["diagnostic_synthesis"]["evidence"]] == [SQUEEZE.title]
+
+
+def test_the_spot_lane_keeps_only_headlines_the_search_returned():
+    narrator = ScriptedRole(
+        {
+            "primary_driver": "Delta / spot move",
+            "verdict": "Delta led the move, consistent with the squeeze headline.",
+            "confidence_level": "medium",
+            "confidence_rationale": "Scripted.",
+            "evidence": [
+                {"headline": SQUEEZE.title, "source": "Wire", "relevance": "Context for the spot jump."},
+                {"headline": "A headline nobody supplied", "source": "x", "relevance": "Supports the story."},
+            ],
+        }
+    )
+    out = run_leg(case="gme_squeeze_2021_real", news=[SQUEEZE], llm=roles(narrator, digester=NoLlm(), challenger=NoLlm()))
+    assert [e["headline"] for e in out["diagnostic_synthesis"]["evidence"]] == [SQUEEZE.title]
+    assert out["diagnostic_synthesis"]["evidence"][0]["relevance"].startswith("Possible context for the spot move")
+    assert "context for the **spot move** only" in out["report"] and "event linkage suppressed" not in out["report"]

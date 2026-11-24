@@ -33,6 +33,12 @@ class QueryPlanner(Protocol):
     ) -> SearchPlan: ...
 
 
+def spot_move_pct(snapshot: MarketSnapshot, pricing: PricingResult) -> float:
+    """|ΔS / S_prev| in percent for the session."""
+    spot_prev = snapshot.spot_prev or 0.0
+    return abs(100.0 * pricing.pnl.d_spot / spot_prev) if abs(spot_prev) > 1e-12 else 0.0
+
+
 def move_is_material(snapshot: MarketSnapshot, pricing: PricingResult) -> bool:
     """True when the 1-day move is large enough to justify a catalyst search."""
     pnl = pricing.pnl
@@ -47,17 +53,17 @@ def move_is_material(snapshot: MarketSnapshot, pricing: PricingResult) -> bool:
         mid = snapshot.option_price_now
     if mid is not None and abs(mid) > 1e-12 and abs_model / abs(mid) >= MATERIAL_PCT_MID:
         return True
-    spot_prev = snapshot.spot_prev or 0.0
-    spot_pct = abs(100.0 * pnl.d_spot / spot_prev) if abs(spot_prev) > 1e-12 else 0.0
     vol_pts = abs(pnl.d_vol) * 100.0
-    return spot_pct >= _SPOT_LARGE_PCT or vol_pts >= _VOL_LARGE_PTS
+    return spot_move_pct(snapshot, pricing) >= _SPOT_LARGE_PCT or vol_pts >= _VOL_LARGE_PTS
 
 
 class CueQueryPlanner:
     """Rule planner: search only when the move is material and observation is reliable.
 
     Quiet / wide-quote days emit an empty plan (no Yahoo). Material + reliable days
-    get ticker headlines plus vega / gap / microstructure / 8-K cues.
+    get ticker headlines plus vega / gap / microstructure / 8-K cues. Under an
+    observation lock, a spot move of at least 10% still gets the spot lane: ticker
+    headlines plus one gap query, nothing about the option tape.
 
     Factor magnitudes include delta, gamma, vega, theta, and residual so the
     dominant share matches the Taylor attribution table.
@@ -92,6 +98,23 @@ class CueQueryPlanner:
         from datetime import datetime
 
         if not observation_reliable:
+            # The lock is about the option tape (quote tier, IV noise band). The stock's
+            # close is not in question, so a large spot move still gets its catalyst
+            # searched; the option-tape cues (vega, residual, 8-K) stay off.
+            if spot_move_pct(snapshot, pricing) >= _SPOT_LARGE_PCT:
+                return SearchPlan(
+                    queries=[
+                        SearchQuery(q=snapshot.ticker, source_id="yfinance_news", cue="material", limit=HEADLINE_LIMIT),
+                        SearchQuery(
+                            q=f"{snapshot.ticker} stock move news event",
+                            source_id="tavily",
+                            cue="gamma",
+                            limit=HEADLINE_LIMIT,
+                        ),
+                    ][: self.max_queries],
+                    max_queries=self.max_queries,
+                    lane="spot",
+                )
             return SearchPlan(
                 queries=[],
                 max_queries=self.max_queries,

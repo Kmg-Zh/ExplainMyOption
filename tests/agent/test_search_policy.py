@@ -1,6 +1,7 @@
 """Search policy: the agent searches only material, reliably observed moves, with a bounded plan.
 
-A quiet move or an unreliable observation gets no search at all; a material one gets
+A quiet move gets no search at all; an unreliable observation gets none either, unless the
+stock itself moved at least 10%, which searches only that spot move's catalyst; a material one gets
 one base query plus cue queries chosen from the blotter, never more than the cap.
 """
 
@@ -37,6 +38,19 @@ def test_planner_searches_only_material_reliable_moves():
     assert quiet.queries == [] and quiet.skip_reason == "below_materiality"
     locked = CueQueryPlanner().plan(*_priced(delta=2.0), observation_reliable=False)
     assert locked.queries == [] and locked.skip_reason == "observation_lock"
+
+
+def test_a_locked_tape_still_searches_a_large_spot_move():
+    """NVDA 2026-11-23: +31% on the CEO's reinstatement, IV move inside the noise band."""
+    plan = CueQueryPlanner().plan(
+        *_priced(delta=5.0, vega=2.0, residual=2.0, d_spot=31.5, d_vol=0.16), observation_reliable=False
+    )
+    assert plan.lane == "spot" and plan.skip_reason == ""
+    assert [(q.source_id, q.cue) for q in plan.queries] == [("yfinance_news", "material"), ("tavily", "gamma")]
+    capped = CueQueryPlanner(max_queries=1).plan(*_priced(d_spot=-12.0), observation_reliable=False)
+    assert [q.cue for q in capped.queries] == ["material"]
+    # Just under the 10% spot threshold, the lock still skips the search.
+    assert CueQueryPlanner().plan(*_priced(d_spot=9.9), observation_reliable=False).skip_reason == "observation_lock"
 
 
 @pytest.mark.parametrize(

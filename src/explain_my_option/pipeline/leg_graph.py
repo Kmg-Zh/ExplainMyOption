@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Sequence
 
 from langgraph.graph import END, START, StateGraph
 
@@ -110,10 +110,27 @@ def _observation_reliable(state: LegState) -> bool:
     return bool((state.get("diagnostic_findings") or {}).get("observation_reliable", True))
 
 
-def _apply_observation_lock(synthesis: DiagnosticSynthesis, *, observation_reliable: bool) -> DiagnosticSynthesis:
-    """Drop catalyst evidence when the quote is too unreliable to support it."""
+def _spot_catalyst_lane(state: LegState) -> bool:
+    return bool((state.get("diagnostic_findings") or {}).get("spot_catalyst_lane", False))
+
+
+def _apply_observation_lock(
+    synthesis: DiagnosticSynthesis,
+    *,
+    observation_reliable: bool,
+    spot_lane: bool = False,
+    news_titles: Sequence[str] = (),
+) -> DiagnosticSynthesis:
+    """Drop catalyst evidence when the quote is too unreliable to support it.
+
+    The spot lane keeps evidence whose headline the spot search returned: that
+    search ran only for the stock's own move. Anything else is still dropped."""
     if observation_reliable or not synthesis.evidence:
         return synthesis
+    if spot_lane:
+        fetched = {t.strip().lower() for t in news_titles if t}
+        kept = [e for e in synthesis.evidence if (e.headline or "").strip().lower() in fetched]
+        return synthesis.model_copy(update={"evidence": kept})
     return synthesis.model_copy(update={"evidence": []})
 
 
@@ -260,7 +277,10 @@ def build_leg_diagnosis_subgraph(
         plan = ports.planner.plan(
             state["snapshot"], state["pricing"], observation_reliable=_observation_reliable(state)
         )
-        return {"search_plan": plan}
+        out: LegState = {"search_plan": plan}
+        if plan.lane == "spot":
+            out["diagnostic_findings"] = {**(state.get("diagnostic_findings") or {}), "spot_catalyst_lane": True}
+        return out
 
     def search_node(state: LegState) -> LegState:
         ports = _resolve_ports(state["leg"], deps)
@@ -307,7 +327,12 @@ def build_leg_diagnosis_subgraph(
             role=roles.narrator,
             playbook=records,
         )
-        synthesis = _apply_observation_lock(synthesis, observation_reliable=_observation_reliable(state))
+        synthesis = _apply_observation_lock(
+            synthesis,
+            observation_reliable=_observation_reliable(state),
+            spot_lane=_spot_catalyst_lane(state),
+            news_titles=[n.title for n in state.get("news", [])],
+        )
         out: LegState = {"diagnostic_synthesis": synthesis.model_dump(), "llm_calls": int(state.get("llm_calls", 0)) + 1}
         if records:
             out["diagnostic_findings"] = {

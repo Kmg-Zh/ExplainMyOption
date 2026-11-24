@@ -31,6 +31,7 @@ from explain_my_option.data.realized import hv20_from_closes, iv_prev_from_hv20
 from explain_my_option.data.synthetic import load_fixture
 from explain_my_option.data_loader import (
     _clean_iv,
+    check_quotes_not_preopen,
     prior_close,
     quote_session,
     session_close,
@@ -91,6 +92,35 @@ def test_the_prior_spot_is_dated_to_the_prior_mark():
     assert prior_close(hist, date(2026, 11, 4), prior_mark_date=date(2026, 10, 31)) == (344.63, date(2026, 10, 30))
     with pytest.raises(DataBreakError, match="no close on or before 2026-10-01"):
         prior_close(hist, date(2026, 11, 4), prior_mark_date=date(2026, 10, 1))
+
+
+def test_premarket_quotes_are_not_the_prior_sessions_close():
+    """NVDA before the 2026-11-23 open: spot stamped 11-20, chain already repriced."""
+    et = "America/New_York"
+    meta = {
+        "regularMarketTime": pd.Timestamp("2026-11-20 16:00:00", tz=et),
+        "exchangeTimezoneName": et,
+        "currentTradingPeriod": {
+            "pre": {"start": pd.Timestamp("2026-11-23 04:00", tz=et), "end": pd.Timestamp("2026-11-23 09:30", tz=et)},
+            "regular": {"start": pd.Timestamp("2026-11-23 09:30", tz=et), "end": pd.Timestamp("2026-11-23 16:00", tz=et)},
+        },
+    }
+    friday = date(2026, 11, 20)
+    with pytest.raises(DataBreakError, match="pre-market of the 2026-11-23 session"):
+        check_quotes_not_preopen(friday, meta, now=pd.Timestamp("2026-11-23 09:11", tz=et))
+    # Epoch seconds, as older yfinance returns them, are read the same way.
+    epoch = {**meta, "currentTradingPeriod": {k: {e: int(t.timestamp()) for e, t in v.items()} for k, v in meta["currentTradingPeriod"].items()}}
+    with pytest.raises(DataBreakError):
+        check_quotes_not_preopen(friday, epoch, now=pd.Timestamp("2026-11-23 05:00", tz=et))
+    # The weekend and overnight before pre-market still hold the session's closing quotes.
+    check_quotes_not_preopen(friday, meta, now=pd.Timestamp("2026-11-22 12:00", tz=et))
+    check_quotes_not_preopen(friday, meta, now=pd.Timestamp("2026-11-23 03:59", tz=et))
+    # Friday evening (the scheduled 21:00 run): the trading period is still Friday's.
+    evening = {**meta, "currentTradingPeriod": {"regular": {"start": pd.Timestamp("2026-11-20 09:30", tz=et)}}}
+    check_quotes_not_preopen(friday, evening, now=pd.Timestamp("2026-11-20 22:00", tz=et))
+    # After the open Yahoo stamps the new session, so the quotes and spot are both 11-23's.
+    check_quotes_not_preopen(date(2026, 11, 23), meta, now=pd.Timestamp("2026-11-23 10:00", tz=et))
+    check_quotes_not_preopen(friday, {}, now=pd.Timestamp("2026-11-23 09:11", tz=et))  # no metadata: no claim
 
 
 def test_a_first_live_day_never_calibrates_to_a_copied_prior_mark():

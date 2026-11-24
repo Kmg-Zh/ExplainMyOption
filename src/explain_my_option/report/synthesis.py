@@ -161,7 +161,13 @@ def _news_to_evidence(news: list[NewsItem], driver: str) -> list[EvidenceItem]:
 
 
 def _should_attach_evidence(findings: dict | None) -> bool:
-    return bool((findings or {}).get("observation_reliable", True))
+    f = findings or {}
+    return bool(f.get("observation_reliable", True)) or bool(f.get("spot_catalyst_lane", False))
+
+
+def _evidence_driver(findings: dict | None, driver: str) -> str:
+    """What evidence is context for: the spot move in the spot lane, else the quant driver."""
+    return "the spot move" if (findings or {}).get("spot_catalyst_lane") else driver
 
 
 def _digest_from_findings(findings: dict | None) -> IntelDigest:
@@ -322,7 +328,7 @@ def synthesize_diagnosis(
             news=layer_b_news,
         )
         if _should_attach_evidence(findings):
-            evidence = _evidence_for_synthesis(digest, layer_b_news, findings, syn.primary_driver)
+            evidence = _evidence_for_synthesis(digest, layer_b_news, findings, _evidence_driver(findings, syn.primary_driver))
             syn = syn.model_copy(update={"evidence": evidence})
         return apply_american_commentary_policy(syn, facts)
 
@@ -345,7 +351,7 @@ def synthesize_diagnosis(
     if validate_synthesis(result):
         return fallback(unavailable=False)
     if _should_attach_evidence(findings) and digest.relevant:
-        result = result.model_copy(update={"evidence": _digest_to_evidence(digest, result.primary_driver)})
+        result = result.model_copy(update={"evidence": _digest_to_evidence(digest, _evidence_driver(findings, result.primary_driver))})
     return apply_american_commentary_policy(result, facts)
 
 
@@ -420,6 +426,7 @@ def _human_prompt(
         f"Vol move magnitude band (code): {_vol_move_band(facts.d_vol_pts)}",
         f"Observation reliable (code): {findings.get('observation_reliable', facts.reconciliation.observation_reliable if facts.reconciliation else True)}",
         f"Suppress Vega narrative (code): {findings.get('suppress_vega_narrative', False)}",
+        f"Spot catalyst lane (code): {findings.get('spot_catalyst_lane', False)}",
         f"Diagnostic tools run (code): {', '.join(findings.get('tools_run', [])) or 'none'}",
     ]
     split = findings.get("ex_div_attribution")

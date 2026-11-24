@@ -90,7 +90,7 @@ Optional attributes on the source itself, used when present:
 | | Contract | Default |
 | --- | --- | --- |
 | `GraphDeps.intel` | `IntelRegistry({source_id: source})`; a source has `search(query, *, ticker) -> list[NewsItem]` | Yahoo news, Tavily (with `TAVILY_API_KEY`), SEC 8-K (with `EMO_SEC_USER_AGENT`) |
-| `GraphDeps.planner` | `plan(snapshot, pricing, *, observation_reliable) -> SearchPlan` | the rule planner, which skips search below materiality or under the observation lock |
+| `GraphDeps.planner` | `plan(snapshot, pricing, *, observation_reliable) -> SearchPlan` | the rule planner, which skips search below materiality or under the observation lock, except that a spot move of 10% or more still searches that move's catalyst (`lane="spot"`, no option-tape cues) |
 | `ExplainMyOption(roles=...)` | `LlmRoleRegistry(narrator=, verifier=, challenger=, digester=)`; a role has `structured_invoke(*, system, human, schema)` | OpenAI through `langchain-openai`; model `EMO_LLM_MODEL`, default `gpt-5.4-mini` |
 | `GraphDeps.playbook` | a tuple of `PlaybookRecord(record_id, when, title, guidance)`; `when` names a boolean diagnostic finding, such as `terminal_unexplained_break` or `suppress_vega_narrative` | `DEFAULT_PLAYBOOK`, one record for a terminal break. Add yours with `playbook=(*DEFAULT_PLAYBOOK, record)` |
 
